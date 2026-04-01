@@ -1,0 +1,31 @@
+{
+  "name": "delivery-tool",
+  "private": true,
+  "description": "Delivery Tool — Google Sheets add-on for Algerian ecommerce shipping",
+  "workspaces": [
+    "apps/sheets-addon",
+    "apps/admin-dashboard",
+    "backend",
+    "packages/*",
+    "shared"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "test": "npm run test --workspaces --if-present",
+    "test:admin-backend": "npm run test:admin -w @delivery-tool/backend",
+    "build": "npm run build -w @delivery-tool/shared && npm run build -w @delivery-tool/carriers && npm run build -w @delivery-tool/backend && npm run build -w @delivery-tool/admin-dashboard",
+    "dev:backend": "npm run dev -w @delivery-tool/backend",
+    "dev:admin": "npm run dev -w @delivery-tool/admin-dashboard",
+    "clasp:push": "npm run clasp:push -w @delivery-tool/sheets-addon",
+    "clasp:pull": "npm run clasp:pull -w @delivery-tool/sheets-addon",
+    "tunnel": "ngrok http 3000",
+    "tunnel:eu": "ngrok http --region=eu 3000"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
