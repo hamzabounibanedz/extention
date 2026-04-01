@@ -1,0 +1,17 @@
+# Node / repo (not deployed to Apps Script)
+node_modules/**
+package.json
+package-lock.json
+dist/**
+.env
+.env.*
+
+# Source that does not run in Apps Script
+**/*.ts
+tsconfig.json
+tsconfig.*.json
+
+# Git / docs
+.git/**
+.gitignore
+*.md

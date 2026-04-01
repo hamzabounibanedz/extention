@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="<?= lang ?>" dir="<?= lang === 'ar' ? 'rtl' : 'ltr' ?>">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      /* 60-30-10: ~60% neutral base, ~30% surfaces/borders/secondary text, ~10% accent */
+      :root {
+        --dt-base: #f1f3f4;
+        --dt-surface: #ffffff;
+        --dt-surface-secondary: #e8eaed;
+        --dt-border: #dadce0;
+        --dt-text: #202124;
+        --dt-text-secondary: #5f6368;
+        --dt-accent: #1a73e8;
+        --dt-accent-hover: #1558b0;
+        --dt-accent-muted: rgba(26, 115, 232, 0.12);
+        --dt-success: #137333;
+        --dt-danger: #c5221f;
+        /* warning tier for near‑risk / trial / expiring */
+        --dt-warning: #ea8600;
+        --dt-warning-muted: rgba(234, 134, 0, 0.12);
+        --dt-radius: 8px;
+        --dt-radius-sm: 6px;
+        --dt-space: 12px;
+        --dt-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: var(--dt-font);
+        padding: var(--dt-space);
+        margin: 0;
+        background: var(--dt-base);
+        color: var(--dt-text);
+        font-size: 13px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1.dt-title {
+        margin: 0 0 14px;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--dt-text);
+      }
+      .dt-card {
+        background: var(--dt-surface);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        padding: var(--dt-space);
+        margin-bottom: var(--dt-space);
+        box-shadow: 0 1px 2px rgba(60, 64, 67, 0.06);
+      }
+      .dt-card[data-core-step] {
+        position: relative;
+        overflow: hidden;
+      }
+      .dt-card[data-core-step]::before {
+        content: '';
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: 3px;
+        background: transparent;
+      }
+      .dt-card.dt-flow-pending[data-core-step]::before {
+        background: var(--dt-warning);
+      }
+      .dt-card.dt-flow-done[data-core-step]::before {
+        background: var(--dt-success);
+      }
+      .dt-card h2 {
+        margin: 0 0 10px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--dt-text);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .dt-step-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .dt-step-badge {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        border: 1px solid var(--dt-border);
+        background: var(--dt-base);
+        color: var(--dt-text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .dt-step-badge.dt-step-done {
+        background: rgba(19, 115, 51, 0.08);
+        border-color: rgba(19, 115, 51, 0.35);
+        color: var(--dt-success);
+      }
+      .dt-section-toggle {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--dt-text-secondary);
+        font-size: 11px;
+        font-weight: 500;
+        padding: 0;
+        cursor: pointer;
+      }
+      .dt-section-toggle:hover {
+        color: var(--dt-text);
+      }
+      .dt-collapsed .dt-section-content {
+        display: none;
+      }
+      .dt-card.dt-busy {
+        border-color: var(--dt-accent);
+        box-shadow: 0 0 0 1px var(--dt-accent-muted) inset;
+      }
+      label {
+        display: block;
+        margin-top: 10px;
+        margin-bottom: 4px;
+        color: var(--dt-text-secondary);
+        font-size: 12px;
+        font-weight: 500;
+      }
+      label:first-of-type {
+        margin-top: 0;
+      }
+      .dt-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-top: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--dt-text);
+      }
+      .dt-check input {
+        margin: 2px 0 0;
+        flex-shrink: 0;
+      }
+      select,
+      .dt-ltr {
+        width: 100%;
+        max-width: 100%;
+      }
+      select {
+        padding: 8px 10px;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-surface);
+        font-size: 13px;
+        color: var(--dt-text);
+      }
+      select:focus,
+      input:focus,
+      textarea:focus,
+      button:focus-visible {
+        outline: 2px solid var(--dt-accent);
+        outline-offset: 1px;
+      }
+      .dt-row {
+        margin-bottom: 8px;
+      }
+      .dt-map-group {
+        border-top: 1px solid var(--dt-border);
+        padding-top: 8px;
+        margin-top: 8px;
+      }
+      .dt-map-group-header {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin-bottom: 6px;
+      }
+      .dt-map-group-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      .dt-map-group-hint {
+        font-size: 11px;
+        color: var(--dt-text-secondary);
+      }
+      .dt-map-group-body {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .dt-map-group-collapsed .dt-map-group-body {
+        display: none;
+      }
+      .dt-map-field label {
+        margin-top: 0;
+      }
+      .dt-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: var(--dt-space);
+      }
+      .dt-actions > button,
+      .dt-actions > a {
+        flex: 1 1 120px;
+      }
+      .dt-actions > a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      button {
+        padding: 8px 14px;
+        border-radius: var(--dt-radius-sm);
+        border: 1px solid var(--dt-border);
+        background: var(--dt-surface);
+        color: var(--dt-text);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      button:hover:not(:disabled) {
+        background: var(--dt-surface-secondary);
+      }
+      button.dt-primary {
+        background: var(--dt-accent);
+        color: #fff;
+        border-color: var(--dt-accent);
+      }
+      button.dt-primary:hover:not(:disabled) {
+        background: var(--dt-accent-hover);
+        border-color: var(--dt-accent-hover);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #dt-status {
+        margin: 10px 0 0;
+        min-height: 1.2em;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+      }
+      #dt-status.dt-err {
+        color: var(--dt-danger);
+      }
+      #dt-status.dt-ok {
+        color: var(--dt-success);
+      }
+      .dt-hint {
+        margin: 0 0 10px;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+        line-height: 1.4;
+      }
+      .dt-pre {
+        margin: 10px 0 0;
+        padding: 10px;
+        max-height: 220px;
+        overflow: auto;
+        background: var(--dt-base);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        font-size: 11px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--dt-text);
+      }
+      .dt-pre:empty::before {
+        content: '—';
+        color: var(--dt-text-secondary);
+      }
+      details.dt-json-details {
+        margin-top: 8px;
+      }
+      details.dt-json-details > summary {
+        cursor: pointer;
+        color: var(--dt-text-secondary);
+        font-size: 12px;
+      }
+      details.dt-json-details > .dt-pre {
+        margin-top: 8px;
+      }
+      .dt-substatus {
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+        min-height: 1.2em;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-base);
+        padding: 6px 8px;
+      }
+      .dt-substatus:empty {
+        display: none;
+      }
+      .dt-substatus.dt-err {
+        color: var(--dt-danger);
+        border-color: rgba(197, 34, 31, 0.35);
+        background: rgba(197, 34, 31, 0.05);
+      }
+      .dt-substatus.dt-ok {
+        color: var(--dt-success);
+        border-color: rgba(19, 115, 51, 0.35);
+        background: rgba(19, 115, 51, 0.08);
+      }
+      #dt-status,
+      .dt-substatus,
+      .dt-pre,
+      .dt-license-summary {
+        unicode-bidi: plaintext;
+      }
+      .dt-warning {
+        color: var(--dt-warning);
+      }
+      input[type='text'],
+      input[type='url'],
+      input[type='password'],
+      input[type='date'] {
+        width: 100%;
+        max-width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        font-size: 13px;
+        color: var(--dt-text);
+        background: var(--dt-surface);
+      }
+      html[dir='rtl'] input.dt-ltr,
+      html[dir='rtl'] textarea.dt-ltr {
+        direction: ltr;
+        text-align: left;
+      }
+      textarea {
+        width: 100%;
+        max-width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        font-size: 12px;
+        font-family: ui-monospace, monospace;
+        resize: vertical;
+        min-height: 88px;
+        color: var(--dt-text);
+        background: var(--dt-surface);
+      }
+      .dt-license-summary {
+        margin-top: 10px;
+        padding: 10px;
+        background: var(--dt-base);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--dt-text);
+      }
+      .dt-license-summary strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--dt-text);
+      }
+      .dt-license-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+        border-radius: var(--dt-radius-sm);
+        border: 1px solid var(--dt-border);
+        background: var(--dt-base);
+      }
+      .dt-license-badge {
+        margin-top: 2px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+      .dt-license-badge--trial {
+        background: var(--dt-warning-muted);
+        border-color: rgba(234, 134, 0, 0.4);
+        color: var(--dt-warning);
+      }
+      .dt-license-badge--active {
+        background: rgba(19, 115, 51, 0.08);
+        border-color: rgba(19, 115, 51, 0.35);
+        color: var(--dt-success);
+      }
+      .dt-license-badge--expired {
+        background: rgba(197, 34, 31, 0.06);
+        border-color: rgba(197, 34, 31, 0.35);
+        color: var(--dt-danger);
+      }
+      .dt-license-badge--unknown {
+        background: rgba(0, 0, 0, 0.02);
+        border-color: rgba(0, 0, 0, 0.1);
+        color: var(--dt-text-secondary);
+      }
+      .dt-license-banner-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .dt-license-title {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 0 2px;
+        color: var(--dt-text);
+      }
+      .dt-license-body {
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+        margin: 0 0 6px;
+      }
+      .dt-license-ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .dt-license-ctas button,
+      .dt-license-ctas a {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 999px;
+      }
+      .dt-license-ctas a {
+        text-decoration: none;
+        border: 1px solid transparent;
+        color: var(--dt-accent);
+        background: var(--dt-accent-muted);
+      }
+      .dt-license-ctas a:hover {
+        border-color: var(--dt-accent);
+      }
+      code {
+        font-size: 11px;
+        background: var(--dt-accent-muted);
+        padding: 1px 4px;
+        border-radius: 4px;
+        color: var(--dt-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="dt-title" data-i18n="sidebar.brand">Delivery Tool</h1>
+
+    <section class="dt-card" id="dt-license" aria-labelledby="dt-license-heading">
+      <h2 id="dt-license-heading" data-i18n="sidebar.section.license">Licence</h2>
+        <div id="dt-license-banner" class="dt-license-banner" aria-live="polite">
+          <span id="dt-license-badge" class="dt-license-badge dt-license-badge--unknown"></span>
+          <div class="dt-license-banner-main">
+            <p id="dt-license-title" class="dt-license-title"></p>
+            <p id="dt-license-body" class="dt-license-body"></p>
+            <div class="dt-license-ctas">
+              <button type="button" id="dt-license-activate-cta"></button>
+              <a href="#" id="dt-license-contact-cta" target="_blank" rel="noopener noreferrer"></a>
+            </div>
+          </div>
+        </div>
+      <label for="dt-api-url" data-i18n="sidebar.label.backend_url">Backend URL</label>
+      <input
+        type="url"
+        id="dt-api-url"
+        class="dt-ltr"
+        data-i18n-placeholder="sidebar.ph.backend_url"
+        placeholder="https://"
+        autocomplete="off"
+      />
+      <div class="dt-actions">
+        <button type="button" id="dt-api-url-save" data-i18n="sidebar.btn.save_url">Save URL</button>
+      </div>
+      <p class="dt-hint" data-i18n="sidebar.hint.backend_url"></p>
+      <label for="dt-api-key" data-i18n="sidebar.label.api_key_optional">API key</label>
+      <input
+        type="password"
+        id="dt-api-key"
+        class="dt-ltr"
+        data-i18n-placeholder="sidebar.ph.api_key"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="dt-actions">
+        <button type="button" id="dt-api-key-save" data-i18n="sidebar.btn.save_key">Save key</button>
+      </div>
+      <p class="dt-hint" data-i18n="sidebar.hint.api_key"></p>
+      <label for="dt-license-code" data-i18n="sidebar.label.activation_code_optional">Code</label>
+      <input
+        type="text"
+        id="dt-license-code"
+        class="dt-ltr"
+        autocomplete="off"
+        spellcheck="false"
+        data-i18n-placeholder="license.enter_code"
+      />
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-license-refresh" data-i18n="sidebar.btn.verify_activate">
+          Verify
+        </button>
+        <button type="button" id="dt-license-clear" data-i18n="sidebar.btn.forget_cache">Clear cache</button>
+      </div>
+      <p class="dt-hint" data-i18n="sidebar.hint.license_send"></p>
+      <details class="dt-hint">
+        <summary data-i18n="sidebar.hint.advanced_title">Advanced diagnostics</summary>
+        <p data-i18n="sidebar.hint.license_jwt"></p>
+      </details>
+      <div id="dt-license-summary" class="dt-license-summary"></div>
+      <p id="dt-license-status" class="dt-substatus" role="status"></p>
+      <label for="dt-lang" data-i18n="sidebar.label.lang">Language</label>
+      <select id="dt-lang">
+        <option value="ar" data-i18n="sidebar.lang.ar">العربية</option>
+        <option value="fr" data-i18n="sidebar.lang.fr">Français</option>
+        <option value="en" data-i18n="sidebar.lang.en">English</option>
+      </select>
+    </section>
+
+    <section class="dt-card" id="dt-carrier-creds" aria-labelledby="dt-carrier-creds-heading">
+      <h2 id="dt-carrier-creds-heading" data-i18n="sidebar.section.carrier_keys">Carrier keys</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.carrier_keys"></p>
+      <label for="dt-carrier-cred-carrier" data-i18n="sidebar.label.carrier">Carrier</label>
+      <select id="dt-carrier-cred-carrier" aria-describedby="dt-carrier-cred-status"></select>
+      <label for="dt-carrier-cred-key" data-i18n="sidebar.label.api_token">Token</label>
+      <input
+        type="password"
+        id="dt-carrier-cred-key"
+        class="dt-ltr"
+        data-i18n-placeholder="sidebar.ph.carrier_token"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-carrier-cred-save" data-i18n="general.save">Save</button>
+      </div>
+      <p id="dt-carrier-cred-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-business" aria-labelledby="dt-business-heading">
+      <h2 id="dt-business-heading" data-i18n="sidebar.section.business">Business</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.business"></p>
+      <label for="dt-biz-name" data-i18n="sidebar.label.biz_name">Name</label>
+      <input type="text" id="dt-biz-name" autocomplete="organization" />
+      <label for="dt-biz-phone" data-i18n="sidebar.label.biz_phone">Phone</label>
+      <input type="text" id="dt-biz-phone" class="dt-ltr" inputmode="tel" autocomplete="tel" />
+      <label for="dt-biz-address" data-i18n="sidebar.label.biz_address">Address</label>
+      <input type="text" id="dt-biz-address" autocomplete="street-address" />
+      <label for="dt-biz-wilaya" data-i18n="sidebar.label.biz_wilaya">Wilaya</label>
+      <input type="text" id="dt-biz-wilaya" autocomplete="address-level1" />
+      <label for="dt-biz-wilaya-code" data-i18n="sidebar.label.biz_wilaya_code">Code</label>
+      <input type="text" id="dt-biz-wilaya-code" class="dt-ltr" inputmode="numeric" autocomplete="off" />
+      <label for="dt-biz-commune" data-i18n="sidebar.label.biz_commune">Commune</label>
+      <input type="text" id="dt-biz-commune" autocomplete="address-level2" />
+      <label for="dt-biz-default-carrier" data-i18n="sidebar.label.biz_default_carrier">Carrier</label>
+      <select id="dt-biz-default-carrier"></select>
+      <label for="dt-biz-stopdesk-id" data-i18n="sidebar.label.biz_stopdesk">Stop-desk</label>
+      <input type="text" id="dt-biz-stopdesk-id" class="dt-ltr" autocomplete="off" />
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-biz-save" data-i18n="general.save">Save</button>
+        <button type="button" id="dt-biz-reload" data-i18n="general.reload">Reload</button>
+      </div>
+      <p id="dt-biz-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-setup" aria-labelledby="dt-setup-heading">
+      <h2 id="dt-setup-heading" data-i18n="sidebar.section.mapping">Setup</h2>
+      <div class="dt-row">
+        <label for="dt-sheet" data-i18n="sidebar.label.sheet">Sheet</label>
+        <select id="dt-sheet" aria-describedby="dt-status"></select>
+      </div>
+      <div class="dt-row">
+        <label for="dt-header-row" data-i18n="sidebar.label.header_row_optional">Header row (optional)</label>
+        <input
+          type="number"
+          id="dt-header-row"
+          min="1"
+          inputmode="numeric"
+          class="dt-ltr"
+        />
+      </div>
+      <div id="dt-fields" class="dt-row"></div>
+      <div class="dt-row">
+        <label for="dt-carrier" data-i18n="sidebar.label.carrier_default">Carrier</label>
+        <select id="dt-carrier"></select>
+      </div>
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-save" data-i18n="general.save">Save</button>
+        <button type="button" id="dt-reload" data-i18n="general.reload">Reload</button>
+      </div>
+      <p id="dt-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-fees" aria-labelledby="dt-fees-heading">
+      <h2 id="dt-fees-heading" data-i18n="sidebar.section.fees">Fees</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.fees"></p>
+      <label for="dt-fee-carrier" data-i18n="sidebar.label.carrier">Carrier</label>
+      <select id="dt-fee-carrier"></select>
+      <label for="dt-fee-default" data-i18n="sidebar.label.fee_default_da">Default</label>
+      <input type="text" id="dt-fee-default" class="dt-ltr" inputmode="decimal" autocomplete="off" />
+      <label for="dt-fee-wilaya" data-i18n="sidebar.label.fee_wilaya_optional">Wilaya rules</label>
+      <textarea
+        id="dt-fee-wilaya"
+        class="dt-ltr"
+        rows="5"
+        data-i18n-placeholder="sidebar.ph.fee_wilaya"
+        aria-describedby="dt-fee-hint2"
+      ></textarea>
+      <p id="dt-fee-hint2" class="dt-hint" data-i18n="sidebar.hint.fee_wilaya_line"></p>
+      <p class="dt-hint" data-i18n="sidebar.hint.fee_wilaya_compat"></p>
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-fee-save" data-i18n="sidebar.btn.save_fee_rules">Save rules</button>
+      </div>
+      <label class="dt-check">
+        <input type="checkbox" id="dt-fee-overwrite" checked />
+        <span data-i18n="sidebar.label.fee_overwrite">Overwrite</span>
+      </label>
+      <div class="dt-actions">
+        <button type="button" id="dt-fee-apply" data-i18n="sidebar.btn.apply_fees_selection">Apply</button>
+      </div>
+      <p id="dt-fee-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-lists" aria-labelledby="dt-lists-heading">
+      <h2 id="dt-lists-heading" data-i18n="sidebar.section.lists">Lists</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.wilaya_list"></p>
+      <label class="dt-check">
+        <input type="checkbox" id="dt-wilaya-allow-invalid" checked />
+        <span data-i18n="sidebar.label.allow_invalid_wilaya">Allow invalid</span>
+      </label>
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-wilaya-validate" data-i18n="sidebar.btn.validate_wilaya">
+          Validate wilaya
+        </button>
+      </div>
+      <p class="dt-hint" data-i18n="sidebar.hint.commune_list"></p>
+      <div class="dt-row">
+        <label for="dt-commune-wilaya" data-i18n="sidebar.label.commune_wilaya">Wilaya</label>
+        <select id="dt-commune-wilaya" aria-describedby="dt-lists-status"></select>
+      </div>
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-commune-validate" data-i18n="sidebar.btn.validate_commune">
+          Validate commune
+        </button>
+      </div>
+      <p class="dt-hint" data-i18n="sidebar.hint.blacklist_list"></p>
+      <div class="dt-actions">
+        <button type="button" id="dt-blacklist-highlight" data-i18n="sidebar.btn.blacklist_highlight">Highlight</button>
+      </div>
+      <p id="dt-lists-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-orders" aria-labelledby="dt-orders-heading">
+      <h2 id="dt-orders-heading" data-i18n="sidebar.section.orders">Orders</h2>
+      <p id="dt-sync-meta" class="dt-hint" role="status"></p>
+      <p id="dt-auto-sync-status" class="dt-hint" role="status"></p>
+      <p class="dt-hint" data-i18n="sidebar.hint.select_rows"></p>
+      <div class="dt-actions">
+        <button type="button" id="dt-orders-preview" data-i18n="sidebar.btn.analyze_selection">
+          Analyze
+        </button>
+        <button type="button" class="dt-primary" id="dt-orders-send" data-i18n="sidebar.btn.send_selection">Send</button>
+        <button type="button" id="dt-orders-sync" data-i18n="sidebar.btn.sync_tracking">Sync</button>
+        <button type="button" id="dt-auto-sync-toggle" data-i18n="sync.auto_enable">Enable auto-sync</button>
+      </div>
+      <div class="dt-actions">
+        <button type="button" id="dt-orders-print-labels" data-i18n="sidebar.btn.print_labels">Labels</button>
+        <button type="button" id="dt-orders-print-all" data-i18n="sidebar.btn.print_all">Print all labels</button>
+      </div>
+      <pre id="dt-orders-out" class="dt-pre" aria-live="polite"></pre>
+      <p id="dt-orders-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-journal" aria-labelledby="dt-journal-heading">
+      <h2 id="dt-journal-heading" data-i18n="sidebar.section.journal">Journal</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.journal"></p>
+      <div class="dt-actions">
+        <button type="button" id="dt-journal-refresh" data-i18n="sidebar.btn.journal_refresh">Refresh</button>
+        <button type="button" id="dt-journal-clear" data-i18n="sidebar.btn.journal_clear">Clear</button>
+      </div>
+      <div class="dt-actions">
+        <button type="button" id="dt-journal-retry-send" data-i18n="sidebar.btn.journal_retry_send">Retry send</button>
+        <button type="button" id="dt-journal-retry-sync" data-i18n="sidebar.btn.journal_retry_sync">Retry sync</button>
+      </div>
+      <pre id="dt-journal-out" class="dt-pre" aria-live="polite"></pre>
+      <p id="dt-journal-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <section class="dt-card" id="dt-stats" aria-labelledby="dt-stats-heading">
+      <h2 id="dt-stats-heading" data-i18n="sidebar.section.stats">Statistics</h2>
+      <p class="dt-hint" data-i18n="sidebar.hint.stats"></p>
+      <label for="dt-stats-from" data-i18n="sidebar.label.date_from_optional">From</label>
+      <input type="date" id="dt-stats-from" class="dt-ltr" />
+      <label for="dt-stats-to" data-i18n="sidebar.label.date_to_optional">To</label>
+      <input type="date" id="dt-stats-to" class="dt-ltr" />
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-stats-compute" data-i18n="sidebar.btn.compute_stats">Compute</button>
+      </div>
+      <pre id="dt-stats-out" class="dt-pre" aria-live="polite"></pre>
+      <p id="dt-stats-status" class="dt-substatus" role="status"></p>
+    </section>
+
+    <script>
+      window.__DT_I18N__ = <?!= stringsJson ?>;
+      window.__DT_LANG__ = '<?= lang ?>';
+    </script>
+    <?!= include('src/ui/views/welcome/client.js'); ?>
+  </body>
+</html>

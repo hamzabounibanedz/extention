@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="<?= lang ?>" dir="<?= lang === 'ar' ? 'rtl' : 'ltr' ?>">
+  <head>
+    <base target="_top" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --dt-base: #f1f3f4;
+        --dt-surface: #ffffff;
+        --dt-surface-secondary: #e8eaed;
+        --dt-border: #dadce0;
+        --dt-text: #202124;
+        --dt-text-secondary: #5f6368;
+        --dt-accent: #1a73e8;
+        --dt-accent-hover: #1558b0;
+        --dt-radius: 8px;
+        --dt-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: var(--dt-font);
+        margin: 0;
+        padding: 0;
+        background: var(--dt-base);
+        color: var(--dt-text);
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      .dt-setup-root {
+        padding: 20px 22px 24px;
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+        color: var(--dt-text);
+      }
+      .dt-lead {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: var(--dt-text-secondary);
+        line-height: 1.45;
+      }
+      .dt-section {
+        background: var(--dt-surface);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        padding: 14px 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 2px rgba(60, 64, 67, 0.06);
+      }
+      .dt-section-title {
+        font-weight: 600;
+        font-size: 0.9375rem;
+        margin: 0 0 8px;
+        color: var(--dt-text);
+      }
+      .dt-section p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--dt-text-secondary);
+        line-height: 1.45;
+      }
+      .dt-footer {
+        margin-top: 18px;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+        line-height: 1.4;
+      }
+      .dt-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .dt-actions > button {
+        flex: 1 1 150px;
+      }
+      button {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--dt-border);
+        background: var(--dt-surface);
+        color: var(--dt-text);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      button:hover:not(:disabled) {
+        background: var(--dt-surface-secondary);
+      }
+      button.dt-primary {
+        background: var(--dt-accent);
+        border-color: var(--dt-accent);
+        color: #fff;
+      }
+      button.dt-primary:hover:not(:disabled) {
+        background: var(--dt-accent-hover);
+        border-color: var(--dt-accent-hover);
+      }
+      button:focus-visible {
+        outline: 2px solid var(--dt-accent);
+        outline-offset: 2px;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .dt-checklist {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: var(--dt-radius);
+        border: 1px dashed var(--dt-border);
+        background: #f8fafc;
+      }
+      .dt-checklist-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin: 0 0 8px;
+        color: var(--dt-text);
+      }
+      .dt-checklist-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .dt-checklist-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--dt-text-secondary);
+        margin-bottom: 4px;
+      }
+      .dt-checklist-item:last-child {
+        margin-bottom: 0;
+      }
+      .dt-checklist-badge {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 1px solid var(--dt-border);
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--dt-text-secondary);
+        flex-shrink: 0;
+      }
+      .dt-checklist-badge.dt-done {
+        background: #e6f4ea;
+        border-color: #34a853;
+        color: #137333;
+      }
+      .dt-status {
+        margin-top: 10px;
+        min-height: 1.2em;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+      }
+      .dt-status.dt-err {
+        color: #c5221f;
+      }
+      .dt-status {
+        unicode-bidi: plaintext;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dt-setup-root">
+      <h1><?= HtmlService.createHtmlOutput(i18n_t('setup.title')).getContent(); ?></h1>
+      <p class="dt-lead"><?= HtmlService.createHtmlOutput(i18n_t('setup.intro_short')).getContent(); ?></p>
+
+      <div class="dt-section">
+        <div class="dt-section-title">
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_title')).getContent(); ?>
+        </div>
+        <p><?= HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_body')).getContent(); ?></p>
+      </div>
+
+      <div class="dt-section">
+        <div class="dt-section-title">
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.license_section_title')).getContent(); ?>
+        </div>
+        <p><?= HtmlService.createHtmlOutput(i18n_t('setup.license_section_body')).getContent(); ?></p>
+      </div>
+
+      <div class="dt-checklist" aria-live="polite">
+        <p class="dt-checklist-title">
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.checklist_title')).getContent(); ?>
+        </p>
+        <ul class="dt-checklist-list">
+          <li class="dt-checklist-item">
+            <span class="dt-checklist-badge" id="dt-check-backend" data-step="1">1</span>
+            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.backend')).getContent(); ?></span>
+          </li>
+          <li class="dt-checklist-item">
+            <span class="dt-checklist-badge" id="dt-check-mapping" data-step="2">2</span>
+            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.mapping')).getContent(); ?></span>
+          </li>
+          <li class="dt-checklist-item">
+            <span class="dt-checklist-badge" id="dt-check-test" data-step="3">3</span>
+            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.test_send')).getContent(); ?></span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="dt-footer">
+        <?= HtmlService.createHtmlOutput(i18n_t('setup.footer_hint')).getContent(); ?>
+      </div>
+      <div class="dt-actions">
+        <button type="button" class="dt-primary" id="dt-open-sidebar">
+          <?= HtmlService.createHtmlOutput(i18n_t('menu.open_sidebar')).getContent(); ?>
+        </button>
+        <button type="button" id="dt-close">
+          <?= HtmlService.createHtmlOutput(i18n_t('general.close')).getContent(); ?>
+        </button>
+      </div>
+      <p id="dt-status" class="dt-status" role="status"></p>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+        function setStatus(msg, isError) {
+          var node = document.getElementById('dt-status');
+          if (!node) return;
+          node.textContent = msg || '';
+          node.className = isError ? 'dt-status dt-err' : 'dt-status';
+        }
+
+        function setChecklistBadge(id, done) {
+          var badge = document.getElementById(id);
+          if (!badge) return;
+          if (done) {
+            badge.classList.add('dt-done');
+            badge.textContent = '✓';
+          } else {
+            badge.classList.remove('dt-done');
+            badge.textContent = badge.getAttribute('data-step') || '?';
+          }
+        }
+
+        function refreshChecklistFromSidebar() {
+          // Ask the sidebar for current mapping + license state and reflect it here.
+          try {
+            google.script.run
+              .withSuccessHandler(function (state) {
+                setChecklistBadge('dt-check-backend', !!(state && state.backendConfigured));
+                setChecklistBadge('dt-check-mapping', !!(state && state.mappingReady));
+                setChecklistBadge('dt-check-test', !!(state && state.testSent));
+              })
+              .withFailureHandler(function () {
+                // Leave badges as-is on error.
+              })
+              .setup_getChecklistState();
+          } catch (e) {
+            // Ignore in older deployments that do not implement setup_getChecklistState.
+          }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+          var openBtn = document.getElementById('dt-open-sidebar');
+          var closeBtn = document.getElementById('dt-close');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', function () {
+              google.script.host.close();
+            });
+          }
+          // Initialize checklist once on load.
+          refreshChecklistFromSidebar();
+
+          if (openBtn) {
+            openBtn.addEventListener('click', function () {
+              openBtn.disabled = true;
+              setStatus('<?= HtmlService.createHtmlOutput(i18n_t('general.loading')).getContent(); ?>', false);
+              google.script.run
+                .withSuccessHandler(function () {
+                  refreshChecklistFromSidebar();
+                  google.script.host.close();
+                })
+                .withFailureHandler(function (err) {
+                  setStatus(err && err.message ? String(err.message) : String(err), true);
+                  openBtn.disabled = false;
+                })
+                .showDeliveryToolSidebar_();
+            });
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

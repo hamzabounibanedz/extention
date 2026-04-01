@@ -1,0 +1,18 @@
+/**
+ * @fileoverview Entry point — Sheets simple triggers must call globally named handlers.
+ * Menu, sidebar, and storage live in sibling .gs files (shared global scope).
+ */
+
+/**
+ * Runs when the spreadsheet is opened. Installs the add-on menu.
+ */
+function onOpen() {
+  installDeliveryToolMenu_();
+}
+
+/**
+ * Runs when the add-on is installed (published add-on flow). Keeps menu in sync with first open.
+ */
+function onInstall() {
+  installDeliveryToolMenu_();
+}

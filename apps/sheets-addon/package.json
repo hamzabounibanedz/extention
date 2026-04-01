@@ -1,0 +1,16 @@
+{
+  "name": "@delivery-tool/sheets-addon",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Google Apps Script add-on (Sheets sidebar + server logic)",
+  "scripts": {
+    "clasp:login": "clasp login",
+    "clasp:create": "clasp create --type sheets --title \"Delivery Tool\"",
+    "clasp:push": "clasp push",
+    "clasp:pull": "clasp pull",
+    "clasp:open": "clasp open"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.0.0"
+  }
+}
