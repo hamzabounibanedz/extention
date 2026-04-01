@@ -1,13 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* 60% neutral base, 30% surfaces & secondary UI, 10% accent — aligned with Sheets add-on */
 :root {
-  --dt-base: #f1f3f4;
+  --dt-base: #f1f1f1;
   --dt-surface: #ffffff;
   --dt-surface-elevated: #f8f9fa;
   --dt-border: #dadce0;
   --dt-text: #202124;
   --dt-text-secondary: #5f6368;
   --dt-accent: #1a73e8;
-  --dt-accent-hover: #1558b0;
+  --dt-accent-hover: #0057ae;
   --dt-success: #137333;
   --dt-danger: #c5221f;
   /* warning tier to mirror Sheets sidebar for trials / near-expiry */
@@ -153,7 +157,7 @@ button {
   transition: background 0.12s ease, border-color 0.12s ease;
 }
 
-button:hover:not(:disabled) {
+button.legacy:hover:not(:disabled) {
   background: var(--dt-surface-elevated);
 }
 
