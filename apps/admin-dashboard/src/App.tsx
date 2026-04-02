@@ -76,7 +76,7 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     status_unused: 'غير مستخدم',
   },
   fr: {
-    app_title: 'Delivery Tool Admin – React',
+    app_title: 'Delivery Tool Admin ',
     app_subtitle:
       "Émettez des codes, gérez les clients et suivez les statistiques d'abonnement pour l'add-on Sheets.",
     lang_label: 'Langue',
@@ -143,7 +143,7 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     status_unused: 'Non utilisé',
   },
   en: {
-    app_title: 'Delivery Tool Admin – React',
+    app_title: 'Delivery Tool Admin',
     app_subtitle:
       'Modern admin dashboard to issue licenses, manage clients, and view subscription stats for the Sheets add-on.',
     lang_label: 'Language',
@@ -710,7 +710,7 @@ const App: React.FC = () => {
   }, [stats]);
 
   return (
-    <div className="min-h-screen bg-dt-base font-dt text-dt-text-secondary">
+    <div className="min-h-screen bg-dt-base font-dt text-dt-text">
       <Header
         lang={lang}
         onChangeLang={(next) => {
