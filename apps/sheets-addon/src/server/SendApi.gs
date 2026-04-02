@@ -89,6 +89,21 @@ function send_sendSelection() {
   }
 
   var businessSettings = businessSettings_get().value || businessSettings_getDefaults_();
+  // Compatibility bridge: older UI/settings store pickup desk as stopDeskId,
+  // while backend bulk flow expects defaultHubId for pickup-point fallback.
+  if (businessSettings) {
+    var bsStopDesk =
+      businessSettings.stopDeskId != null
+        ? String(businessSettings.stopDeskId).trim()
+        : '';
+    if (
+      bsStopDesk &&
+      (businessSettings.defaultHubId == null ||
+        String(businessSettings.defaultHubId).trim() === '')
+    ) {
+      businessSettings.defaultHubId = bsStopDesk;
+    }
+  }
   var sent = 0;
   var failed = 0;
   var labelUrls = [];
@@ -305,6 +320,9 @@ function send_sendSelection() {
     }
   } catch (logErr) {}
 
+  var failedDetails = batchDetails
+    .filter(function (d) { return !d.ok && d.errorMessage; })
+    .map(function (d) { return { row: d.rowNumber, error: d.errorMessage }; });
   return {
     attempted: sent + failed,
     succeeded: sent,
@@ -313,6 +331,7 @@ function send_sendSelection() {
     done: true,
     labelUrls: labelUrls,
     message: i18n_format('send.success', sent),
+    errors: failedDetails.length > 0 ? failedDetails : undefined,
   };
   } finally {
     lock.releaseLock();

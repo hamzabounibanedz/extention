@@ -4,8 +4,6 @@
 
  */
 
-
-
 /**
 
  * Headers for authenticated requests (UserProperties API key, optional).
@@ -15,21 +13,20 @@
  */
 
 function apiAuthHeaders_() {
-
+  var headers = {
+    // Prevent ngrok free-tier interstitial HTML page from replacing API JSON.
+    "ngrok-skip-browser-warning": "1",
+  };
   var key = getUserApiKey_();
 
   if (!key) {
-
-    return {};
-
+    return headers;
   }
 
   // Locked checklist: always send API key in X-API-Key.
-  return { 'X-API-Key': String(key) };
-
+  headers["X-API-Key"] = String(key);
+  return headers;
 }
-
-
 
 /**
 
@@ -40,36 +37,28 @@ function apiAuthHeaders_() {
  */
 
 function getLicenseAccessTokenFromCache_() {
-
   var raw = DeliveryToolStorage.getLicenseCacheJson();
 
   if (!raw) {
-
-    return '';
-
+    return "";
   }
 
   try {
-
     var rec = JSON.parse(raw);
 
-    if (rec && rec.accessToken != null && String(rec.accessToken).trim() !== '') {
-
+    if (
+      rec &&
+      rec.accessToken != null &&
+      String(rec.accessToken).trim() !== ""
+    ) {
       return String(rec.accessToken).trim();
-
     }
-
   } catch (e) {
-
     /* ignore */
-
   }
 
-  return '';
-
+  return "";
 }
-
-
 
 /**
 
@@ -82,32 +71,24 @@ function getLicenseAccessTokenFromCache_() {
  */
 
 function apiJsonGet_(path) {
-
   var base = getApiBaseUrl_();
 
   if (!base) {
-
-    throw new Error(i18n_t('error.backend_url_missing'));
-
+    throw new Error(i18n_t("error.backend_url_missing"));
   }
 
   var url = base + path;
 
   var options = {
-
-    method: 'get',
+    method: "get",
 
     muteHttpExceptions: true,
 
     headers: apiAuthHeaders_(),
-
   };
 
   return fetchWithRetry_(url, options);
-
 }
-
-
 
 /**
 
@@ -122,52 +103,44 @@ function apiJsonGet_(path) {
  */
 
 function apiJsonPost_(path, body) {
-
   var base = getApiBaseUrl_();
 
   if (!base) {
-
-    throw new Error(i18n_t('error.backend_url_missing'));
-
+    throw new Error(i18n_t("error.backend_url_missing"));
   }
 
   var url = base + path;
 
   var headers = Object.assign(
+    { "Content-Type": "application/json" },
 
-    { 'Content-Type': 'application/json' },
-
-    apiAuthHeaders_()
-
+    apiAuthHeaders_(),
   );
 
-  if (path.indexOf('/v1/shipments/') === 0) {
+  if (path.indexOf("/v1/shipments/") === 0) {
     var dtTok = null;
-    if (typeof license_getAccessToken_ === 'function') {
+    if (typeof license_getAccessToken_ === "function") {
       dtTok = license_getAccessToken_();
     }
     if (!dtTok) {
       dtTok = getLicenseAccessTokenFromCache_();
     }
     if (dtTok) {
-      headers['X-DT-Access-Token'] = dtTok;
+      headers["X-DT-Access-Token"] = dtTok;
     }
   }
 
   var options = {
-
-    method: 'post',
+    method: "post",
 
     muteHttpExceptions: true,
 
     payload: JSON.stringify(body || {}),
 
     headers: headers,
-
   };
 
   return fetchWithRetry_(url, options);
-
 }
 
 function fetchWithRetry_(url, options) {
@@ -190,8 +163,6 @@ function fetchWithRetry_(url, options) {
   return {};
 }
 
-
-
 /**
 
  * @param {GoogleAppsScript.URL_Fetch.HTTPResponse} res
@@ -201,67 +172,45 @@ function fetchWithRetry_(url, options) {
  */
 
 function parseApiResponse_(res) {
-
   var code = res.getResponseCode();
 
   var text = res.getContentText();
 
   if (code < 200 || code >= 300) {
-
-    var msg = i18n_format('error.api_http', code);
+    var msg = i18n_format("error.api_http", code);
 
     try {
-
       var errJson = JSON.parse(text);
 
-      if (errJson && typeof errJson === 'object') {
-
+      if (errJson && typeof errJson === "object") {
         if (errJson.message) {
-
-        msg = String(errJson.message);
-
+          msg = String(errJson.message);
         } else if (errJson.error) {
-
           msg = String(errJson.error);
-
         } else if (errJson.code) {
-
           msg = String(errJson.code);
-
         }
-
       }
-
     } catch (e) {
-
       if (text) {
-
-        msg = msg + ': ' + text.slice(0, 180);
-
+        msg = msg + ": " + text.slice(0, 180);
       }
-
     }
 
     throw new Error(msg);
-
   }
 
   if (!text) {
-
     return {};
-
   }
 
   try {
-
     return JSON.parse(text);
-
   } catch (e) {
-
-    throw new Error(i18n_t('error.api_invalid_json'));
-
+    var trimmed = String(text || "").trim();
+    if (trimmed && trimmed.charAt(0) === "<") {
+      throw new Error(i18n_t("error.api_invalid_json_html"));
+    }
+    throw new Error(i18n_t("error.api_invalid_json"));
   }
-
 }
-
-

@@ -70,14 +70,26 @@ export async function insertAdminLicenseCode(
 export async function listAdminLicenseCodes(
   pool: Pool,
   limit: number,
+  opts?: { activatedBy?: string | null },
 ): Promise<AdminLicenseRow[]> {
   const lim = Math.min(500, Math.max(1, limit));
+  const activatedBy =
+    opts?.activatedBy != null && String(opts.activatedBy).trim() !== ''
+      ? String(opts.activatedBy).trim()
+      : null;
+  const params: Array<number | string> = [lim];
+  let whereSql = '';
+  if (activatedBy) {
+    params.push(activatedBy);
+    whereSql = 'WHERE activated_by = $2';
+  }
   const r = await pool.query<AdminLicenseRow>(
     `SELECT id, code, created_at, duration_days, notes, revoked, revoked_at, activated_by, activated_at
      FROM dt_admin_license_code
+     ${whereSql}
      ORDER BY created_at DESC
      LIMIT $1`,
-    [lim],
+    params,
   );
   return r.rows;
 }

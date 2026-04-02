@@ -10,10 +10,10 @@ var LICENSE_CACHE_TTL_MS_ = 60 * 60 * 1000; // 1 hour
 var WHATSAPP_LINK_ = (function () {
   try {
     var props = PropertiesService.getScriptProperties();
-    var v = props && props.getProperty('dt.whatsapp.link');
-    return v && String(v).trim() !== '' ? String(v).trim() : '';
+    var v = props && props.getProperty("dt.whatsapp.link");
+    return v && String(v).trim() !== "" ? String(v).trim() : "";
   } catch (e) {
-    return '';
+    return "";
   }
 })();
 
@@ -21,7 +21,7 @@ var WHATSAPP_LINK_ = (function () {
 function license_getCurrentEmail_() {
   try {
     var email = Session.getActiveUser().getEmail();
-    return email && email.trim() !== '' ? email.trim() : null;
+    return email && email.trim() !== "" ? email.trim() : null;
   } catch (e) {
     // Fall back below.
   }
@@ -32,11 +32,11 @@ function license_getCurrentEmail_() {
       cached.customerEmail != null
         ? String(cached.customerEmail).trim()
         : cached.email != null
-        ? String(cached.email).trim()
-        : cached.clientEmail != null
-        ? String(cached.clientEmail).trim()
-        : '';
-    if (fromCache && fromCache.indexOf('@') > 0) {
+          ? String(cached.email).trim()
+          : cached.clientEmail != null
+            ? String(cached.clientEmail).trim()
+            : "";
+    if (fromCache && fromCache.indexOf("@") > 0) {
       return fromCache.toLowerCase();
     }
   }
@@ -51,14 +51,22 @@ function license_getCurrentEmail_() {
 function license_getSidebarState() {
   // 1. Check cache first
   var cached = license_getCachedRecord_();
-  if (cached && cached._cachedAt && Date.now() - cached._cachedAt < LICENSE_CACHE_TTL_MS_) {
+  if (
+    cached &&
+    cached._cachedAt &&
+    Date.now() - cached._cachedAt < LICENSE_CACHE_TTL_MS_
+  ) {
     var stateFromCache = license_buildSidebarState_(cached);
     // Enrich with API configuration hints for the sidebar UI.
     var baseCached = getApiBaseUrl_();
-    stateFromCache.apiBaseUrl = baseCached || '';
+    stateFromCache.apiBaseUrl = baseCached || "";
     var userKeyCached = getUserApiKey_ && getUserApiKey_();
-    stateFromCache.apiKeyConfigured = !!(userKeyCached && String(userKeyCached).trim() !== '');
-    stateFromCache.apiConfigured = !!(baseCached && String(baseCached).trim() !== '');
+    stateFromCache.apiKeyConfigured = !!(
+      userKeyCached && String(userKeyCached).trim() !== ""
+    );
+    stateFromCache.apiConfigured = !!(
+      baseCached && String(baseCached).trim() !== ""
+    );
     stateFromCache.record = cached;
     return stateFromCache;
   }
@@ -68,25 +76,25 @@ function license_getSidebarState() {
   if (!email) {
     var baseNoEmail = getApiBaseUrl_();
     return {
-      status: 'no_email',
-      message: i18n_t('general.error'),
-      apiBaseUrl: baseNoEmail || '',
-      apiConfigured: !!(baseNoEmail && String(baseNoEmail).trim() !== ''),
+      status: "no_email",
+      message: i18n_t("general.error"),
+      apiBaseUrl: baseNoEmail || "",
+      apiConfigured: !!(baseNoEmail && String(baseNoEmail).trim() !== ""),
       apiKeyConfigured: false,
       record: null,
     };
   }
   try {
-    var record = apiJsonPost_('/v1/license/status', { email: email });
+    var record = apiJsonPost_("/v1/license/status", { email: email });
     record._cachedAt = Date.now();
     DeliveryToolStorage.setLicenseCacheJson(JSON.stringify(record));
     DeliveryToolStorage.setAccessToken(record.accessToken || null);
     var state = license_buildSidebarState_(record);
     var base = getApiBaseUrl_();
-    state.apiBaseUrl = base || '';
+    state.apiBaseUrl = base || "";
     var userKey = getUserApiKey_ && getUserApiKey_();
-    state.apiKeyConfigured = !!(userKey && String(userKey).trim() !== '');
-    state.apiConfigured = !!(base && String(base).trim() !== '');
+    state.apiKeyConfigured = !!(userKey && String(userKey).trim() !== "");
+    state.apiConfigured = !!(base && String(base).trim() !== "");
     state.record = record;
     return state;
   } catch (e) {
@@ -95,19 +103,23 @@ function license_getSidebarState() {
     if (stale) {
       var stateStale = license_buildSidebarState_(stale);
       var baseStale = getApiBaseUrl_();
-      stateStale.apiBaseUrl = baseStale || '';
+      stateStale.apiBaseUrl = baseStale || "";
       var userKeyStale = getUserApiKey_ && getUserApiKey_();
-      stateStale.apiKeyConfigured = !!(userKeyStale && String(userKeyStale).trim() !== '');
-      stateStale.apiConfigured = !!(baseStale && String(baseStale).trim() !== '');
+      stateStale.apiKeyConfigured = !!(
+        userKeyStale && String(userKeyStale).trim() !== ""
+      );
+      stateStale.apiConfigured = !!(
+        baseStale && String(baseStale).trim() !== ""
+      );
       stateStale.record = stale;
       return stateStale;
     }
     var baseErr = getApiBaseUrl_();
     return {
-      status: 'error',
-      message: i18n_format('general.error', e && e.message ? e.message : e),
-      apiBaseUrl: baseErr || '',
-      apiConfigured: !!(baseErr && String(baseErr).trim() !== ''),
+      status: "error",
+      message: i18n_format("general.error", e && e.message ? e.message : e),
+      apiBaseUrl: baseErr || "",
+      apiConfigured: !!(baseErr && String(baseErr).trim() !== ""),
       apiKeyConfigured: false,
       record: null,
     };
@@ -126,7 +138,7 @@ function license_buildSidebarState_(record) {
   if (trialEnd) {
     daysRemaining = Math.max(
       0,
-      Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000)
+      Math.ceil((new Date(trialEnd).getTime() - Date.now()) / 86400000),
     );
   }
   var expiresOn = null;
@@ -135,29 +147,29 @@ function license_buildSidebarState_(record) {
   }
   return {
     status: status,
-    email: record.clientEmail || record.email || '',
+    email: record.clientEmail || record.email || "",
     daysRemaining: daysRemaining,
     expiresOn: expiresOn,
     whatsappLink: WHATSAPP_LINK_,
     strings: {
       title:
-        status === 'trial'
-          ? i18n_t('trial.welcome_title')
-          : status === 'active'
-          ? i18n_t('license.active')
-          : status === 'expired'
-          ? i18n_t('license.expired_title')
-          : i18n_t('trial.expired_title'),
+        status === "trial"
+          ? i18n_t("trial.welcome_title")
+          : status === "active"
+            ? i18n_t("license.active")
+            : status === "expired"
+              ? i18n_t("license.expired_title")
+              : i18n_t("trial.expired_title"),
       body:
-        status === 'trial'
+        status === "trial"
           ? daysRemaining > 0
-            ? i18n_format('trial.days_remaining', daysRemaining)
-            : i18n_t('trial.expired_body')
-          : status === 'active'
-          ? i18n_format('license.expires_on', expiresOn || '')
-          : i18n_t('license.expired_body'),
-      contactLabel: i18n_t('trial.contact_whatsapp'),
-      activateLabel: i18n_t('license.have_code'),
+            ? i18n_format("trial.days_remaining", daysRemaining)
+            : i18n_t("trial.expired_body")
+          : status === "active"
+            ? i18n_format("license.expires_on", expiresOn || "")
+            : i18n_t("license.expired_body"),
+      contactLabel: i18n_t("trial.contact_whatsapp"),
+      activateLabel: i18n_t("license.have_code"),
     },
   };
 }
@@ -168,14 +180,14 @@ function license_buildSidebarState_(record) {
  * @return {{ ok: boolean, message: string }}
  */
 function license_activate(code) {
-  if (!code || String(code).trim() === '') {
-    throw new Error(i18n_t('license.activate_error'));
+  if (!code || String(code).trim() === "") {
+    throw new Error(i18n_t("license.activate_error"));
   }
   var email = license_getCurrentEmail_();
   if (!email) {
-    throw new Error(i18n_t('general.error'));
+    throw new Error(i18n_t("general.error"));
   }
-  var record = apiJsonPost_('/v1/license/activate', {
+  var record = apiJsonPost_("/v1/license/activate", {
     code: String(code).trim().toUpperCase(),
     email: email,
   });
@@ -183,7 +195,7 @@ function license_activate(code) {
   DeliveryToolStorage.setAccessToken(record.accessToken || null);
   record._cachedAt = Date.now();
   DeliveryToolStorage.setLicenseCacheJson(JSON.stringify(record));
-  return { ok: true, message: i18n_t('license.activate_success') };
+  return { ok: true, message: i18n_t("license.activate_success") };
 }
 
 /**
@@ -198,12 +210,14 @@ function license_assertOperationsAllowed_(opts) {
   opts = opts || {};
 
   var cached = license_getCachedRecord_();
-  var status = cached ? cached.licenseStatus || cached.status : 'invalid';
+  var status = cached ? cached.licenseStatus || cached.status : "invalid";
 
   // If cache is stale, re-validate unless explicitly disabled (e.g. time-based triggers).
   if (
     !opts.skipRefresh &&
-    (!cached || !cached._cachedAt || Date.now() - cached._cachedAt > LICENSE_CACHE_TTL_MS_)
+    (!cached ||
+      !cached._cachedAt ||
+      Date.now() - cached._cachedAt > LICENSE_CACHE_TTL_MS_)
   ) {
     try {
       var fresh = license_getSidebarState();
@@ -213,18 +227,26 @@ function license_assertOperationsAllowed_(opts) {
     }
   }
 
-  if (status === 'active' || status === 'trial') {
+  if (status === "active" || status === "trial") {
     // For trial: check days remaining
-    if (status === 'trial' && cached && (cached.trialEnd || cached.trialExpiresAt)) {
+    if (
+      status === "trial" &&
+      cached &&
+      (cached.trialEnd || cached.trialExpiresAt)
+    ) {
       var tEnd = cached.trialEnd || cached.trialExpiresAt;
       if (new Date(tEnd).getTime() < Date.now()) {
-        throw new Error(i18n_t('trial.expired_title') + '. ' + i18n_t('trial.expired_body'));
+        throw new Error(
+          i18n_t("trial.expired_title") + ". " + i18n_t("trial.expired_body"),
+        );
       }
     }
     return true;
   }
 
-  throw new Error(i18n_t('general.license_required') + '. ' + i18n_t('license.expired_body'));
+  throw new Error(
+    i18n_t("general.license_required") + ". " + i18n_t("license.expired_body"),
+  );
 }
 
 /**
@@ -275,11 +297,13 @@ function license_getAccessToken_() {
  */
 function license_getTokenExpiryMs_(token) {
   try {
-    var parts = String(token).split('.');
+    var parts = String(token).split(".");
     if (parts.length !== 2) return null;
-    var payloadJson = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
+    var payloadJson = Utilities.newBlob(
+      Utilities.base64DecodeWebSafe(parts[0]),
+    ).getDataAsString();
     var payload = JSON.parse(payloadJson);
-    return payload && typeof payload.expMs === 'number' ? payload.expMs : null;
+    return payload && typeof payload.expMs === "number" ? payload.expMs : null;
   } catch (e) {
     return null;
   }

@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto';
 
 type ZrCredentials = {
   tenantId: string;
-  apiKey: string;
+  secretKey: string;
   bearerToken?: string;
   version: string;
   baseUrl: string;
@@ -47,8 +47,15 @@ function pickFirst_(obj: AdapterCredentials | undefined, keys: string[]): string
 
 function parseCredentials_(credentials?: AdapterCredentials): ZrCredentials | null {
   const tenantId = pickFirst_(credentials, ['tenantId', 'tenant', 'xTenant', 'X-Tenant']);
-  const apiKey = pickFirst_(credentials, ['apiKey', 'xApiKey', 'X-Api-Key', 'api_key']);
-  if (!tenantId || !apiKey) {
+  const secretKey = pickFirst_(credentials, [
+    'secretKey',
+    'secret',
+    'apiKey',
+    'xApiKey',
+    'X-Api-Key',
+    'api_key',
+  ]);
+  if (!tenantId || !secretKey) {
     return null;
   }
   const bearerToken = pickFirst_(credentials, ['bearerToken', 'token', 'bearer', 'authorization']);
@@ -56,7 +63,7 @@ function parseCredentials_(credentials?: AdapterCredentials): ZrCredentials | nu
   const baseUrl = (pickFirst_(credentials, ['baseUrl']) || ZR_DEFAULT_BASE).replace(/\/+$/, '');
   return {
     tenantId,
-    apiKey,
+    secretKey,
     bearerToken: bearerToken || undefined,
     version,
     baseUrl,
@@ -73,7 +80,7 @@ function headersForKeyAuth_(creds: ZrCredentials): Record<string, string> {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     'X-Tenant': creds.tenantId,
-    'X-Api-Key': creds.apiKey,
+    'X-Api-Key': creds.secretKey,
   };
 }
 
@@ -343,14 +350,15 @@ export class ZrAdapter implements CarrierAdapter {
     if (!creds) {
       return {
         ok: false,
-        errorMessage: 'ZR: clé API manquante (tenantId/apiKey) — intégration à brancher.',
+        errorMessage: 'ZR: credentials missing (tenantId/secretKey).',
       };
     }
     const searchBody = {
       pageNumber: 1,
       pageSize: 20,
       advancedSearch: {
-        fields: [{ field: 'trackingNumber', keyword: trackingNumber }],
+        field: 'trackingNumber',
+        keyword: trackingNumber,
       },
     };
     const result = await this.searchParcels({
@@ -371,7 +379,7 @@ export class ZrAdapter implements CarrierAdapter {
   async testConnection(credentials?: AdapterCredentials): Promise<TestConnectionResult> {
     const creds = parseCredentials_(credentials);
     if (!creds) {
-      return { ok: false, message: 'Missing ZR credentials (tenantId/apiKey).' };
+      return { ok: false, message: 'Missing ZR credentials (tenantId/secretKey).' };
     }
     const url = `${zrBase_(creds)}/users/profile`;
     const keyHeaders = headersForKeyAuth_(creds);
@@ -416,7 +424,7 @@ export class ZrAdapter implements CarrierAdapter {
   async fetchAllTerritories(credentials?: AdapterCredentials): Promise<TerritoryRecord[]> {
     const creds = parseCredentials_(credentials);
     if (!creds) {
-      throw new Error('Missing ZR credentials (tenantId/apiKey).');
+      throw new Error('Missing ZR credentials (tenantId/secretKey).');
     }
     const out: TerritoryRecord[] = [];
     const pageSize = 1000;
@@ -459,7 +467,7 @@ export class ZrAdapter implements CarrierAdapter {
         failures: input.parcels.map((p, index) => ({
           index,
           errorCode: 'MISSING_CREDENTIALS',
-          errorMessage: 'Missing ZR credentials (tenantId/apiKey).',
+          errorMessage: 'Missing ZR credentials (tenantId/secretKey).',
           externalId: p.externalId != null ? String(p.externalId) : null,
         })),
       };

@@ -4,62 +4,305 @@
 
 var SETUP_SCHEMA_VERSION_ = 2;
 var SETUP_ALIAS_SCHEMA_VERSION_ = 1;
-var SETUP_ALIAS_KEY_PREFIX_ = 'dt.v1.mapAlias.';
-var SETUP_AUTODETECT_MIN_SCORE_ = 0.66;
+var SETUP_ALIAS_KEY_PREFIX_ = "dt.v1.mapAlias.";
+var SETUP_AUTODETECT_MIN_SCORE_ = 0.6;
 var SETUP_ALIAS_MAX_PER_FIELD_ = 20;
 
 var SETUP_FIELD_KEYS_ = [
-  'orderIdColumn',
-  'phoneColumn',
-  'addressColumn',
-  'wilayaColumn',
-  'codColumn',
-  'customerFirstNameColumn',
-  'customerLastNameColumn',
-  'customerFullNameColumn',
-  'wilayaCodeColumn',
-  'communeColumn',
-  'productColumn',
-  'quantityColumn',
-  'shippingFeeColumn',
-  'deliveryTypeColumn',
-  'stopDeskIdColumn',
-  'statusColumn',
-  'carrierColumn',
-  'trackingColumn',
-  'externalShipmentIdColumn',
-  'labelUrlColumn',
-  'notesColumn',
-  'blacklistColumn',
-  'blacklistReasonColumn',
-  'orderDateColumn',
+  "orderIdColumn",
+  "phoneColumn",
+  "addressColumn",
+  "wilayaColumn",
+  "codColumn",
+  "customerFirstNameColumn",
+  "customerLastNameColumn",
+  "customerFullNameColumn",
+  "wilayaCodeColumn",
+  "communeColumn",
+  "productColumn",
+  "quantityColumn",
+  "shippingFeeColumn",
+  "deliveryTypeColumn",
+  "stopDeskIdColumn",
+  "statusColumn",
+  "carrierColumn",
+  "trackingColumn",
+  "externalShipmentIdColumn",
+  "labelUrlColumn",
+  "notesColumn",
+  "blacklistColumn",
+  "blacklistReasonColumn",
+  "orderDateColumn",
 ];
 
 var SETUP_FIELD_SYNONYMS_ = {
-  orderIdColumn: ['order id', 'id commande', 'numero commande', 'num commande', 'commande id', 'id'],
-  phoneColumn: ['phone', 'telephone', 'tel', 'mobile', 'gsm', 'رقم الهاتف', 'الهاتف', 'phone1'],
-  addressColumn: ['address', 'adresse', 'adr', 'عنوان', 'location'],
-  wilayaColumn: ['wilaya', 'province', 'ولاية'],
-  codColumn: ['cod', 'montant', 'amount', 'prix', 'prix livraison', 'قيمة الطلب', 'المبلغ'],
-  customerFirstNameColumn: ['first name', 'prenom', 'الاسم'],
-  customerLastNameColumn: ['last name', 'nom', 'family name', 'اللقب', 'النسب'],
-  customerFullNameColumn: ['full name', 'nom complet', 'customer name', 'client', 'اسم و لقب', 'الاسم الكامل'],
-  wilayaCodeColumn: ['wilaya code', 'code wilaya', 'province code', 'رقم الولاية'],
-  communeColumn: ['commune', 'district', 'municipality', 'baladia', 'بلدية'],
-  productColumn: ['product', 'produit', 'article', 'منتج'],
-  quantityColumn: ['quantity', 'qty', 'qte', 'quantite', 'الكمية'],
-  shippingFeeColumn: ['shipping fee', 'delivery fee', 'frais livraison', 'frais', 'سعر التوصيل'],
-  deliveryTypeColumn: ['delivery type', 'delivery mode', 'type livraison', 'mode livraison', 'نوع التوصيل'],
-  stopDeskIdColumn: ['stopdesk', 'pickup point', 'relay', 'hub', 'station', 'point relais', 'مكتب'],
-  statusColumn: ['status', 'statut', 'etat', 'الحالة'],
-  carrierColumn: ['carrier', 'transporteur', 'livreur', 'شركة التوصيل'],
-  trackingColumn: ['tracking', 'tracking number', 'suivi', 'num suivi', 'رقم التتبع'],
-  externalShipmentIdColumn: ['external id', 'shipment id', 'parcel id', 'id expedition', 'معرف الشحنة'],
-  labelUrlColumn: ['label', 'label url', 'etiquette', 'bon', 'رابط الملصق'],
-  notesColumn: ['notes', 'note', 'comment', 'remarque', 'ملاحظات'],
-  blacklistColumn: ['blacklist', 'liste noire', 'blocked', 'black listed', 'محظور', 'قائمة سوداء'],
-  blacklistReasonColumn: ['blacklist reason', 'raison blacklist', 'motif blacklist', 'سبب الحظر'],
-  orderDateColumn: ['order date', 'date commande', 'date', 'تاريخ الطلب'],
+  orderIdColumn: [
+    "order id",
+    "orderid",
+    "order no",
+    "order number",
+    "order ref",
+    "id commande",
+    "numero commande",
+    "numéro commande",
+    "num commande",
+    "n commande",
+    "n° commande",
+    "commande id",
+    "ref commande",
+    "reference",
+    "référence",
+    "ref",
+    "bon",
+    "id",
+    "رقم الطلب",
+    "رقم الفاتورة",
+    "تتبع الطلب",
+  ],
+  phoneColumn: [
+    "phone",
+    "telephone",
+    "téléphone",
+    "tel",
+    "mobile",
+    "gsm",
+    "whatsapp",
+    "wa",
+    "رقم الهاتف",
+    "الهاتف",
+    "هاتف",
+    "phone1",
+    "phone 1",
+    "tel client",
+  ],
+  addressColumn: [
+    "address",
+    "adresse",
+    "adr",
+    "adresse livraison",
+    "adresse de livraison",
+    "delivery address",
+    "lieu",
+    "destination",
+    "localisation",
+    "location",
+    "عنوان",
+    "عنوان التوصيل",
+    "مكان التوصيل",
+    "العنوان",
+  ],
+  wilayaColumn: [
+    "wilaya",
+    "province",
+    "state",
+    "governorate",
+    "ولاية",
+    "الولاية",
+  ],
+  codColumn: [
+    "cod",
+    "montant",
+    "montant cod",
+    "amount",
+    "amount due",
+    "total",
+    "total da",
+    "total dz",
+    "prix",
+    "prix total",
+    "tarif",
+    "prix livraison",
+    "قيمة الطلب",
+    "المبلغ",
+    "المجموع",
+    "الثمن",
+    "دفع عند الاستلام",
+  ],
+  customerFirstNameColumn: [
+    "first name",
+    "firstname",
+    "prenom",
+    "prénom",
+    "given name",
+    "الاسم",
+    "الاسم الاول",
+    "الاسم الأول",
+  ],
+  customerLastNameColumn: [
+    "last name",
+    "lastname",
+    "nom",
+    "family name",
+    "surname",
+    "nom de famille",
+    "اللقب",
+    "النسب",
+    "اسم العائلة",
+  ],
+  customerFullNameColumn: [
+    "full name",
+    "fullname",
+    "nom complet",
+    "customer name",
+    "client name",
+    "client",
+    "name",
+    "nom client",
+    "اسم و لقب",
+    "الاسم الكامل",
+    "اسم الزبون",
+  ],
+  wilayaCodeColumn: [
+    "wilaya code",
+    "code wilaya",
+    "province code",
+    "code province",
+    "رقم الولاية",
+    "كود الولاية",
+  ],
+  communeColumn: [
+    "commune",
+    "district",
+    "municipality",
+    "city",
+    "ville",
+    "localite",
+    "localité",
+    "baladia",
+    "بلدية",
+    "مدينة",
+    "البلدية",
+  ],
+  productColumn: [
+    "product",
+    "produit",
+    "article",
+    "item",
+    "designation",
+    "description",
+    "منتج",
+    "المنتج",
+    "سلعة",
+  ],
+  quantityColumn: ["quantity", "qty", "qte", "quantite", "quantité", "الكمية"],
+  shippingFeeColumn: [
+    "shipping fee",
+    "shipping",
+    "delivery fee",
+    "delivery cost",
+    "frais livraison",
+    "frais",
+    "frais de livraison",
+    "سعر التوصيل",
+    "رسوم الشحن",
+    "تكلفة التوصيل",
+  ],
+  deliveryTypeColumn: [
+    "delivery type",
+    "delivery mode",
+    "type livraison",
+    "mode livraison",
+    "livraison",
+    "نوع التوصيل",
+    "طريقة التوصيل",
+  ],
+  stopDeskIdColumn: [
+    "stopdesk",
+    "stop desk",
+    "pickup point",
+    "pickup",
+    "relay",
+    "hub",
+    "hub id",
+    "station",
+    "point relais",
+    "bureau",
+    "مكتب",
+    "نقطة الاستلام",
+    "desk",
+  ],
+  statusColumn: [
+    "status",
+    "statut",
+    "etat",
+    "état",
+    "order status",
+    "الحالة",
+    "حالة الطلب",
+  ],
+  carrierColumn: [
+    "carrier",
+    "transporteur",
+    "livreur",
+    "delivery company",
+    "expediteur",
+    "شركة التوصيل",
+    "الناقل",
+    "شركة الشحن",
+  ],
+  trackingColumn: [
+    "tracking",
+    "tracking number",
+    "track",
+    "track no",
+    "suivi",
+    "num suivi",
+    "n suivi",
+    "رقم التتبع",
+    "تتبع",
+  ],
+  externalShipmentIdColumn: [
+    "external id",
+    "shipment id",
+    "parcel id",
+    "id expedition",
+    "معرف الشحنة",
+  ],
+  labelUrlColumn: [
+    "label",
+    "label url",
+    "url label",
+    "etiquette",
+    "étiquette",
+    "sticker",
+    "bon de livraison",
+    "رابط الملصق",
+    "رابط البوليصة",
+  ],
+  notesColumn: [
+    "notes",
+    "note",
+    "comment",
+    "comments",
+    "remarque",
+    "observation",
+    "ملاحظات",
+    "تعليق",
+  ],
+  blacklistColumn: [
+    "blacklist",
+    "liste noire",
+    "blocked",
+    "black listed",
+    "محظور",
+    "قائمة سوداء",
+  ],
+  blacklistReasonColumn: [
+    "blacklist reason",
+    "raison blacklist",
+    "motif blacklist",
+    "سبب الحظر",
+  ],
+  orderDateColumn: [
+    "order date",
+    "date commande",
+    "date de commande",
+    "purchase date",
+    "created",
+    "created at",
+    "تاريخ الطلب",
+    "تاريخ",
+  ],
 };
 
 /**
@@ -68,8 +311,8 @@ var SETUP_FIELD_SYNONYMS_ = {
  */
 function setup_getCarriersFallback_() {
   return [
-    { id: 'yalidine', label: 'Yalidine' },
-    { id: 'zr', label: 'ZR' },
+    { id: "yalidine", label: "Yalidine" },
+    { id: "zr", label: "ZR" },
   ];
 }
 
@@ -78,30 +321,53 @@ function setup_getCarriersFallback_() {
  * @return {Array<{ id: string, label: string }>}
  */
 function setup_resolveCarriers_() {
+  return setup_resolveCarriersWithMeta_().carriers;
+}
+
+/**
+ * Resolve carriers with resilience metadata for UX messaging.
+ * @return {{
+ *   carriers: Array<{ id: string, label: string }>,
+ *   warning: string|null
+ * }}
+ */
+function setup_resolveCarriersWithMeta_() {
   var fallback = setup_getCarriersFallback_();
   if (!getApiBaseUrl_()) {
-    return fallback;
+    return { carriers: fallback, warning: null };
   }
   try {
-    var res = apiJsonGet_('/v1/carriers');
+    var res = apiJsonGet_("/v1/carriers");
     if (res && res.carriers && res.carriers.length) {
-      return res.carriers.map(function (c) {
-        return { id: String(c.id), label: String(c.label != null ? c.label : c.id) };
-      });
+      return {
+        carriers: res.carriers.map(function (c) {
+          return {
+            id: String(c.id),
+            label: String(c.label != null ? c.label : c.id),
+          };
+        }),
+        warning: null,
+      };
     }
+    return {
+      carriers: fallback,
+      warning: i18n_t("warn.backend_carriers_fallback"),
+    };
   } catch (e) {
-    // Locked checklist: when backend is configured, do not silently fall back.
     var msg = e && e.message ? String(e.message) : String(e);
-    throw new Error(i18n_format('error.backend_carriers_load_with_reason', msg));
+    return {
+      carriers: fallback,
+      warning: i18n_format("warn.backend_carriers_fallback_with_reason", msg),
+    };
   }
-  throw new Error(i18n_t('error.backend_carriers_load'));
 }
 
 /**
  * @return {{
  *   spreadsheetId: string,
  *   sheets: Array<{ sheetId: number, sheetName: string }>,
- *   carriers: Array<{ id: string, label: string }>
+ *   carriers: Array<{ id: string, label: string }>,
+ *   carriersWarning: string|null
  * }}
  */
 function setup_getContext() {
@@ -110,8 +376,13 @@ function setup_getContext() {
   var sheets = ss.getSheets().map(function (sh) {
     return { sheetId: sh.getSheetId(), sheetName: sh.getName() };
   });
-  var carriers = setup_resolveCarriers_();
-  return { spreadsheetId: spreadsheetId, sheets: sheets, carriers: carriers };
+  var carriersMeta = setup_resolveCarriersWithMeta_();
+  return {
+    spreadsheetId: spreadsheetId,
+    sheets: sheets,
+    carriers: carriersMeta.carriers,
+    carriersWarning: carriersMeta.warning,
+  };
 }
 
 /**
@@ -130,10 +401,10 @@ function setup_getHeaders(sheetId, headerRowRaw) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = getSheetById_(ss, id);
   if (!sheet) {
-    throw new Error(i18n_t('error.sheet_not_found'));
+    throw new Error(i18n_t("error.sheet_not_found"));
   }
   var headerRow =
-    headerRowRaw != null && String(headerRowRaw).trim() !== ''
+    headerRowRaw != null && String(headerRowRaw).trim() !== ""
       ? Number(headerRowRaw)
       : 1;
   if (!Number.isFinite(headerRow) || headerRow < 1) {
@@ -156,8 +427,8 @@ function setup_getHeaders(sheetId, headerRowRaw) {
   }
   var row = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
   var headers = row.map(function (cell) {
-    if (cell === '' || cell === null) {
-      return '';
+    if (cell === "" || cell === null) {
+      return "";
     }
     return String(cell).trim();
   });
@@ -168,7 +439,7 @@ function setup_getHeaders(sheetId, headerRowRaw) {
     columns.push({
       index: c,
       letter: columnIndexToLetter_(c),
-      header: headers[c - 1] || '',
+      header: headers[c - 1] || "",
     });
   }
   return {
@@ -185,27 +456,27 @@ function setup_getHeaders(sheetId, headerRowRaw) {
  * @return {string}
  */
 function setup_getActiveUserHash_() {
-  var email = '';
+  var email = "";
   try {
     email = Session.getActiveUser().getEmail();
   } catch (e) {
-    email = '';
+    email = "";
   }
-  var normalized = email != null ? String(email).trim().toLowerCase() : '';
+  var normalized = email != null ? String(email).trim().toLowerCase() : "";
   if (!normalized) {
-    return 'anon';
+    return "anon";
   }
   var digest = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
     normalized,
     Utilities.Charset.UTF_8,
   );
-  var out = '';
+  var out = "";
   for (var i = 0; i < digest.length; i++) {
     var v = digest[i];
     if (v < 0) v += 256;
     var hex = v.toString(16);
-    out += hex.length === 1 ? '0' + hex : hex;
+    out += hex.length === 1 ? "0" + hex : hex;
   }
   return out;
 }
@@ -219,9 +490,9 @@ function setup_aliasStoreKey_(spreadsheetId, sheetId) {
   return (
     SETUP_ALIAS_KEY_PREFIX_ +
     spreadsheetId +
-    ':' +
+    ":" +
     String(sheetId) +
-    ':' +
+    ":" +
     setup_getActiveUserHash_()
   );
 }
@@ -235,18 +506,29 @@ function setup_getLearnedAliases_(spreadsheetId, sheetId) {
   var key = setup_aliasStoreKey_(spreadsheetId, sheetId);
   var raw = PropertiesService.getUserProperties().getProperty(key);
   if (!raw) {
-    return { schemaVersion: SETUP_ALIAS_SCHEMA_VERSION_, fields: {}, updatedAt: null };
+    return {
+      schemaVersion: SETUP_ALIAS_SCHEMA_VERSION_,
+      fields: {},
+      updatedAt: null,
+    };
   }
   try {
     var parsed = JSON.parse(raw);
-    var fields = parsed && parsed.fields && typeof parsed.fields === 'object' ? parsed.fields : {};
+    var fields =
+      parsed && parsed.fields && typeof parsed.fields === "object"
+        ? parsed.fields
+        : {};
     return {
       schemaVersion: SETUP_ALIAS_SCHEMA_VERSION_,
       fields: fields,
       updatedAt: parsed && parsed.updatedAt ? String(parsed.updatedAt) : null,
     };
   } catch (e) {
-    return { schemaVersion: SETUP_ALIAS_SCHEMA_VERSION_, fields: {}, updatedAt: null };
+    return {
+      schemaVersion: SETUP_ALIAS_SCHEMA_VERSION_,
+      fields: {},
+      updatedAt: null,
+    };
   }
 }
 
@@ -269,14 +551,14 @@ function setup_setLearnedAliases_(spreadsheetId, sheetId, payload) {
  * @return {string}
  */
 function setup_normalizeHeader_(s) {
-  if (s == null) return '';
+  if (s == null) return "";
   return String(s)
     .trim()
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[_./|-]+/g, ' ')
-    .replace(/\s+/g, ' ')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_./|-]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -288,13 +570,24 @@ function setup_normalizeHeader_(s) {
 function setup_termScore_(headerNorm, termNorm) {
   if (!headerNorm || !termNorm) return 0;
   if (headerNorm === termNorm) return 1;
-  if (headerNorm.indexOf(termNorm) !== -1 || termNorm.indexOf(headerNorm) !== -1) {
+  if (
+    headerNorm.indexOf(termNorm) !== -1 ||
+    termNorm.indexOf(headerNorm) !== -1
+  ) {
     return 0.92;
   }
-  var h = headerNorm.split(' ').filter(function (x) {
+  var hTok = headerNorm.split(" ").filter(function (x) {
     return x;
   });
-  var t = termNorm.split(' ').filter(function (x) {
+  for (var ti = 0; ti < hTok.length; ti++) {
+    if (hTok[ti] === termNorm) {
+      return 0.9;
+    }
+  }
+  var h = headerNorm.split(" ").filter(function (x) {
+    return x;
+  });
+  var t = termNorm.split(" ").filter(function (x) {
     return x;
   });
   if (!h.length || !t.length) return 0;
@@ -317,8 +610,13 @@ function setup_termScore_(headerNorm, termNorm) {
  * @param {number} headerRow
  * @param {Object} columns
  */
-function setup_learnAliasesFromMapping_(spreadsheetId, sheetId, headerRow, columns) {
-  if (!columns || typeof columns !== 'object') return;
+function setup_learnAliasesFromMapping_(
+  spreadsheetId,
+  sheetId,
+  headerRow,
+  columns,
+) {
+  if (!columns || typeof columns !== "object") return;
   var headerPayload = setup_getHeaders(sheetId, headerRow);
   var headers = headerPayload.headers || [];
   var aliases = setup_getLearnedAliases_(spreadsheetId, sheetId);
@@ -331,7 +629,9 @@ function setup_learnAliasesFromMapping_(spreadsheetId, sheetId, headerRow, colum
     var header = headers[col - 1];
     var norm = setup_normalizeHeader_(header);
     if (!norm) return;
-    var arr = Array.isArray(fields[fieldKey]) ? fields[fieldKey].map(String) : [];
+    var arr = Array.isArray(fields[fieldKey])
+      ? fields[fieldKey].map(String)
+      : [];
     arr = arr.filter(function (x) {
       return setup_normalizeHeader_(x) !== norm;
     });
@@ -371,7 +671,7 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
   var spreadsheetId = ss.getId();
   var sheet = getSheetById_(ss, id);
   if (!sheet) {
-    throw new Error(i18n_t('error.sheet_not_found'));
+    throw new Error(i18n_t("error.sheet_not_found"));
   }
   var headerPayload = setup_getHeaders(id, headerRowRaw);
   var cols = headerPayload.columns || [];
@@ -381,8 +681,12 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
   var scored = [];
 
   SETUP_FIELD_KEYS_.forEach(function (fieldKey) {
-    var defaults = Array.isArray(SETUP_FIELD_SYNONYMS_[fieldKey]) ? SETUP_FIELD_SYNONYMS_[fieldKey] : [];
-    var userTerms = Array.isArray(learnedFields[fieldKey]) ? learnedFields[fieldKey] : [];
+    var defaults = Array.isArray(SETUP_FIELD_SYNONYMS_[fieldKey])
+      ? SETUP_FIELD_SYNONYMS_[fieldKey]
+      : [];
+    var userTerms = Array.isArray(learnedFields[fieldKey])
+      ? learnedFields[fieldKey]
+      : [];
     var termsMap = {};
     var terms = [];
     defaults.concat(userTerms).forEach(function (raw) {
@@ -396,7 +700,7 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
     var bestCol = null;
     var bestScore = 0;
     cols.forEach(function (c) {
-      var hn = setup_normalizeHeader_(c.header || '');
+      var hn = setup_normalizeHeader_(c.header || "");
       if (!hn) return;
       var localBest = 0;
       terms.forEach(function (term) {
@@ -460,15 +764,16 @@ function setup_loadMapping(sheetId) {
   try {
     raw = JSON.parse(json);
   } catch (e) {
-    throw new Error(i18n_t('error.mapping_invalid'));
+    throw new Error(i18n_t("error.mapping_invalid"));
   }
 
-  if (!raw || typeof raw !== 'object') {
-    throw new Error(i18n_t('error.mapping_invalid'));
+  if (!raw || typeof raw !== "object") {
+    throw new Error(i18n_t("error.mapping_invalid"));
   }
 
   // Normalize legacy shapes (schema v1 → v2) without breaking stored data.
-  var columns = raw.columns && typeof raw.columns === 'object' ? raw.columns : {};
+  var columns =
+    raw.columns && typeof raw.columns === "object" ? raw.columns : {};
 
   // Legacy single name column → use as full name when first/last are absent.
   if (columns.customerNameColumn != null) {
@@ -480,15 +785,15 @@ function setup_loadMapping(sheetId) {
 
   // Default carrier: prefer explicit v2 field, then legacy carrierId.
   var defaultCarrier =
-    raw.defaultCarrier != null && String(raw.defaultCarrier).trim() !== ''
+    raw.defaultCarrier != null && String(raw.defaultCarrier).trim() !== ""
       ? String(raw.defaultCarrier).trim()
-      : raw.carrierId != null && String(raw.carrierId).trim() !== ''
-      ? String(raw.carrierId).trim()
-      : null;
+      : raw.carrierId != null && String(raw.carrierId).trim() !== ""
+        ? String(raw.carrierId).trim()
+        : null;
 
   // Header row: ensure configurable and >= 1. Legacy mappings defaulted to 1.
   var headerRow =
-    raw.headerRow != null && String(raw.headerRow).trim() !== ''
+    raw.headerRow != null && String(raw.headerRow).trim() !== ""
       ? Number(raw.headerRow)
       : 1;
   if (!Number.isFinite(headerRow) || headerRow < 1) {
@@ -499,7 +804,7 @@ function setup_loadMapping(sheetId) {
   var payload = {
     spreadsheetId: spreadsheetId,
     sheetId: id,
-    sheetName: sheet ? sheet.getName() : raw.sheetName || '',
+    sheetName: sheet ? sheet.getName() : raw.sheetName || "",
     columns: columns,
     defaultCarrier: defaultCarrier,
     headerRow: Math.floor(headerRow),
@@ -508,7 +813,11 @@ function setup_loadMapping(sheetId) {
 
   // Persist normalized shape so future reads do not need to re-migrate.
   try {
-    DeliveryToolStorage.setMappingJson(spreadsheetId, id, JSON.stringify(payload));
+    DeliveryToolStorage.setMappingJson(
+      spreadsheetId,
+      id,
+      JSON.stringify(payload),
+    );
   } catch (e2) {
     // Best-effort only.
   }
@@ -532,10 +841,13 @@ function setup_getChecklistState() {
   // Backend + license: require base URL and a non-error license state. API key is optional.
   try {
     var base = getApiBaseUrl_();
-    if (base && String(base).trim() !== '') {
-      var lic = typeof license_getSidebarState === 'function' ? license_getSidebarState() : null;
+    if (base && String(base).trim() !== "") {
+      var lic =
+        typeof license_getSidebarState === "function"
+          ? license_getSidebarState()
+          : null;
       var st = lic && lic.status;
-      backendConfigured = st === 'active' || st === 'trial';
+      backendConfigured = st === "active" || st === "trial";
     }
   } catch (e) {
     // Leave backendConfigured as false on error.
@@ -547,11 +859,20 @@ function setup_getChecklistState() {
     var spreadsheetId = ss.getId();
     var sheet = ss.getActiveSheet();
     var sheetId = sheet.getSheetId();
-    var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
-    if (mappingJson && String(mappingJson).trim() !== '') {
+    var mappingJson = DeliveryToolStorage.getMappingJson(
+      spreadsheetId,
+      sheetId,
+    );
+    if (mappingJson && String(mappingJson).trim() !== "") {
       var saved = setup_loadMapping(sheetId);
       var cols = saved && saved.columns ? saved.columns : {};
-      var required = ['orderIdColumn', 'phoneColumn', 'addressColumn', 'wilayaColumn', 'codColumn'];
+      var required = [
+        "orderIdColumn",
+        "phoneColumn",
+        "addressColumn",
+        "wilayaColumn",
+        "codColumn",
+      ];
       var allPresent = true;
       for (var i = 0; i < required.length; i++) {
         var key = required[i];
@@ -560,6 +881,27 @@ function setup_getChecklistState() {
         if (!isFinite(n) || n < 1) {
           allPresent = false;
           break;
+        }
+      }
+      if (allPresent) {
+        var fullN = cols.customerFullNameColumn;
+        var firstN = cols.customerFirstNameColumn;
+        var lastN = cols.customerLastNameColumn;
+        var nameOk =
+          (fullN != null &&
+            String(fullN).trim() !== "" &&
+            isFinite(Number(fullN)) &&
+            Number(fullN) >= 1) ||
+          (firstN != null &&
+            String(firstN).trim() !== "" &&
+            isFinite(Number(firstN)) &&
+            Number(firstN) >= 1) ||
+          (lastN != null &&
+            String(lastN).trim() !== "" &&
+            isFinite(Number(lastN)) &&
+            Number(lastN) >= 1);
+        if (!nameOk) {
+          allPresent = false;
         }
       }
       mappingReady = allPresent;
@@ -574,12 +916,12 @@ function setup_getChecklistState() {
   try {
     var ss2 = SpreadsheetApp.getActiveSpreadsheet();
     var spreadsheetId2 = ss2.getId();
-    if (typeof ops_readEntries_ === 'function') {
+    if (typeof ops_readEntries_ === "function") {
       var entries = ops_readEntries_(spreadsheetId2);
       if (entries && entries.length) {
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i];
-          if (entry && entry.kind === 'send' && entry.attempted > 0) {
+          if (entry && entry.kind === "send" && entry.attempted > 0) {
             testSent = true;
             break;
           }
@@ -602,32 +944,33 @@ function setup_getChecklistState() {
  * @return {Object} Normalized payload that was stored
  */
 function setup_saveMapping(mapping) {
-  if (!mapping || typeof mapping !== 'object') {
-    throw new Error(i18n_t('error.invalid_data'));
+  if (!mapping || typeof mapping !== "object") {
+    throw new Error(i18n_t("error.invalid_data"));
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var spreadsheetId = ss.getId();
   if (mapping.spreadsheetId !== spreadsheetId) {
-    throw new Error(i18n_t('error.wrong_spreadsheet'));
+    throw new Error(i18n_t("error.wrong_spreadsheet"));
   }
   var sheetId = Number(mapping.sheetId);
   var sheet = getSheetById_(ss, sheetId);
   if (!sheet) {
-    throw new Error(i18n_t('error.sheet_not_found'));
+    throw new Error(i18n_t("error.sheet_not_found"));
   }
   var columns = {};
-  if (mapping.columns != null && typeof mapping.columns === 'object') {
+  if (mapping.columns != null && typeof mapping.columns === "object") {
     if (Array.isArray(mapping.columns)) {
-      throw new Error(i18n_t('error.columns_format_invalid'));
+      throw new Error(i18n_t("error.columns_format_invalid"));
     }
     columns = mapping.columns;
   }
   var carrierRaw =
-    mapping.defaultCarrier != null && String(mapping.defaultCarrier).trim() !== ''
+    mapping.defaultCarrier != null &&
+    String(mapping.defaultCarrier).trim() !== ""
       ? String(mapping.defaultCarrier).trim()
       : null;
   var headerRow =
-    mapping.headerRow != null && String(mapping.headerRow).trim() !== ''
+    mapping.headerRow != null && String(mapping.headerRow).trim() !== ""
       ? Number(mapping.headerRow)
       : 1;
   if (!Number.isFinite(headerRow) || headerRow < 1) {
@@ -645,11 +988,16 @@ function setup_saveMapping(mapping) {
   };
   var json = JSON.stringify(payload);
   if (json.length > 9000) {
-    throw new Error(i18n_t('error.mapping_too_large'));
+    throw new Error(i18n_t("error.mapping_too_large"));
   }
   DeliveryToolStorage.setMappingJson(spreadsheetId, sheetId, json);
   try {
-    setup_learnAliasesFromMapping_(spreadsheetId, sheetId, payload.headerRow, payload.columns);
+    setup_learnAliasesFromMapping_(
+      spreadsheetId,
+      sheetId,
+      payload.headerRow,
+      payload.columns,
+    );
   } catch (e3) {
     // Learning is best-effort and must never block explicit mapping saves.
   }
@@ -678,7 +1026,7 @@ function getSheetById_(ss, sheetId) {
  */
 function columnIndexToLetter_(columnIndexOneBased) {
   var col = columnIndexOneBased;
-  var result = '';
+  var result = "";
   while (col > 0) {
     var remainder = (col - 1) % 26;
     result = String.fromCharCode(65 + remainder) + result;

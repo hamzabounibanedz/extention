@@ -1,6 +1,6 @@
 <script>
   (function () {
-    'use strict';
+    "use strict";
 
     var I18N = {};
     function t(key) {
@@ -10,64 +10,155 @@
       var args = Array.prototype.slice.call(arguments, 1);
       var s = t(key);
       return s.replace(/\{(\d+)\}/g, function (_, i) {
-        return args[i] !== undefined && args[i] !== null ? String(args[i]) : '';
+        return args[i] !== undefined && args[i] !== null ? String(args[i]) : "";
       });
     }
     function applyDomI18n() {
-      document.querySelectorAll('[data-i18n]').forEach(function (node) {
-        node.textContent = t(node.getAttribute('data-i18n'));
+      document.querySelectorAll("[data-i18n]").forEach(function (node) {
+        node.textContent = t(node.getAttribute("data-i18n"));
       });
-      document.querySelectorAll('[data-i18n-placeholder]').forEach(function (node) {
-        node.setAttribute('placeholder', t(node.getAttribute('data-i18n-placeholder')));
-      });
+      document
+        .querySelectorAll("[data-i18n-placeholder]")
+        .forEach(function (node) {
+          node.setAttribute(
+            "placeholder",
+            t(node.getAttribute("data-i18n-placeholder")),
+          );
+        });
     }
 
     var FIELD_DEFS = [
       // Required for sending orders
-      { key: 'orderIdColumn', mapKey: 'sidebar.map.orderId', group: 'required' },
-      { key: 'phoneColumn', mapKey: 'sidebar.map.phone', group: 'required' },
-      { key: 'addressColumn', mapKey: 'sidebar.map.address', group: 'required' },
-      { key: 'wilayaColumn', mapKey: 'sidebar.map.wilaya', group: 'required' },
-      { key: 'codColumn', mapKey: 'sidebar.map.cod', group: 'required' },
+      {
+        key: "orderIdColumn",
+        mapKey: "sidebar.map.orderId",
+        group: "required",
+      },
+      { key: "phoneColumn", mapKey: "sidebar.map.phone", group: "required" },
+      {
+        key: "addressColumn",
+        mapKey: "sidebar.map.address",
+        group: "required",
+      },
+      { key: "wilayaColumn", mapKey: "sidebar.map.wilaya", group: "required" },
+      { key: "codColumn", mapKey: "sidebar.map.cod", group: "required" },
+      // Recipient name: at least one mapped column (matches carrier validation, e.g. ZR).
+      {
+        key: "customerFirstNameColumn",
+        mapKey: "sidebar.map.firstName",
+        group: "required",
+      },
+      {
+        key: "customerLastNameColumn",
+        mapKey: "sidebar.map.lastName",
+        group: "required",
+      },
+      {
+        key: "customerFullNameColumn",
+        mapKey: "sidebar.map.fullName",
+        group: "required",
+      },
       // Recommended for smoother delivery
-      { key: 'customerFirstNameColumn', mapKey: 'sidebar.map.firstName', group: 'recommended' },
-      { key: 'customerLastNameColumn', mapKey: 'sidebar.map.lastName', group: 'recommended' },
-      { key: 'customerFullNameColumn', mapKey: 'sidebar.map.fullName', group: 'recommended' },
-      { key: 'wilayaCodeColumn', mapKey: 'sidebar.map.wilayaCode', group: 'recommended' },
-      { key: 'communeColumn', mapKey: 'sidebar.map.commune', group: 'recommended' },
-      { key: 'productColumn', mapKey: 'sidebar.map.product', group: 'recommended' },
-      { key: 'quantityColumn', mapKey: 'sidebar.map.qty', group: 'recommended' },
+      {
+        key: "wilayaCodeColumn",
+        mapKey: "sidebar.map.wilayaCode",
+        group: "recommended",
+      },
+      {
+        key: "communeColumn",
+        mapKey: "sidebar.map.commune",
+        group: "recommended",
+      },
+      {
+        key: "productColumn",
+        mapKey: "sidebar.map.product",
+        group: "recommended",
+      },
+      {
+        key: "quantityColumn",
+        mapKey: "sidebar.map.qty",
+        group: "recommended",
+      },
       // Optional / advanced tracking & operations
-      { key: 'shippingFeeColumn', mapKey: 'sidebar.map.shippingFee', group: 'optional' },
-      { key: 'deliveryTypeColumn', mapKey: 'sidebar.map.deliveryType', group: 'optional' },
-      { key: 'stopDeskIdColumn', mapKey: 'sidebar.map.stopDeskId', group: 'optional' },
+      {
+        key: "shippingFeeColumn",
+        mapKey: "sidebar.map.shippingFee",
+        group: "optional",
+      },
+      {
+        key: "deliveryTypeColumn",
+        mapKey: "sidebar.map.deliveryType",
+        group: "optional",
+      },
+      {
+        key: "stopDeskIdColumn",
+        mapKey: "sidebar.map.stopDeskId",
+        group: "optional",
+      },
       // Status and tracking are essential for write-back and sync, but not strictly required
       // to start a minimal send flow, so we treat them as "recommended" instead of "optional".
-      { key: 'statusColumn', mapKey: 'sidebar.map.status', group: 'recommended' },
-      { key: 'carrierColumn', mapKey: 'sidebar.map.carrierCol', group: 'optional' },
-      { key: 'trackingColumn', mapKey: 'sidebar.map.tracking', group: 'recommended' },
-      { key: 'externalShipmentIdColumn', mapKey: 'sidebar.map.externalId', group: 'optional' },
-      { key: 'labelUrlColumn', mapKey: 'sidebar.map.labelUrl', group: 'optional' },
-      { key: 'notesColumn', mapKey: 'sidebar.map.notes', group: 'optional' },
-      { key: 'blacklistColumn', mapKey: 'sidebar.map.blacklist', group: 'optional' },
-      { key: 'blacklistReasonColumn', mapKey: 'sidebar.map.blacklistReason', group: 'optional' },
-      { key: 'orderDateColumn', mapKey: 'sidebar.map.orderDate', group: 'optional' },
+      {
+        key: "statusColumn",
+        mapKey: "sidebar.map.status",
+        group: "recommended",
+      },
+      {
+        key: "carrierColumn",
+        mapKey: "sidebar.map.carrierCol",
+        group: "optional",
+      },
+      {
+        key: "trackingColumn",
+        mapKey: "sidebar.map.tracking",
+        group: "recommended",
+      },
+      {
+        key: "externalShipmentIdColumn",
+        mapKey: "sidebar.map.externalId",
+        group: "optional",
+      },
+      {
+        key: "labelUrlColumn",
+        mapKey: "sidebar.map.labelUrl",
+        group: "optional",
+      },
+      { key: "notesColumn", mapKey: "sidebar.map.notes", group: "optional" },
+      {
+        key: "blacklistColumn",
+        mapKey: "sidebar.map.blacklist",
+        group: "optional",
+      },
+      {
+        key: "blacklistReasonColumn",
+        mapKey: "sidebar.map.blacklistReason",
+        group: "optional",
+      },
+      {
+        key: "orderDateColumn",
+        mapKey: "sidebar.map.orderDate",
+        group: "optional",
+      },
     ];
 
     var state = {
       spreadsheetId: null,
       sheets: [],
       carriers: [],
+      carrierCredByCarrier: {},
       currentSheetId: null,
       headerPayload: null,
       mapping: null,
       feeRules: null,
       lastLabelUrls: [],
       autoSyncEnabled: false,
-      licenseStatus: 'unknown',
+      licenseStatus: "unknown",
+      apiBaseUrl: "",
       apiConfigured: false,
+      /** When false, onboarding step for license is not styled (avoids “signed out” flash while loading). */
+      licenseUiHydrated: false,
       mappingReady: false,
       opsReady: false,
+      carriersWarning: "",
     };
 
     var el = {
@@ -95,6 +186,7 @@
       licenseClear: null,
       licenseSummary: null,
       licenseStatus: null,
+      licenseStatusInline: null,
       licenseBanner: null,
       licenseBadge: null,
       licenseTitle: null,
@@ -126,8 +218,13 @@
       journalRetrySend: null,
       journalRetrySync: null,
       carrierCredCarrier: null,
+      carrierCredSingleWrap: null,
+      carrierCredZrWrap: null,
       carrierCredKey: null,
+      carrierCredTenant: null,
+      carrierCredSecret: null,
       carrierCredSave: null,
+      carrierCredTest: null,
       carrierCredStatus: null,
       bizName: null,
       bizPhone: null,
@@ -149,76 +246,103 @@
       return document.getElementById(id);
     }
 
+    function safeInsertBefore_(parent, node, referenceNode) {
+      if (!parent || !node) return false;
+      var ref = referenceNode || null;
+      if (ref && ref.parentNode !== parent) {
+        ref = null;
+      }
+      try {
+        parent.insertBefore(node, ref);
+        return true;
+      } catch (e) {
+        try {
+          parent.appendChild(node);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+    }
+
+    /** UX order: account → carrier keys → business defaults → column mapping → daily ops → advanced tools. */
     var FLOW_SECTION_ORDER_ = [
-      'dt-license',
-      'dt-setup',
-      'dt-orders',
-      'dt-business',
-      'dt-carrier-creds',
-      'dt-fees',
-      'dt-lists',
-      'dt-journal',
-      'dt-stats',
+      "dt-license",
+      "dt-carrier-creds",
+      "dt-business",
+      "dt-setup",
+      "dt-orders",
+      "dt-fees",
+      "dt-lists",
+      "dt-journal",
+      "dt-stats",
     ];
 
+    /** Only these three sections show numbered onboarding badges (1–3). */
+    var CORE_FLOW_STEP_BY_SECTION_ = {
+      "dt-license": 1,
+      "dt-setup": 2,
+      "dt-orders": 3,
+    };
+
     var SECTION_DEFAULT_OPEN_ = {
-      'dt-license': true,
-      'dt-setup': true,
-      'dt-orders': true,
-      'dt-business': false,
-      'dt-carrier-creds': false,
-      'dt-fees': false,
-      'dt-lists': false,
-      'dt-journal': false,
-      'dt-stats': false,
+      "dt-license": true,
+      "dt-setup": true,
+      "dt-orders": true,
+      "dt-business": false,
+      "dt-carrier-creds": false,
+      "dt-fees": false,
+      "dt-lists": false,
+      "dt-journal": false,
+      "dt-stats": false,
     };
 
     function initSectionFlowUi() {
-      var firstScript = document.querySelector('script');
+      var anchor = $("dt-sections-anchor");
       FLOW_SECTION_ORDER_.forEach(function (id) {
         var section = $(id);
-        if (section && firstScript) {
-          document.body.insertBefore(section, firstScript);
-        }
+        if (!section || !anchor || !anchor.parentNode) return;
+        // Keep DOM ordering best-effort only: never let it block sidebar boot.
+        safeInsertBefore_(anchor.parentNode, section, anchor);
       });
 
       FLOW_SECTION_ORDER_.forEach(function (id) {
         var card = $(id);
-        if (!card || card.querySelector('.dt-section-content')) {
+        if (!card || card.querySelector(".dt-section-content")) {
           return;
         }
-        var heading = card.querySelector('h2');
+        var heading = card.querySelector("h2");
         if (!heading) {
           return;
         }
 
-        var titleText = heading.textContent || '';
-        var flowStep = FLOW_SECTION_ORDER_.indexOf(id) + 1;
+        var titleText = heading.textContent || "";
+        var flowStep = CORE_FLOW_STEP_BY_SECTION_[id];
         while (heading.firstChild) heading.removeChild(heading.firstChild);
-        var title = document.createElement('span');
-        title.className = 'dt-step-title';
+        var title = document.createElement("span");
+        title.className = "dt-step-title";
         if (flowStep >= 1 && flowStep <= 3) {
-          card.setAttribute('data-core-step', String(flowStep));
-          var stepBadge = document.createElement('span');
-          var stepBadgeId = id + '-step-badge';
+          card.setAttribute("data-core-step", String(flowStep));
+          var stepBadge = document.createElement("span");
+          var stepBadgeId = id + "-step-badge";
           stepBadge.id = stepBadgeId;
-          stepBadge.className = 'dt-step-badge';
-          stepBadge.setAttribute('data-step-number', String(flowStep));
+          stepBadge.className = "dt-step-badge";
+          stepBadge.setAttribute("data-step-number", String(flowStep));
           stepBadge.textContent = String(flowStep);
-          card.setAttribute('data-step-badge-id', stepBadgeId);
+          card.setAttribute("data-step-badge-id", stepBadgeId);
           title.appendChild(stepBadge);
         }
-        var titleLabel = document.createElement('span');
+        var titleLabel = document.createElement("span");
         titleLabel.textContent = titleText;
         title.appendChild(titleLabel);
-        var toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'dt-section-toggle';
+        var toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "dt-section-toggle";
         heading.appendChild(title);
         heading.appendChild(toggle);
 
-        var content = document.createElement('div');
-        content.className = 'dt-section-content';
+        var content = document.createElement("div");
+        content.className = "dt-section-content";
         while (heading.nextSibling) {
           content.appendChild(heading.nextSibling);
         }
@@ -226,11 +350,13 @@
 
         var open = !!SECTION_DEFAULT_OPEN_[id];
         var renderToggle = function () {
-          card.classList.toggle('dt-collapsed', !open);
-          toggle.textContent = open ? t('sidebar.section.collapse') : t('sidebar.section.expand');
-          toggle.setAttribute('aria-expanded', String(open));
+          card.classList.toggle("dt-collapsed", !open);
+          toggle.textContent = open
+            ? t("sidebar.section.collapse")
+            : t("sidebar.section.expand");
+          toggle.setAttribute("aria-expanded", String(open));
         };
-        toggle.addEventListener('click', function () {
+        toggle.addEventListener("click", function () {
           open = !open;
           renderToggle();
         });
@@ -243,15 +369,38 @@
     function setSectionBusy(sectionId, busy) {
       var section = $(sectionId);
       if (!section) return;
-      section.classList.toggle('dt-busy', !!busy);
-      section.setAttribute('aria-busy', busy ? 'true' : 'false');
+      section.classList.toggle("dt-busy", !!busy);
+      section.setAttribute("aria-busy", busy ? "true" : "false");
+    }
+
+    function columnMapped_(columns, key) {
+      if (!columns || typeof columns !== "object") return false;
+      var v = columns[key];
+      var n = Number(v);
+      return v != null && String(v).trim() !== "" && isFinite(n) && n >= 1;
+    }
+
+    /** Matches OrderEngine.validateOrder_: need full name, or first+last, or either part. */
+    function mappingHasCustomerNameColumns_(columns) {
+      if (!columns) return false;
+      return (
+        columnMapped_(columns, "customerFullNameColumn") ||
+        columnMapped_(columns, "customerFirstNameColumn") ||
+        columnMapped_(columns, "customerLastNameColumn")
+      );
     }
 
     function mappingHasRequiredColumns_(mapping) {
-      if (!mapping || !mapping.columns || typeof mapping.columns !== 'object') {
+      if (!mapping || !mapping.columns || typeof mapping.columns !== "object") {
         return false;
       }
-      var required = ['orderIdColumn', 'phoneColumn', 'addressColumn', 'wilayaColumn', 'codColumn'];
+      var required = [
+        "orderIdColumn",
+        "phoneColumn",
+        "addressColumn",
+        "wilayaColumn",
+        "codColumn",
+      ];
       for (var i = 0; i < required.length; i++) {
         var key = required[i];
         var v = mapping.columns[key];
@@ -260,37 +409,45 @@
           return false;
         }
       }
+      if (!mappingHasCustomerNameColumns_(mapping.columns)) {
+        return false;
+      }
       return true;
     }
 
     function setCoreStepState_(sectionId, done) {
       var card = $(sectionId);
       if (!card) return;
-      if (!card.hasAttribute('data-core-step')) return;
-      card.classList.toggle('dt-flow-done', !!done);
-      card.classList.toggle('dt-flow-pending', !done);
-      var badgeId = card.getAttribute('data-step-badge-id');
+      if (!card.hasAttribute("data-core-step")) return;
+      card.classList.toggle("dt-flow-done", !!done);
+      card.classList.toggle("dt-flow-pending", !done);
+      var badgeId = card.getAttribute("data-step-badge-id");
       var badge = badgeId ? $(badgeId) : null;
       if (!badge) return;
-      badge.classList.toggle('dt-step-done', !!done);
-      badge.textContent = done ? '✓' : badge.getAttribute('data-step-number') || '';
+      badge.classList.toggle("dt-step-done", !!done);
+      badge.textContent = done
+        ? "✓"
+        : badge.getAttribute("data-step-number") || "";
     }
 
     function refreshFlowReadiness_() {
-      var licenseReady =
-        state.apiConfigured && (state.licenseStatus === 'active' || state.licenseStatus === 'trial');
-      setCoreStepState_('dt-license', licenseReady);
-      setCoreStepState_('dt-setup', !!state.mappingReady);
-      setCoreStepState_('dt-orders', !!state.opsReady);
+      if (state.licenseUiHydrated) {
+        var licenseReady =
+          state.apiConfigured &&
+          (state.licenseStatus === "active" || state.licenseStatus === "trial");
+        setCoreStepState_("dt-license", licenseReady);
+      }
+      setCoreStepState_("dt-setup", !!state.mappingReady);
+      setCoreStepState_("dt-orders", !!state.opsReady);
     }
 
     function detailsNodeIdForPre_(preEl) {
-      return preEl && preEl.id ? preEl.id + '-details' : '';
+      return preEl && preEl.id ? preEl.id + "-details" : "";
     }
 
     function clearStructuredOutput(preEl) {
       if (!preEl) return;
-      preEl.textContent = '';
+      preEl.textContent = "";
       var detailsId = detailsNodeIdForPre_(preEl);
       var detailsNode = detailsId ? $(detailsId) : null;
       if (detailsNode && detailsNode.parentNode) {
@@ -303,12 +460,12 @@
       var lines = Array.isArray(summaryLines) ? summaryLines : [summaryLines];
       preEl.textContent = lines
         .filter(function (line) {
-          return line != null && String(line).trim() !== '';
+          return line != null && String(line).trim() !== "";
         })
         .map(function (line) {
           return String(line);
         })
-        .join('\n');
+        .join("\n");
 
       var detailsId = detailsNodeIdForPre_(preEl);
       if (!detailsId) return;
@@ -320,21 +477,21 @@
         return;
       }
       if (!detailsNode) {
-        detailsNode = document.createElement('details');
-        detailsNode.className = 'dt-json-details';
+        detailsNode = document.createElement("details");
+        detailsNode.className = "dt-json-details";
         detailsNode.id = detailsId;
-        var summary = document.createElement('summary');
-        summary.textContent = t('sidebar.msg.technical_details');
+        var summary = document.createElement("summary");
+        summary.textContent = t("sidebar.msg.technical_details");
         detailsNode.appendChild(summary);
-        var jsonPre = document.createElement('pre');
-        jsonPre.className = 'dt-pre dt-ltr';
-        jsonPre.id = detailsId + '-json';
+        var jsonPre = document.createElement("pre");
+        jsonPre.className = "dt-pre dt-ltr";
+        jsonPre.id = detailsId + "-json";
         detailsNode.appendChild(jsonPre);
         if (preEl.parentNode) {
-          preEl.parentNode.insertBefore(detailsNode, preEl.nextSibling);
+          safeInsertBefore_(preEl.parentNode, detailsNode, preEl.nextSibling);
         }
       }
-      var jsonNode = $(detailsId + '-json');
+      var jsonNode = $(detailsId + "-json");
       if (jsonNode) {
         jsonNode.textContent = JSON.stringify(detailsObj, null, 2);
       }
@@ -344,7 +501,7 @@
     function setStatus(msg, kind) {
       var s = el.status;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
@@ -381,47 +538,47 @@
     }
 
     function substatusClass(kind) {
-      if (kind === 'err') return 'dt-substatus dt-err';
-      if (kind === 'ok') return 'dt-substatus dt-ok';
-      return 'dt-substatus';
+      if (kind === "err") return "dt-substatus dt-err";
+      if (kind === "ok") return "dt-substatus dt-ok";
+      return "dt-substatus";
     }
 
     function setOrdersStatus(msg, kind) {
       var s = el.ordersStatus;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
     function setAutoSyncStatus(msg, kind) {
       var s = el.autoSyncStatus;
       if (!s) return;
-      s.textContent = msg || '';
-      if (kind === 'ok' || kind === 'err') {
+      s.textContent = msg || "";
+      if (kind === "ok" || kind === "err") {
         s.className = substatusClass(kind);
       } else {
-        s.className = 'dt-hint';
+        s.className = "dt-hint";
       }
     }
 
     function setFeeStatus(msg, kind) {
       var s = el.feeStatus;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
     function setStatsStatus(msg, kind) {
       var s = el.statsStatus;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
     function setListsStatus(msg, kind) {
       var s = el.listsStatus;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
@@ -429,24 +586,24 @@
       var allow =
         el.wilayaAllowInvalid && el.wilayaAllowInvalid.checked ? true : false;
       setBusy(true);
-      setSectionBusy('dt-lists', true);
-      setListsStatus(t('sidebar.msg.validating_wilaya'), null);
-      runServer('lists_applyWilayaColumnValidation', allow)
+      setSectionBusy("dt-lists", true);
+      setListsStatus(t("sidebar.msg.validating_wilaya"), null);
+      runServer("lists_applyWilayaColumnValidation", allow)
         .then(function (res) {
           setListsStatus(
             tf(
-              'sidebar.msg.wilaya_col_result',
-              res.column != null ? res.column : '',
-              res.rowCount || 0
+              "sidebar.msg.wilaya_col_result",
+              res.column != null ? res.column : "",
+              res.rowCount || 0,
             ),
-            null
+            null,
           );
         })
         .catch(function (err) {
-          setListsStatus(err.message || String(err), 'err');
+          setListsStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-lists', false);
+          setSectionBusy("dt-lists", false);
           setBusy(false);
         });
     }
@@ -454,14 +611,14 @@
     function populateCommuneWilayaSelect() {
       var sel = el.communeWilaya;
       if (!sel) return;
-      return runServer('lists_getWilayas')
+      return runServer("lists_getWilayas")
         .then(function (res) {
-          sel.innerHTML = '';
+          sel.innerHTML = "";
           (res.wilayas || []).forEach(function (w) {
-            var opt = document.createElement('option');
+            var opt = document.createElement("option");
             opt.value = String(w.code);
-            var pad = w.code < 10 ? '0' : '';
-            opt.textContent = pad + w.code + ' — ' + w.label;
+            var pad = w.code < 10 ? "0" : "";
+            opt.textContent = pad + w.code + " — " + w.label;
             sel.appendChild(opt);
           });
         })
@@ -471,94 +628,160 @@
     function applyCommuneValidation() {
       var allow =
         el.wilayaAllowInvalid && el.wilayaAllowInvalid.checked ? true : false;
-      var wc = el.communeWilaya && el.communeWilaya.value ? el.communeWilaya.value : '16';
+      var wc =
+        el.communeWilaya && el.communeWilaya.value
+          ? el.communeWilaya.value
+          : "16";
       setBusy(true);
-      setSectionBusy('dt-lists', true);
-      setListsStatus(t('sidebar.msg.validating_communes'), null);
-      runServer('lists_applyCommuneColumnValidation', Number(wc), allow)
+      setSectionBusy("dt-lists", true);
+      setListsStatus(t("sidebar.msg.validating_communes"), null);
+      runServer("lists_applyCommuneColumnValidation", Number(wc), allow)
         .then(function (res) {
           setListsStatus(
             tf(
-              'sidebar.msg.commune_col_result',
-              res.wilayaCode != null ? res.wilayaCode : '',
-              res.column != null ? res.column : '',
-              res.rowCount || 0
+              "sidebar.msg.commune_col_result",
+              res.wilayaCode != null ? res.wilayaCode : "",
+              res.column != null ? res.column : "",
+              res.rowCount || 0,
             ),
-            null
+            null,
           );
         })
         .catch(function (err) {
-          setListsStatus(err.message || String(err), 'err');
+          setListsStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-lists', false);
+          setSectionBusy("dt-lists", false);
           setBusy(false);
         });
     }
 
     function applyBlacklistHighlights() {
       setBusy(true);
-      setSectionBusy('dt-lists', true);
-      setListsStatus(t('sidebar.msg.styling_blacklist'), null);
-      runServer('blacklist_applyRowHighlights')
+      setSectionBusy("dt-lists", true);
+      setListsStatus(t("sidebar.msg.styling_blacklist"), null);
+      runServer("blacklist_applyRowHighlights")
         .then(function (res) {
-          setListsStatus(tf('sidebar.msg.blacklist_styled', res.rowsStyled || 0, res.lastCol || ''), null);
+          setListsStatus(
+            tf(
+              "sidebar.msg.blacklist_styled",
+              res.rowsStyled || 0,
+              res.lastCol || "",
+            ),
+            null,
+          );
         })
         .catch(function (err) {
-          setListsStatus(err.message || String(err), 'err');
+          setListsStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-lists', false);
+          setSectionBusy("dt-lists", false);
           setBusy(false);
         });
     }
 
     function computeSheetStats() {
       setBusy(true);
-      setSectionBusy('dt-stats', true);
-      setStatsStatus(t('sidebar.msg.computing_stats'), null);
+      setSectionBusy("dt-stats", true);
+      setStatsStatus(t("sidebar.msg.computing_stats"), null);
       clearStructuredOutput(el.statsOut);
-      var fromV = el.statsFrom && el.statsFrom.value ? el.statsFrom.value : '';
-      var toV = el.statsTo && el.statsTo.value ? el.statsTo.value : '';
-      runServer('stats_computeSheet', fromV, toV)
+      var fromV = el.statsFrom && el.statsFrom.value ? el.statsFrom.value : "";
+      var toV = el.statsTo && el.statsTo.value ? el.statsTo.value : "";
+      runServer("stats_computeSheet", fromV, toV)
         .then(function (res) {
           var n = res.totalRowsAnalyzed != null ? res.totalRowsAnalyzed : 0;
           var buckets = res && res.buckets ? res.buckets : {};
           var lines = [
-            tf('sidebar.msg.rows_analyzed', n, res.sheetName || ''),
+            tf("sidebar.msg.rows_analyzed", n, res.sheetName || ""),
             tf(
-              'sidebar.msg.stats_bucket_line',
+              "sidebar.msg.stats_bucket_line",
               buckets.delivered || 0,
               buckets.in_transit || 0,
               buckets.returned || 0,
-              buckets.failed || 0
+              buckets.failed || 0,
             ),
           ];
           if (res && res.dateFilter && res.dateFilter.active) {
-            lines.push(t('sidebar.msg.stats_filtered'));
+            lines.push(t("sidebar.msg.stats_filtered"));
           }
           renderStructuredOutput(el.statsOut, lines, res);
-          setStatsStatus(tf('sidebar.msg.rows_analyzed', n, res.sheetName || ''), null);
+          setStatsStatus(
+            tf("sidebar.msg.rows_analyzed", n, res.sheetName || ""),
+            null,
+          );
         })
         .catch(function (err) {
-          setStatsStatus(err.message || String(err), 'err');
+          setStatsStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-stats', false);
+          setSectionBusy("dt-stats", false);
           setBusy(false);
         });
     }
 
     function setLicenseStatus(msg, kind) {
-      var s = el.licenseStatus;
-      if (!s) return;
-      s.textContent = msg || '';
-      s.className = substatusClass(kind);
+      var text = msg || "";
+      var cls = substatusClass(kind);
+      var targets = [el.licenseStatusInline, el.licenseStatus];
+      targets.forEach(function (node) {
+        if (!node) return;
+        node.textContent = text;
+        node.className = cls;
+      });
+    }
+
+    function normalizeApiBaseUrlInput_(raw) {
+      var url = String(raw || "").trim();
+      if (!url) return "";
+      // Copy/paste from chats or screenshots can inject spaces/newlines.
+      url = url.replace(/\s+/g, "");
+      // Common ngrok typo: missing ".app" on free domains.
+      if (/^https?:\/\/[^/]*ngrok-free$/i.test(url)) {
+        url += ".app";
+      }
+      return url;
+    }
+
+    function maybePersistApiBaseUrlFromInput_() {
+      var rawUrl = el.apiUrl ? el.apiUrl.value : "";
+      var url = normalizeApiBaseUrlInput_(rawUrl);
+      if (el.apiUrl && url !== rawUrl) {
+        el.apiUrl.value = url;
+      }
+      if (!url) {
+        return Promise.resolve(false);
+      }
+      if (String(state.apiBaseUrl || "") === url) {
+        return Promise.resolve(false);
+      }
+      return runServer("config_saveApiBaseUrl", url).then(function () {
+        state.apiBaseUrl = url;
+        state.apiConfigured = true;
+        refreshFlowReadiness_();
+        return true;
+      });
+    }
+
+    function notifyLicenseError_(err) {
+      var message = err && err.message ? String(err.message) : String(err);
+      setLicenseStatus(message, "err");
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert(message);
+      }
+    }
+
+    function sidebarBridgeReady_() {
+      return !!(
+        window &&
+        window.google &&
+        window.google.script &&
+        window.google.script.run
+      );
     }
 
     function renderLicenseBanner(state) {
       if (!el.licenseBanner) return;
-      var status = state && state.status ? String(state.status) : 'unknown';
+      var status = state && state.status ? String(state.status) : "unknown";
       var strings = (state && state.strings) || {};
       var badge = el.licenseBadge;
       var title = el.licenseTitle;
@@ -567,31 +790,37 @@
       var contactLink = el.licenseContactCta;
 
       if (badge) {
-        var badgeClass = 'dt-license-badge dt-license-badge--unknown';
-        if (status === 'trial') {
-          badgeClass = 'dt-license-badge dt-license-badge--trial';
-        } else if (status === 'active') {
-          badgeClass = 'dt-license-badge dt-license-badge--active';
-        } else if (status === 'expired') {
-          badgeClass = 'dt-license-badge dt-license-badge--expired';
+        var badgeClass = "dt-license-badge dt-license-badge--unknown";
+        if (status === "trial") {
+          badgeClass = "dt-license-badge dt-license-badge--trial";
+        } else if (status === "active") {
+          badgeClass = "dt-license-badge dt-license-badge--active";
+        } else if (status === "expired") {
+          badgeClass = "dt-license-badge dt-license-badge--expired";
+        } else if (status === "loading") {
+          badgeClass = "dt-license-badge dt-license-badge--unknown";
         }
         badge.className = badgeClass;
-        badge.textContent = status === 'trial'
-          ? t('trial.badge_label')
-          : status === 'active'
-          ? t('license.badge_active')
-          : status === 'expired'
-          ? t('license.badge_expired')
-          : t('license.badge_unknown');
+        badge.textContent =
+          status === "loading"
+            ? "…"
+            : status === "trial"
+              ? t("trial.badge_label")
+              : status === "active"
+                ? t("license.badge_active")
+                : status === "expired"
+                  ? t("license.badge_expired")
+                  : t("license.badge_unknown");
       }
       if (title) {
-        title.textContent = strings.title || '';
+        title.textContent = strings.title || "";
       }
       if (body) {
-        body.textContent = strings.body || '';
+        body.textContent = strings.body || "";
       }
       if (activateBtn) {
-        activateBtn.textContent = strings.activateLabel || t('license.have_code');
+        activateBtn.textContent =
+          strings.activateLabel || t("license.have_code");
         activateBtn.onclick = function () {
           if (el.licenseCode) {
             el.licenseCode.focus();
@@ -599,14 +828,15 @@
         };
       }
       if (contactLink) {
-        var link = state && state.whatsappLink ? String(state.whatsappLink) : '';
-        contactLink.textContent = strings.contactLabel || '';
+        var link =
+          state && state.whatsappLink ? String(state.whatsappLink) : "";
+        contactLink.textContent = strings.contactLabel || "";
         if (link) {
           contactLink.href = link;
-          contactLink.style.display = '';
+          contactLink.style.display = "";
         } else {
-          contactLink.href = '#';
-          contactLink.style.display = 'none';
+          contactLink.href = "#";
+          contactLink.style.display = "none";
         }
       }
     }
@@ -616,85 +846,133 @@
       if (!box) return;
       while (box.firstChild) box.removeChild(box.firstChild);
 
-      var title = document.createElement('strong');
-      title.textContent = record ? t('sidebar.license.summary_license') : t('sidebar.license.summary_state');
+      var title = document.createElement("strong");
+      title.textContent = record
+        ? t("sidebar.license.summary_license")
+        : t("sidebar.license.summary_state");
       box.appendChild(title);
 
       var line = function (label, value) {
-        var div = document.createElement('div');
+        var div = document.createElement("div");
         div.textContent = label + value;
         box.appendChild(div);
       };
 
       if (!record) {
-        line('', t('sidebar.license.no_cache'));
+        line("", t("sidebar.license.no_cache"));
         return;
       }
 
-      line(t('sidebar.license.lbl_status'), String(record.licenseStatus || t('sidebar.msg.sync_meta_na')));
-      if (record.planName) line(t('sidebar.license.lbl_plan'), String(record.planName));
-      if (record.trialEnd) line(t('sidebar.license.lbl_trial_end'), String(record.trialEnd));
-      if (record.subscriptionEnd) line(t('sidebar.license.lbl_sub_end'), String(record.subscriptionEnd));
-      if (record.licenseKey) line(t('sidebar.license.lbl_key'), String(record.licenseKey).slice(0, 8) + '…');
+      line(
+        t("sidebar.license.lbl_status"),
+        String(record.licenseStatus || t("sidebar.msg.sync_meta_na")),
+      );
+      if (record.planName)
+        line(t("sidebar.license.lbl_plan"), String(record.planName));
+      if (record.trialEnd)
+        line(t("sidebar.license.lbl_trial_end"), String(record.trialEnd));
+      if (record.subscriptionEnd)
+        line(t("sidebar.license.lbl_sub_end"), String(record.subscriptionEnd));
+      if (record.licenseKey)
+        line(
+          t("sidebar.license.lbl_key"),
+          String(record.licenseKey).slice(0, 8) + "…",
+        );
     }
 
     // escapeHtml_ removed: license summary renders with textContent only.
 
     function loadLicenseSidebar() {
-      return runServer('license_getSidebarState')
+      renderLicenseBanner({
+        status: "loading",
+        strings: {
+          title: t("sidebar.msg.license_loading_title"),
+          body: t("sidebar.msg.license_loading_body"),
+          contactLabel: "",
+          activateLabel: t("license.have_code"),
+        },
+        whatsappLink: "",
+      });
+      return runServer("license_getSidebarState")
         .then(function (st) {
-          if (el.apiUrl) el.apiUrl.value = st.apiBaseUrl || '';
+          if (el.apiUrl) el.apiUrl.value = st.apiBaseUrl || "";
           if (el.apiKey) {
-            el.apiKey.value = '';
+            el.apiKey.value = "";
             el.apiKey.placeholder = st.apiKeyConfigured
-              ? t('sidebar.ph.api_key_replace')
-              : t('sidebar.ph.api_key');
+              ? t("sidebar.ph.api_key_replace")
+              : t("sidebar.ph.api_key");
           }
           renderLicenseSummary(st.record);
           renderLicenseBanner(st);
-          state.licenseStatus = st && st.status ? String(st.status) : 'unknown';
+          state.licenseStatus = st && st.status ? String(st.status) : "unknown";
+          state.apiBaseUrl = st && st.apiBaseUrl ? String(st.apiBaseUrl) : "";
           state.apiConfigured = !!(st && st.apiConfigured);
+          state.licenseUiHydrated = true;
           refreshFlowReadiness_();
-          setLicenseStatus(
-            st.apiConfigured ? t('sidebar.msg.backend_configured') : t('sidebar.msg.backend_need_url'),
-            st.apiConfigured ? null : 'err'
-          );
+          var stCode = st && st.status ? String(st.status) : "";
+          if (stCode === "error" || stCode === "no_email") {
+            setLicenseStatus((st && st.message) || t("general.error"), "err");
+          } else {
+            setLicenseStatus(
+              st.apiConfigured
+                ? t("sidebar.msg.backend_configured")
+                : t("sidebar.msg.backend_need_url"),
+              st.apiConfigured ? null : "err",
+            );
+          }
+          return st;
         })
         .catch(function (err) {
-          state.licenseStatus = 'unknown';
+          var normalized = err && err.message ? err : new Error(String(err));
+          state.licenseStatus = "unknown";
+          state.apiBaseUrl = "";
           state.apiConfigured = false;
+          state.licenseUiHydrated = true;
           refreshFlowReadiness_();
-          setLicenseStatus(err.message || String(err), 'err');
+          setLicenseStatus(normalized.message || String(normalized), "err");
+          throw normalized;
         });
     }
 
     function saveUserApiKey() {
-      var key = el.apiKey ? el.apiKey.value.trim() : '';
+      var key = el.apiKey ? el.apiKey.value.trim() : "";
       setBusy(true);
-      setSectionBusy('dt-license', true);
-      setLicenseStatus(t('sidebar.msg.saving_key'), null);
-      runServer('config_saveUserApiKey', key)
+      setSectionBusy("dt-license", true);
+      setLicenseStatus(t("sidebar.msg.saving_key"), null);
+      runServer("config_saveUserApiKey", key)
         .then(function () {
-          setLicenseStatus(key ? t('sidebar.msg.key_saved') : t('sidebar.msg.key_cleared'), 'ok');
+          setLicenseStatus(
+            key ? t("sidebar.msg.key_saved") : t("sidebar.msg.key_cleared"),
+            "ok",
+          );
+          return maybePersistApiBaseUrlFromInput_();
+        })
+        .then(function () {
+          if (!state.apiConfigured) {
+            return null;
+          }
           return loadLicenseSidebar();
         })
         .then(function () {
+          if (!state.apiConfigured) {
+            return null;
+          }
           return refreshCarriersFromContext().catch(function (e) {
             var m = e && e.message ? String(e.message) : String(e);
-            setLicenseStatus(tf('sidebar.msg.key_carriers_fail', m), 'err');
+            setLicenseStatus(tf("sidebar.msg.key_carriers_fail", m), "err");
           });
         })
         .catch(function (err) {
-          setLicenseStatus(err.message || String(err), 'err');
+          notifyLicenseError_(err);
         })
         .then(function () {
-          setSectionBusy('dt-license', false);
+          setSectionBusy("dt-license", false);
           setBusy(false);
         });
     }
 
     function refreshCarriersFromContext() {
-      return runServer('setup_getContext').then(function (ctx) {
+      return runServer("setup_getContext").then(function (ctx) {
         state.carriers = ctx.carriers || [];
         populateCarrierSelect();
         applyMappingToFields();
@@ -707,10 +985,12 @@
     function renderSyncMeta(meta) {
       var node = el.syncMeta;
       if (!node) return;
-      var na = t('sidebar.msg.sync_meta_na');
-      var a = meta && meta.lastSyncAttemptIso ? String(meta.lastSyncAttemptIso) : na;
-      var s = meta && meta.lastSyncSuccessIso ? String(meta.lastSyncSuccessIso) : na;
-      node.textContent = tf('sidebar.msg.sync_meta', a, s);
+      var na = t("sidebar.msg.sync_meta_na");
+      var a =
+        meta && meta.lastSyncAttemptIso ? String(meta.lastSyncAttemptIso) : na;
+      var s =
+        meta && meta.lastSyncSuccessIso ? String(meta.lastSyncSuccessIso) : na;
+      node.textContent = tf("sidebar.msg.sync_meta", a, s);
       if (meta && meta.lastSyncSuccessIso) {
         state.opsReady = true;
         refreshFlowReadiness_();
@@ -718,7 +998,7 @@
     }
 
     function loadSyncMeta() {
-      return runServer('sync_getMeta')
+      return runServer("sync_getMeta")
         .then(function (meta) {
           renderSyncMeta(meta || {});
         })
@@ -731,39 +1011,43 @@
       state.autoSyncEnabled = !!enabled;
       if (el.autoSyncToggle) {
         el.autoSyncToggle.textContent = state.autoSyncEnabled
-          ? t('sync.auto_disable')
-          : t('sync.auto_enable');
+          ? t("sync.auto_disable")
+          : t("sync.auto_enable");
       }
       setAutoSyncStatus(
-        state.autoSyncEnabled ? t('sidebar.msg.auto_sync_enabled') : t('sidebar.msg.auto_sync_disabled'),
-        state.autoSyncEnabled ? 'ok' : null
+        state.autoSyncEnabled
+          ? t("sidebar.msg.auto_sync_enabled")
+          : t("sidebar.msg.auto_sync_disabled"),
+        state.autoSyncEnabled ? "ok" : null,
       );
     }
 
     function loadAutoSyncState() {
-      return runServer('sync_isAutoSyncEnabled')
+      return runServer("sync_isAutoSyncEnabled")
         .then(function (res) {
           renderAutoSyncState(!!(res && res.enabled));
         })
         .catch(function (err) {
-          setAutoSyncStatus(err.message || String(err), 'err');
+          setAutoSyncStatus(err.message || String(err), "err");
         });
     }
 
     function toggleAutoSync() {
       setBusy(true);
-      setSectionBusy('dt-orders', true);
-      setAutoSyncStatus(t('sidebar.msg.saving'), null);
-      var fnName = state.autoSyncEnabled ? 'sync_disableAutoSync' : 'sync_enableAutoSync';
+      setSectionBusy("dt-orders", true);
+      setAutoSyncStatus(t("sidebar.msg.saving"), null);
+      var fnName = state.autoSyncEnabled
+        ? "sync_disableAutoSync"
+        : "sync_enableAutoSync";
       runServer(fnName)
         .then(function () {
           return loadAutoSyncState();
         })
         .catch(function (err) {
-          setAutoSyncStatus(err.message || String(err), 'err');
+          setAutoSyncStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-orders', false);
+          setSectionBusy("dt-orders", false);
           setBusy(false);
         });
     }
@@ -771,56 +1055,63 @@
     function setJournalStatus(msg, kind) {
       var s = el.journalStatus;
       if (!s) return;
-      s.textContent = msg || '';
+      s.textContent = msg || "";
       s.className = substatusClass(kind);
     }
 
     function formatJournalText_(data) {
       var entries = (data && data.entries) || [];
       if (!entries.length) {
-        return t('sidebar.msg.journal_empty');
+        return t("sidebar.msg.journal_empty");
       }
       var lines = [];
       entries.forEach(function (e, idx) {
-        lines.push(tf('sidebar.msg.journal_line1', e.ts || '', e.kind || '', e.sheetName || ''));
         lines.push(
           tf(
-            'sidebar.msg.journal_line2',
+            "sidebar.msg.journal_line1",
+            e.ts || "",
+            e.kind || "",
+            e.sheetName || "",
+          ),
+        );
+        lines.push(
+          tf(
+            "sidebar.msg.journal_line2",
             e.attempted || 0,
             e.succeeded || 0,
-            e.failed || 0
-          )
+            e.failed || 0,
+          ),
         );
         if (e.failedRows && e.failedRows.length) {
           var fr = e.failedRows.slice(0, 36);
           lines.push(
-            t('sidebar.msg.journal_failed_rows') +
-              fr.join(', ') +
-              (e.failedRows.length > fr.length ? ' …' : '')
+            t("sidebar.msg.journal_failed_rows") +
+              fr.join(", ") +
+              (e.failedRows.length > fr.length ? " …" : ""),
           );
         }
         if (e.detailPreview && e.detailPreview.length) {
-          lines.push(t('sidebar.msg.journal_detail'));
+          lines.push(t("sidebar.msg.journal_detail"));
           e.detailPreview.forEach(function (p) {
             lines.push(
               tf(
-                'sidebar.msg.journal_row',
-                p.rowNumber != null ? p.rowNumber : '?',
-                p.ok ? t('sidebar.msg.ok_short') : t('sidebar.msg.ko_short'),
-                p.errorMessage || ''
-              )
+                "sidebar.msg.journal_row",
+                p.rowNumber != null ? p.rowNumber : "?",
+                p.ok ? t("sidebar.msg.ok_short") : t("sidebar.msg.ko_short"),
+                p.errorMessage || "",
+              ),
             );
           });
         }
         if (idx < entries.length - 1) {
-          lines.push('');
+          lines.push("");
         }
       });
-      return lines.join('\n');
+      return lines.join("\n");
     }
 
     function loadJournal() {
-      return runServer('ops_getLog')
+      return runServer("ops_getLog")
         .then(function (data) {
           if (el.journalOut) {
             el.journalOut.textContent = formatJournalText_(data);
@@ -828,146 +1119,188 @@
           var n = data.entries ? data.entries.length : 0;
           state.opsReady = state.opsReady || n > 0;
           refreshFlowReadiness_();
-          setJournalStatus(tf('sidebar.msg.journal_entries', n, data.rawLength || 0), null);
+          setJournalStatus(
+            tf("sidebar.msg.journal_entries", n, data.rawLength || 0),
+            null,
+          );
         })
         .catch(function (err) {
-          setJournalStatus(err.message || String(err), 'err');
+          setJournalStatus(err.message || String(err), "err");
         });
     }
 
     function clearJournal() {
-      if (!window.confirm(t('sidebar.btn.journal_clear') + '?')) {
+      if (!window.confirm(t("sidebar.btn.journal_clear") + "?")) {
         return;
       }
       setBusy(true);
-      setSectionBusy('dt-journal', true);
-      setJournalStatus(t('sidebar.msg.journal_clearing'), null);
-      runServer('ops_clearLog')
+      setSectionBusy("dt-journal", true);
+      setJournalStatus(t("sidebar.msg.journal_clearing"), null);
+      runServer("ops_clearLog")
         .then(function () {
-          setJournalStatus(t('sidebar.msg.journal_cleared'), 'ok');
+          setJournalStatus(t("sidebar.msg.journal_cleared"), "ok");
           return loadJournal();
         })
         .catch(function (err) {
-          setJournalStatus(err.message || String(err), 'err');
+          setJournalStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-journal', false);
+          setSectionBusy("dt-journal", false);
           setBusy(false);
         });
     }
 
     function selectFailedSendRows() {
       setBusy(true);
-      setSectionBusy('dt-journal', true);
-      setJournalStatus(t('sidebar.msg.selecting'), null);
-      runServer('ops_selectLastFailedSendRows')
+      setSectionBusy("dt-journal", true);
+      setJournalStatus(t("sidebar.msg.selecting"), null);
+      runServer("ops_selectLastFailedSendRows")
         .then(function (res) {
-          setJournalStatus(tf('sidebar.msg.journal_retry_send_ok', res.rowCount), null);
+          setJournalStatus(
+            tf("sidebar.msg.journal_retry_send_ok", res.rowCount),
+            null,
+          );
         })
         .catch(function (err) {
-          setJournalStatus(err.message || String(err), 'err');
+          setJournalStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-journal', false);
+          setSectionBusy("dt-journal", false);
           setBusy(false);
         });
     }
 
     function selectFailedSyncRows() {
       setBusy(true);
-      setSectionBusy('dt-journal', true);
-      setJournalStatus(t('sidebar.msg.selecting'), null);
-      runServer('ops_selectLastFailedSyncRows')
+      setSectionBusy("dt-journal", true);
+      setJournalStatus(t("sidebar.msg.selecting"), null);
+      runServer("ops_selectLastFailedSyncRows")
         .then(function (res) {
-          setJournalStatus(tf('sidebar.msg.journal_retry_sync_ok', res.rowCount), null);
+          setJournalStatus(
+            tf("sidebar.msg.journal_retry_sync_ok", res.rowCount),
+            null,
+          );
         })
         .catch(function (err) {
-          setJournalStatus(err.message || String(err), 'err');
+          setJournalStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-journal', false);
+          setSectionBusy("dt-journal", false);
           setBusy(false);
         });
     }
 
     function saveApiBaseUrl() {
-      var url = el.apiUrl ? el.apiUrl.value.trim() : '';
+      var rawUrl = el.apiUrl ? el.apiUrl.value : "";
+      var url = normalizeApiBaseUrlInput_(rawUrl);
+      if (el.apiUrl && url !== rawUrl) {
+        el.apiUrl.value = url;
+      }
       setBusy(true);
-      setSectionBusy('dt-license', true);
-      setLicenseStatus(t('sidebar.msg.saving'), null);
-      runServer('config_saveApiBaseUrl', url)
+      setSectionBusy("dt-license", true);
+      setLicenseStatus(t("sidebar.msg.saving"), null);
+      runServer("config_saveApiBaseUrl", url)
         .then(function () {
-          setLicenseStatus(t('sidebar.msg.url_saved'), 'ok');
+          setLicenseStatus(t("sidebar.msg.url_saved"), "ok");
           return loadLicenseSidebar();
         })
         .then(function () {
           return refreshCarriersFromContext().catch(function (e) {
             var m = e && e.message ? String(e.message) : String(e);
-            setLicenseStatus(tf('sidebar.msg.url_carriers_fail', m), 'err');
+            setLicenseStatus(tf("sidebar.msg.url_carriers_fail", m), "err");
           });
         })
         .catch(function (err) {
-          setLicenseStatus(err.message || String(err), 'err');
+          notifyLicenseError_(err);
         })
         .then(function () {
-          setSectionBusy('dt-license', false);
+          setSectionBusy("dt-license", false);
           setBusy(false);
         });
     }
 
     function refreshLicense() {
-      var code = el.licenseCode ? el.licenseCode.value.trim() : '';
+      var code = el.licenseCode ? el.licenseCode.value.trim() : "";
       setBusy(true);
-      setSectionBusy('dt-license', true);
-      setLicenseStatus(t('sidebar.msg.verifying'), null);
+      setSectionBusy("dt-license", true);
+      setLicenseStatus(t("sidebar.msg.verifying"), null);
 
-      var p;
-      if (code) {
-        // First activate the code, then reload the full sidebar state so the
-        // UI always reflects the fresh license record (including expiry date).
-        p = runServer('license_activate', code).then(function () {
-          return loadLicenseSidebar();
-        });
-      } else {
-        p = loadLicenseSidebar();
-      }
-
-      p.then(function () {
-        setLicenseStatus(t('sidebar.msg.license_current'), 'ok');
-      })
+      maybePersistApiBaseUrlFromInput_()
+        .then(function () {
+          if (!state.apiConfigured) {
+            throw new Error(t("sidebar.msg.backend_need_url"));
+          }
+          var p;
+          if (code) {
+            // First activate the code, then reload the full sidebar state so the
+            // UI always reflects the fresh license record (including expiry date).
+            p = runServer("license_activate", code).then(function () {
+              return loadLicenseSidebar();
+            });
+          } else {
+            p = loadLicenseSidebar();
+          }
+          return p.then(function (st) {
+            var statusLabel =
+              st && st.status
+                ? String(st.status)
+                : String(state.licenseStatus || "");
+            var ok = statusLabel === "active" || statusLabel === "trial";
+            var msg = "";
+            if (!ok && st && st.message) {
+              msg = String(st.message);
+            } else {
+              msg = t("sidebar.msg.license_current");
+              if (statusLabel) {
+                msg += " (" + statusLabel + ")";
+              }
+            }
+            setLicenseStatus(msg, ok ? "ok" : "err");
+            if (!ok) {
+              throw new Error(msg || "license_check_failed");
+            }
+          });
+        })
         .catch(function (err) {
-          setLicenseStatus(err.message || String(err), 'err');
+          notifyLicenseError_(err);
         })
         .then(function () {
-          setSectionBusy('dt-license', false);
+          setSectionBusy("dt-license", false);
           setBusy(false);
         });
     }
 
     function clearLicenseCache() {
-      if (!window.confirm(t('sidebar.btn.forget_cache') + '?')) {
+      if (!window.confirm(t("sidebar.btn.forget_cache") + "?")) {
         return;
       }
       setBusy(true);
-      setSectionBusy('dt-license', true);
-      runServer('license_clearCache')
+      setSectionBusy("dt-license", true);
+      runServer("license_clearCache")
         .then(function () {
           renderLicenseSummary(null);
-          state.licenseStatus = 'unknown';
+          state.licenseStatus = "unknown";
           refreshFlowReadiness_();
-          setLicenseStatus(t('sidebar.msg.cache_cleared'), 'ok');
+          setLicenseStatus(t("sidebar.msg.cache_cleared"), "ok");
         })
         .catch(function (err) {
-          setLicenseStatus(err.message || String(err), 'err');
+          setLicenseStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-license', false);
+          setSectionBusy("dt-license", false);
           setBusy(false);
         });
     }
 
     function runServer(fnName) {
       var args = Array.prototype.slice.call(arguments, 1);
+      if (!sidebarBridgeReady_()) {
+        return Promise.reject(
+          new Error(
+            "Google sidebar bridge unavailable. Reload the sheet and reopen Delivery Tool.",
+          ),
+        );
+      }
       return new Promise(function (resolve, reject) {
         var runner = google.script.run
           .withSuccessHandler(resolve)
@@ -980,9 +1313,9 @@
 
     function populateSheetSelect() {
       var sel = el.sheet;
-      sel.innerHTML = '';
+      sel.innerHTML = "";
       state.sheets.forEach(function (sh) {
-        var opt = document.createElement('option');
+        var opt = document.createElement("option");
         opt.value = String(sh.sheetId);
         opt.textContent = sh.sheetName;
         sel.appendChild(opt);
@@ -996,13 +1329,13 @@
     }
 
     function wilayaMapToText(map) {
-      if (!map || typeof map !== 'object') return '';
+      if (!map || typeof map !== "object") return "";
       var keys = Object.keys(map).sort();
       return keys
         .map(function (k) {
-          return k + '=' + map[k];
+          return k + "=" + map[k];
         })
-        .join('\n');
+        .join("\n");
     }
 
     function fillFeeFormForCarrier(carrierId) {
@@ -1011,18 +1344,18 @@
         state.feeRules &&
         state.feeRules.carriers &&
         state.feeRules.carriers[carrierId];
-      el.feeDefault.value = r && r.default != null ? String(r.default) : '';
-      el.feeWilaya.value = r && r.wilaya ? wilayaMapToText(r.wilaya) : '';
+      el.feeDefault.value = r && r.default != null ? String(r.default) : "";
+      el.feeWilaya.value = r && r.wilaya ? wilayaMapToText(r.wilaya) : "";
     }
 
     function loadFeeState() {
-      return runServer('fee_getState').then(function (st) {
+      return runServer("fee_getState").then(function (st) {
         state.feeRules = st.rules || { carriers: {} };
         var sel = el.feeCarrier;
         if (!sel) return;
-        sel.innerHTML = '';
+        sel.innerHTML = "";
         (st.carriers || []).forEach(function (c) {
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = c.id;
           opt.textContent = c.label;
           sel.appendChild(opt);
@@ -1036,22 +1369,22 @@
     function saveFeeRules() {
       if (!el.feeCarrier || !el.feeDefault) return;
       setBusy(true);
-      setSectionBusy('dt-fees', true);
-      setFeeStatus(t('sidebar.msg.saving_fee'), null);
-      runServer('fee_saveCarrierRules', {
+      setSectionBusy("dt-fees", true);
+      setFeeStatus(t("sidebar.msg.saving_fee"), null);
+      runServer("fee_saveCarrierRules", {
         carrierId: el.feeCarrier.value,
         defaultFee: el.feeDefault.value,
-        wilayaLines: el.feeWilaya ? el.feeWilaya.value : '',
+        wilayaLines: el.feeWilaya ? el.feeWilaya.value : "",
       })
         .then(function (rules) {
           state.feeRules = rules;
-          setFeeStatus(t('sidebar.msg.fee_saved'), 'ok');
+          setFeeStatus(t("sidebar.msg.fee_saved"), "ok");
         })
         .catch(function (err) {
-          setFeeStatus(err.message || String(err), 'err');
+          setFeeStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-fees', false);
+          setSectionBusy("dt-fees", false);
           setBusy(false);
         });
     }
@@ -1059,55 +1392,55 @@
     function applyFeeSelection() {
       var overwrite = el.feeOverwrite ? el.feeOverwrite.checked : true;
       setBusy(true);
-      setSectionBusy('dt-fees', true);
-      setFeeStatus(t('sidebar.msg.applying_fees'), null);
+      setSectionBusy("dt-fees", true);
+      setFeeStatus(t("sidebar.msg.applying_fees"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer('fee_applySelection', overwrite)
+      runServer("fee_applySelection", overwrite)
         .then(function (res) {
           renderStructuredOutput(
             el.ordersOut,
             [
               tf(
-                'sidebar.msg.fee_result',
+                "sidebar.msg.fee_result",
                 res.applied || 0,
                 res.skippedEmpty || 0,
                 res.skippedNoRule || 0,
                 res.skippedExisting || 0,
-                res.skippedNoCarrier || 0
+                res.skippedNoCarrier || 0,
               ),
             ],
-            res
+            res,
           );
           setFeeStatus(
             tf(
-              'sidebar.msg.fee_result',
+              "sidebar.msg.fee_result",
               res.applied || 0,
               res.skippedEmpty || 0,
               res.skippedNoRule || 0,
               res.skippedExisting || 0,
-              res.skippedNoCarrier || 0
+              res.skippedNoCarrier || 0,
             ),
-            null
+            null,
           );
         })
         .catch(function (err) {
-          setFeeStatus(err.message || String(err), 'err');
+          setFeeStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-fees', false);
+          setSectionBusy("dt-fees", false);
           setBusy(false);
         });
     }
 
     function populateCarrierSelect() {
       var sel = el.carrier;
-      sel.innerHTML = '';
-      var empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = t('sidebar.opt.none');
+      sel.innerHTML = "";
+      var empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = t("sidebar.opt.none");
       sel.appendChild(empty);
       state.carriers.forEach(function (c) {
-        var opt = document.createElement('option');
+        var opt = document.createElement("option");
         opt.value = c.id;
         opt.textContent = c.label;
         sel.appendChild(opt);
@@ -1117,28 +1450,38 @@
     function setCarrierCredStatus(msg, kind) {
       var s = el.carrierCredStatus;
       if (!s) return;
-      s.textContent = msg || '';
-      s.className = kind === 'err' ? 'dt-substatus dt-err' : kind === 'ok' ? 'dt-substatus dt-ok' : 'dt-substatus';
+      s.textContent = msg || "";
+      s.className =
+        kind === "err"
+          ? "dt-substatus dt-err"
+          : kind === "ok"
+            ? "dt-substatus dt-ok"
+            : "dt-substatus";
     }
 
     function setBizStatus(msg, kind) {
       var s = el.bizStatus;
       if (!s) return;
-      s.textContent = msg || '';
-      s.className = kind === 'err' ? 'dt-substatus dt-err' : kind === 'ok' ? 'dt-substatus dt-ok' : 'dt-substatus';
+      s.textContent = msg || "";
+      s.className =
+        kind === "err"
+          ? "dt-substatus dt-err"
+          : kind === "ok"
+            ? "dt-substatus dt-ok"
+            : "dt-substatus";
     }
 
     function populateBizCarrierSelect() {
       var sel = el.bizDefaultCarrier;
       if (!sel) return;
       var prev = sel.value;
-      sel.innerHTML = '';
-      var empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = t('sidebar.opt.none');
+      sel.innerHTML = "";
+      var empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = t("sidebar.opt.none");
       sel.appendChild(empty);
       state.carriers.forEach(function (c) {
-        var opt = document.createElement('option');
+        var opt = document.createElement("option");
         opt.value = c.id;
         opt.textContent = c.label;
         sel.appendChild(opt);
@@ -1149,48 +1492,61 @@
     }
 
     function applyBusinessSettingsToForm(value) {
-      if (!value || typeof value !== 'object') {
-        if (el.bizName) el.bizName.value = '';
-        if (el.bizPhone) el.bizPhone.value = '';
-        if (el.bizAddress) el.bizAddress.value = '';
-        if (el.bizWilaya) el.bizWilaya.value = '';
-        if (el.bizWilayaCode) el.bizWilayaCode.value = '';
-        if (el.bizCommune) el.bizCommune.value = '';
-        if (el.bizDefaultCarrier) el.bizDefaultCarrier.value = '';
-        if (el.bizStopDeskId) el.bizStopDeskId.value = '';
+      if (!value || typeof value !== "object") {
+        if (el.bizName) el.bizName.value = "";
+        if (el.bizPhone) el.bizPhone.value = "";
+        if (el.bizAddress) el.bizAddress.value = "";
+        if (el.bizWilaya) el.bizWilaya.value = "";
+        if (el.bizWilayaCode) el.bizWilayaCode.value = "";
+        if (el.bizCommune) el.bizCommune.value = "";
+        if (el.bizDefaultCarrier) el.bizDefaultCarrier.value = "";
+        if (el.bizStopDeskId) el.bizStopDeskId.value = "";
         return;
       }
-      if (el.bizName) el.bizName.value = value.businessName ? String(value.businessName) : '';
-      if (el.bizPhone) el.bizPhone.value = value.phone ? String(value.phone) : '';
-      if (el.bizAddress) el.bizAddress.value = value.address ? String(value.address) : '';
-      if (el.bizWilaya) el.bizWilaya.value = value.wilaya ? String(value.wilaya) : '';
+      if (el.bizName)
+        el.bizName.value = value.businessName ? String(value.businessName) : "";
+      if (el.bizPhone)
+        el.bizPhone.value = value.phone ? String(value.phone) : "";
+      if (el.bizAddress)
+        el.bizAddress.value = value.address ? String(value.address) : "";
+      if (el.bizWilaya)
+        el.bizWilaya.value = value.wilaya ? String(value.wilaya) : "";
       if (el.bizWilayaCode) {
         var wCode = Number(value.wilayaCode);
-        el.bizWilayaCode.value = isFinite(wCode) && wCode > 0 ? String(wCode) : '';
+        el.bizWilayaCode.value =
+          isFinite(wCode) && wCode > 0 ? String(wCode) : "";
       }
-      if (el.bizCommune) el.bizCommune.value = value.commune ? String(value.commune) : '';
-      if (el.bizDefaultCarrier) el.bizDefaultCarrier.value = value.defaultCarrier ? String(value.defaultCarrier) : '';
-      if (el.bizStopDeskId) el.bizStopDeskId.value = value.stopDeskId != null ? String(value.stopDeskId) : '';
+      if (el.bizCommune)
+        el.bizCommune.value = value.commune ? String(value.commune) : "";
+      if (el.bizDefaultCarrier)
+        el.bizDefaultCarrier.value = value.defaultCarrier
+          ? String(value.defaultCarrier)
+          : "";
+      if (el.bizStopDeskId)
+        el.bizStopDeskId.value =
+          value.stopDeskId != null ? String(value.stopDeskId) : "";
     }
 
     function loadBusinessSettings() {
-      setBizStatus(t('sidebar.msg.biz_loading'), null);
-      return runServer('businessSettings_get')
+      setBizStatus(t("sidebar.msg.biz_loading"), null);
+      return runServer("businessSettings_get")
         .then(function (res) {
           if (!res || res.ok !== true) {
-            throw new Error(t('sidebar.msg.biz_load_error'));
+            throw new Error(t("sidebar.msg.biz_load_error"));
           }
           populateBizCarrierSelect();
           applyBusinessSettingsToForm(res.value);
-          setBizStatus(t('sidebar.msg.biz_ready'), null);
+          setBizStatus(t("sidebar.msg.biz_ready"), null);
         })
         .catch(function (err) {
-          setBizStatus(err.message || String(err), 'err');
+          setBizStatus(err.message || String(err), "err");
         });
     }
 
     function collectBusinessSettingsFromForm() {
-      var wcRaw = el.bizWilayaCode ? String(el.bizWilayaCode.value || '').trim() : '';
+      var wcRaw = el.bizWilayaCode
+        ? String(el.bizWilayaCode.value || "").trim()
+        : "";
       var wc = null;
       var wcValid = true;
       if (wcRaw) {
@@ -1202,22 +1558,25 @@
         }
       }
       return {
-        businessName: el.bizName ? el.bizName.value.trim() : '',
-        phone: el.bizPhone ? el.bizPhone.value.trim() : '',
-        address: el.bizAddress ? el.bizAddress.value.trim() : '',
-        wilaya: el.bizWilaya ? el.bizWilaya.value.trim() : '',
+        businessName: el.bizName ? el.bizName.value.trim() : "",
+        phone: el.bizPhone ? el.bizPhone.value.trim() : "",
+        address: el.bizAddress ? el.bizAddress.value.trim() : "",
+        wilaya: el.bizWilaya ? el.bizWilaya.value.trim() : "",
         wilayaCode: wc,
         __wilayaCodeValid: wcValid,
-        commune: el.bizCommune ? el.bizCommune.value.trim() : '',
-        defaultCarrier: el.bizDefaultCarrier ? el.bizDefaultCarrier.value : '',
-        stopDeskId: el.bizStopDeskId && el.bizStopDeskId.value.trim() ? el.bizStopDeskId.value.trim() : null,
+        commune: el.bizCommune ? el.bizCommune.value.trim() : "",
+        defaultCarrier: el.bizDefaultCarrier ? el.bizDefaultCarrier.value : "",
+        stopDeskId:
+          el.bizStopDeskId && el.bizStopDeskId.value.trim()
+            ? el.bizStopDeskId.value.trim()
+            : null,
       };
     }
 
     function saveBusinessSettings() {
       var payload = collectBusinessSettingsFromForm();
       if (!payload.__wilayaCodeValid) {
-        setBizStatus(t('sidebar.msg.biz_wilaya_invalid'), 'err');
+        setBizStatus(t("sidebar.msg.biz_wilaya_invalid"), "err");
         return;
       }
       delete payload.__wilayaCodeValid;
@@ -1225,17 +1584,17 @@
         payload.wilayaCode = 0;
       }
       setBusy(true);
-      setSectionBusy('dt-business', true);
-      setBizStatus(t('sidebar.msg.biz_saving'), null);
-      runServer('businessSettings_save', payload)
+      setSectionBusy("dt-business", true);
+      setBizStatus(t("sidebar.msg.biz_saving"), null);
+      runServer("businessSettings_save", payload)
         .then(function () {
-          setBizStatus(t('sidebar.msg.biz_saved'), 'ok');
+          setBizStatus(t("sidebar.msg.biz_saved"), "ok");
         })
         .catch(function (err) {
-          setBizStatus(err.message || String(err), 'err');
+          setBizStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-business', false);
+          setSectionBusy("dt-business", false);
           setBusy(false);
         });
     }
@@ -1243,13 +1602,15 @@
     function populateCarrierCredSelect(byCarrier) {
       var sel = el.carrierCredCarrier;
       if (!sel) return;
+      state.carrierCredByCarrier =
+        byCarrier && typeof byCarrier === "object" ? byCarrier : {};
       var prev = sel.value;
-      sel.innerHTML = '';
+      sel.innerHTML = "";
       state.carriers.forEach(function (c) {
-        var opt = document.createElement('option');
+        var opt = document.createElement("option");
         opt.value = c.id;
-        var bc = byCarrier && byCarrier[c.id];
-        var tag = bc && bc.hasApiKey ? t('sidebar.carrier_configured') : '';
+        var bc = state.carrierCredByCarrier[c.id];
+        var tag = bc && bc.hasApiKey ? t("sidebar.carrier_configured") : "";
         opt.textContent = c.label + tag;
         sel.appendChild(opt);
       });
@@ -1260,75 +1621,198 @@
       }
     }
 
+    function isZrCarrier_(carrierId) {
+      return String(carrierId || "")
+        .trim()
+        .toLowerCase() === "zr";
+    }
+
+    function carrierCredHasSaved_(carrierId) {
+      var id = String(carrierId || "").trim();
+      if (!id) return false;
+      var byCarrier = state.carrierCredByCarrier || {};
+      var rec = byCarrier[id];
+      return !!(rec && rec.hasApiKey);
+    }
+
+    function renderCarrierCredPlaceholders_() {
+      var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
+      var hasSaved = carrierCredHasSaved_(cid);
+      if (el.carrierCredKey) {
+        el.carrierCredKey.placeholder = t("sidebar.ph.carrier_token_edit");
+      }
+      if (el.carrierCredTenant) {
+        el.carrierCredTenant.placeholder = hasSaved
+          ? t("sidebar.ph.zr_tenant_saved")
+          : t("sidebar.ph.zr_tenant_id");
+      }
+      if (el.carrierCredSecret) {
+        el.carrierCredSecret.placeholder = hasSaved
+          ? t("sidebar.ph.zr_secret_key_saved")
+          : t("sidebar.ph.zr_secret_key");
+      }
+    }
+
+    function clearCarrierCredDraftInputs_() {
+      if (el.carrierCredKey) {
+        el.carrierCredKey.value = "";
+      }
+      if (el.carrierCredTenant) {
+        el.carrierCredTenant.value = "";
+      }
+      if (el.carrierCredSecret) {
+        el.carrierCredSecret.value = "";
+      }
+      renderCarrierCredPlaceholders_();
+    }
+
+    function renderCarrierCredInputs_() {
+      var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
+      var zr = isZrCarrier_(cid);
+      if (el.carrierCredSingleWrap) {
+        el.carrierCredSingleWrap.hidden = zr;
+      }
+      if (el.carrierCredZrWrap) {
+        el.carrierCredZrWrap.hidden = !zr;
+      }
+      renderCarrierCredPlaceholders_();
+    }
+
     function loadCarrierCreds() {
-      return runServer('carrierCreds_getState')
+      return runServer("carrierCreds_getState")
         .then(function (st) {
           populateCarrierCredSelect(st.byCarrier || {});
-          if (el.carrierCredKey) {
-            el.carrierCredKey.value = '';
-            el.carrierCredKey.placeholder = t('sidebar.ph.carrier_token_edit');
+          clearCarrierCredDraftInputs_();
+          renderCarrierCredInputs_();
+          if (state.carriersWarning) {
+            setCarrierCredStatus(state.carriersWarning, "err");
           }
         })
-        .catch(function () {});
+        .catch(function (err) {
+          populateCarrierCredSelect({});
+          clearCarrierCredDraftInputs_();
+          renderCarrierCredInputs_();
+          setCarrierCredStatus(
+            err && err.message ? String(err.message) : t("error.backend_carriers_load"),
+            "err",
+          );
+        });
     }
 
     function saveCarrierCred() {
-      var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : '';
-      var key = el.carrierCredKey ? el.carrierCredKey.value : '';
+      var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
       if (!cid) {
-        setCarrierCredStatus(t('sidebar.msg.choose_carrier'), 'err');
+        setCarrierCredStatus(t("sidebar.msg.choose_carrier"), "err");
+        return;
+      }
+      var zr = isZrCarrier_(cid);
+      var key = el.carrierCredKey ? String(el.carrierCredKey.value || "").trim() : "";
+      var tenant = el.carrierCredTenant ? String(el.carrierCredTenant.value || "").trim() : "";
+      var secret = el.carrierCredSecret ? String(el.carrierCredSecret.value || "").trim() : "";
+      if (zr && ((tenant && !secret) || (!tenant && secret))) {
+        setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
         return;
       }
       setBusy(true);
-      setSectionBusy('dt-carrier-creds', true);
-      setCarrierCredStatus(t('sidebar.msg.saving_carrier_cred'), null);
-      runServer('carrierCreds_saveApiKey', cid, key)
+      setSectionBusy("dt-carrier-creds", true);
+      setCarrierCredStatus(t("sidebar.msg.saving_carrier_cred"), null);
+      var saveReq = zr
+        ? runServer("carrierCreds_saveZrCredentials", tenant, secret)
+        : runServer("carrierCreds_saveApiKey", cid, key);
+      saveReq
         .then(function (st) {
           populateCarrierCredSelect(st.byCarrier || {});
-          if (el.carrierCredKey) el.carrierCredKey.value = '';
-          setCarrierCredStatus(key ? t('sidebar.msg.carrier_saved') : t('sidebar.msg.carrier_cleared'), 'ok');
+          clearCarrierCredDraftInputs_();
+          renderCarrierCredInputs_();
+          var hasCred = zr ? !!(tenant || secret) : !!key;
+          setCarrierCredStatus(
+            hasCred
+              ? t("sidebar.msg.carrier_saved")
+              : t("sidebar.msg.carrier_cleared"),
+            "ok",
+          );
         })
         .catch(function (err) {
-          setCarrierCredStatus(err.message || String(err), 'err');
+          setCarrierCredStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-carrier-creds', false);
+          setSectionBusy("dt-carrier-creds", false);
+          setBusy(false);
+        });
+    }
+
+    function testCarrierCred() {
+      var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
+      if (!cid) {
+        setCarrierCredStatus(t("sidebar.msg.choose_carrier"), "err");
+        return;
+      }
+      var zr = isZrCarrier_(cid);
+      var keyDraft = el.carrierCredKey ? String(el.carrierCredKey.value || "").trim() : "";
+      var tenantDraft = el.carrierCredTenant ? String(el.carrierCredTenant.value || "").trim() : "";
+      var secretDraft = el.carrierCredSecret ? String(el.carrierCredSecret.value || "").trim() : "";
+      if (zr && ((tenantDraft && !secretDraft) || (!tenantDraft && secretDraft))) {
+        setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
+        return;
+      }
+      setBusy(true);
+      setSectionBusy("dt-carrier-creds", true);
+      setCarrierCredStatus(t("sidebar.msg.testing_carrier_cred"), null);
+      var testReq = zr
+        ? runServer("carrierCreds_testZrConnection", tenantDraft, secretDraft)
+        : runServer("carrierCreds_testConnection", cid, keyDraft);
+      testReq
+        .then(function (res) {
+          var ok = !!(res && res.ok);
+          var message =
+            res && res.message != null
+              ? String(res.message)
+              : ok
+                ? "OK"
+                : "Connection test failed.";
+          setCarrierCredStatus(message, ok ? "ok" : "err");
+        })
+        .catch(function (err) {
+          setCarrierCredStatus(err.message || String(err), "err");
+        })
+        .then(function () {
+          setSectionBusy("dt-carrier-creds", false);
           setBusy(false);
         });
     }
 
     function buildFieldSelects() {
       var container = el.fields;
-      container.innerHTML = '';
+      container.innerHTML = "";
       var payload = state.headerPayload;
       if (!payload || !payload.columns || !payload.columns.length) {
-        var p = document.createElement('p');
-        p.textContent = t('sidebar.msg.no_columns_row1');
-        p.style.color = 'var(--dt-text-secondary)';
+        var p = document.createElement("p");
+        p.textContent = t("sidebar.msg.no_columns_row1");
+        p.style.color = "var(--dt-text-secondary)";
         container.appendChild(p);
         return;
       }
 
       var groups = {
         required: {
-          title: t('sidebar.map.group_required'),
-          hint: t('sidebar.map.group_required_hint'),
+          title: t("sidebar.map.group_required"),
+          hint: t("sidebar.map.group_required_hint"),
           defs: FIELD_DEFS.filter(function (d) {
-            return d.group === 'required';
+            return d.group === "required";
           }),
         },
         recommended: {
-          title: t('sidebar.map.group_recommended'),
-          hint: t('sidebar.map.group_recommended_hint'),
+          title: t("sidebar.map.group_recommended"),
+          hint: t("sidebar.map.group_recommended_hint"),
           defs: FIELD_DEFS.filter(function (d) {
-            return d.group === 'recommended';
+            return d.group === "recommended";
           }),
         },
         optional: {
-          title: t('sidebar.map.group_optional'),
-          hint: t('sidebar.map.group_optional_hint'),
+          title: t("sidebar.map.group_optional"),
+          hint: t("sidebar.map.group_optional_hint"),
           defs: FIELD_DEFS.filter(function (d) {
-            return d.group === 'optional';
+            return d.group === "optional";
           }),
         },
       };
@@ -1337,43 +1821,43 @@
         var g = groups[key];
         if (!g || !g.defs.length) return;
 
-        var section = document.createElement('section');
-        section.className = 'dt-map-group';
+        var section = document.createElement("section");
+        section.className = "dt-map-group";
 
-        var header = document.createElement('div');
-        header.className = 'dt-map-group-header';
-        var title = document.createElement('div');
-        title.className = 'dt-map-group-title';
+        var header = document.createElement("div");
+        header.className = "dt-map-group-header";
+        var title = document.createElement("div");
+        title.className = "dt-map-group-title";
         title.textContent = g.title;
-        var hint = document.createElement('div');
-        hint.className = 'dt-map-group-hint';
+        var hint = document.createElement("div");
+        hint.className = "dt-map-group-hint";
         hint.textContent = g.hint;
         header.appendChild(title);
         header.appendChild(hint);
 
-        var content = document.createElement('div');
-        content.className = 'dt-map-group-body';
+        var content = document.createElement("div");
+        content.className = "dt-map-group-body";
 
         g.defs.forEach(function (def) {
-          var wrap = document.createElement('div');
-          wrap.className = 'dt-map-field';
-          var lab = document.createElement('label');
-          lab.setAttribute('for', 'dt-field-' + def.key);
+          var wrap = document.createElement("div");
+          wrap.className = "dt-map-field";
+          var lab = document.createElement("label");
+          lab.setAttribute("for", "dt-field-" + def.key);
           lab.textContent = t(def.mapKey);
-          var sel = document.createElement('select');
-          sel.id = 'dt-field-' + def.key;
+          var sel = document.createElement("select");
+          sel.id = "dt-field-" + def.key;
           sel.dataset.fieldKey = def.key;
 
-          var none = document.createElement('option');
-          none.value = '';
-          none.textContent = t('sidebar.opt.none');
+          var none = document.createElement("option");
+          none.value = "";
+          none.textContent = t("sidebar.opt.none");
           sel.appendChild(none);
 
           payload.columns.forEach(function (col) {
-            var opt = document.createElement('option');
+            var opt = document.createElement("option");
             opt.value = String(col.index);
-            var h = col.header ? col.header : t('sidebar.opt.empty_header');
-            opt.textContent = col.letter + ' · ' + h;
+            var h = col.header ? col.header : t("sidebar.opt.empty_header");
+            opt.textContent = col.letter + " · " + h;
             sel.appendChild(opt);
           });
 
@@ -1387,17 +1871,19 @@
 
         if (collapsible) {
           var open = false;
-          section.classList.add('dt-map-group-collapsed');
-          var toggle = document.createElement('button');
-          toggle.type = 'button';
-          toggle.className = 'dt-section-toggle';
+          section.classList.add("dt-map-group-collapsed");
+          var toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "dt-section-toggle";
           header.appendChild(toggle);
           var render = function () {
-            section.classList.toggle('dt-map-group-collapsed', !open);
-            toggle.textContent = open ? t('sidebar.section.collapse') : t('sidebar.section.expand');
-            toggle.setAttribute('aria-expanded', String(open));
+            section.classList.toggle("dt-map-group-collapsed", !open);
+            toggle.textContent = open
+              ? t("sidebar.section.collapse")
+              : t("sidebar.section.expand");
+            toggle.setAttribute("aria-expanded", String(open));
           };
-          toggle.addEventListener('click', function () {
+          toggle.addEventListener("click", function () {
             open = !open;
             render();
           });
@@ -1407,43 +1893,43 @@
         container.appendChild(section);
       }
 
-      buildGroup('required', false);
-      buildGroup('recommended', false);
-      buildGroup('optional', true);
+      buildGroup("required", false);
+      buildGroup("recommended", false);
+      buildGroup("optional", true);
     }
 
     function applyMappingToFields() {
       var m = state.mapping;
       if (!m || !m.columns) return;
       FIELD_DEFS.forEach(function (def) {
-        var sel = $('dt-field-' + def.key);
+        var sel = $("dt-field-" + def.key);
         if (!sel) return;
         var raw = m.columns[def.key];
-        if (raw === undefined || raw === null || raw === '') {
-          sel.value = '';
+        if (raw === undefined || raw === null || raw === "") {
+          sel.value = "";
           return;
         }
-        var n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+        var n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
         if (!isNaN(n)) {
           sel.value = String(n);
         } else {
-          sel.value = '';
+          sel.value = "";
         }
       });
       if (el.carrier) {
-        el.carrier.value = m.defaultCarrier ? String(m.defaultCarrier) : '';
+        el.carrier.value = m.defaultCarrier ? String(m.defaultCarrier) : "";
       }
-      var headerInput = el.headerRow || $('dt-header-row');
+      var headerInput = el.headerRow || $("dt-header-row");
       if (headerInput) {
         var h = m.headerRow != null ? parseInt(String(m.headerRow), 10) : 1;
-        headerInput.value = !isNaN(h) && h >= 1 ? String(h) : '1';
+        headerInput.value = !isNaN(h) && h >= 1 ? String(h) : "1";
       }
     }
 
     function collectColumnsFromFields() {
       var columns = {};
       FIELD_DEFS.forEach(function (def) {
-        var sel = $('dt-field-' + def.key);
+        var sel = $("dt-field-" + def.key);
         if (!sel || !sel.value) return;
         var n = parseInt(sel.value, 10);
         if (!isNaN(n)) {
@@ -1454,28 +1940,42 @@
     }
 
     function mergeSuggestedMapping_(saved, suggested) {
-      var base = saved && typeof saved === 'object' ? saved : {};
+      var base = saved && typeof saved === "object" ? saved : {};
       var out = {
         spreadsheetId: base.spreadsheetId || state.spreadsheetId,
         sheetId: base.sheetId != null ? base.sheetId : state.currentSheetId,
-        sheetName: base.sheetName || (suggested && suggested.sheetName ? suggested.sheetName : ''),
-        columns: base.columns && typeof base.columns === 'object' ? Object.assign({}, base.columns) : {},
+        sheetName:
+          base.sheetName ||
+          (suggested && suggested.sheetName ? suggested.sheetName : ""),
+        columns:
+          base.columns && typeof base.columns === "object"
+            ? Object.assign({}, base.columns)
+            : {},
         defaultCarrier:
-          base.defaultCarrier != null && String(base.defaultCarrier).trim() !== ''
+          base.defaultCarrier != null &&
+          String(base.defaultCarrier).trim() !== ""
             ? String(base.defaultCarrier)
             : null,
         headerRow:
           base.headerRow != null
             ? base.headerRow
             : suggested && suggested.headerRow != null
-            ? suggested.headerRow
-            : 1,
+              ? suggested.headerRow
+              : 1,
         schemaVersion:
-          base.schemaVersion != null ? base.schemaVersion : suggested && suggested.schemaVersion != null ? suggested.schemaVersion : 2,
+          base.schemaVersion != null
+            ? base.schemaVersion
+            : suggested && suggested.schemaVersion != null
+              ? suggested.schemaVersion
+              : 2,
       };
-      if (suggested && suggested.columns && typeof suggested.columns === 'object') {
+      if (
+        suggested &&
+        suggested.columns &&
+        typeof suggested.columns === "object"
+      ) {
         Object.keys(suggested.columns).forEach(function (k) {
-          if (out.columns[k] == null || out.columns[k] === '') {
+          if (out.columns[k] == null || out.columns[k] === "") {
             out.columns[k] = suggested.columns[k];
           }
         });
@@ -1484,7 +1984,7 @@
     }
 
     function getSelectedHeaderRowOrDefault_() {
-      var input = el.headerRow || $('dt-header-row');
+      var input = el.headerRow || $("dt-header-row");
       if (input && input.value) {
         var parsed = parseInt(input.value, 10);
         if (!isNaN(parsed) && parsed >= 1) {
@@ -1505,190 +2005,234 @@
       if (sheetId == null) return Promise.resolve();
 
       setBusy(true);
-      setSectionBusy('dt-setup', true);
-      setStatus(t('sidebar.msg.loading'), null);
+      setSectionBusy("dt-setup", true);
+      setStatus(t("sidebar.msg.loading"), null);
       var headerRow = getSelectedHeaderRowOrDefault_();
 
-      return runServer('setup_getHeaders', sheetId, headerRow)
+      return runServer("setup_getHeaders", sheetId, headerRow)
         .then(function (headers) {
           state.headerPayload = headers;
           buildFieldSelects();
-          return runServer('setup_loadMapping', sheetId);
+          return runServer("setup_loadMapping", sheetId);
         })
         .then(function (mapping) {
           state.mapping = mapping;
           var persistedMappingReady = mappingHasRequiredColumns_(mapping);
-          return runServer('setup_getSuggestedMapping', sheetId, headerRow)
+          return runServer("setup_getSuggestedMapping", sheetId, headerRow)
             .then(function (suggested) {
               state.mapping = mergeSuggestedMapping_(state.mapping, suggested);
               applyMappingToFields();
               state.mappingReady = persistedMappingReady;
               refreshFlowReadiness_();
-              setStatus(t('sidebar.msg.ready'), 'ok');
+              setStatus(
+                state.carriersWarning || t("sidebar.msg.ready"),
+                state.carriersWarning ? "err" : "ok",
+              );
             })
             .catch(function () {
               applyMappingToFields();
               state.mappingReady = persistedMappingReady;
               refreshFlowReadiness_();
-              setStatus(t('sidebar.msg.ready'), 'ok');
+              setStatus(
+                state.carriersWarning || t("sidebar.msg.ready"),
+                state.carriersWarning ? "err" : "ok",
+              );
             });
         })
         .catch(function (err) {
           state.mappingReady = false;
           refreshFlowReadiness_();
-          setStatus(err.message || String(err), 'err');
+          setStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-setup', false);
+          setSectionBusy("dt-setup", false);
           setBusy(false);
         });
     }
 
     function previewOrders() {
       clearStructuredOutput(el.ordersOut);
-      setOrdersStatus(t('sidebar.msg.analyzing'), null);
+      setOrdersStatus(t("sidebar.msg.analyzing"), null);
       setOrdersBusy(true);
-      setSectionBusy('dt-orders', true);
-      runServer('order_previewSelection')
+      setSectionBusy("dt-orders", true);
+      runServer("order_previewSelection")
         .then(function (result) {
           var n = result.rows ? result.rows.length : 0;
           var ok = 0;
           var warnRows = 0;
           var invalidRows = 0;
+          var headerCount = 0;
+          var emptyCount = 0;
           if (result.rows) {
             result.rows.forEach(function (r) {
+              if (r.skipped && r.skipReason === "header") headerCount++;
+              if (r.skipped && r.skipReason === "empty") emptyCount++;
               if (!r.skipped && r.valid) ok++;
               if (!r.skipped && r.warnings && r.warnings.length) warnRows++;
               if (!r.skipped && !r.valid) invalidRows++;
             });
           }
-          var summaryLines = [tf('sidebar.msg.preview_summary', n, ok)];
+          var userHint = "";
+          if (ok === 0 && n > 0) {
+            if (headerCount === n) {
+              userHint = t("sidebar.msg.preview_only_header");
+            } else if (emptyCount === n) {
+              userHint = t("sidebar.msg.preview_only_empty");
+            }
+          }
+          var summaryLines = [];
+          if (userHint) summaryLines.push(userHint);
+          summaryLines.push(tf("sidebar.msg.preview_summary", n, ok));
           if (invalidRows > 0) {
-            summaryLines.push(tf('sidebar.msg.preview_invalid_rows', invalidRows));
+            summaryLines.push(
+              tf("sidebar.msg.preview_invalid_rows", invalidRows),
+            );
           }
           if (warnRows > 0) {
-            summaryLines.push(tf('sidebar.msg.preview_warning_rows', warnRows));
+            summaryLines.push(tf("sidebar.msg.preview_warning_rows", warnRows));
           }
           renderStructuredOutput(el.ordersOut, summaryLines, result);
           var scan =
             result.duplicateIndexLastRow != null
-              ? tf('sidebar.msg.preview_footer_dup', result.duplicateIndexLastRow)
-              : '';
-          var warnTail = warnRows > 0 ? tf('sidebar.msg.preview_footer_warn', warnRows) : '';
-          setOrdersStatus(tf('sidebar.msg.preview_summary', n, ok) + scan + warnTail, null);
+              ? tf(
+                  "sidebar.msg.preview_footer_dup",
+                  result.duplicateIndexLastRow,
+                )
+              : "";
+          var warnTail =
+            warnRows > 0 ? tf("sidebar.msg.preview_footer_warn", warnRows) : "";
+          setOrdersStatus(
+            (userHint ? userHint + " " : "") +
+              tf("sidebar.msg.preview_summary", n, ok) +
+              scan +
+              warnTail,
+            null,
+          );
         })
         .catch(function (err) {
-          setOrdersStatus(err.message || String(err), 'err');
+          setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-orders', false);
+          setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function sendSelection() {
       setOrdersBusy(true);
-      setSectionBusy('dt-orders', true);
-      setOrdersStatus(t('sidebar.msg.sending'), null);
+      setSectionBusy("dt-orders", true);
+      setOrdersStatus(t("sidebar.msg.sending"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer('send_sendSelection')
+      runServer("send_sendSelection")
         .then(function (result) {
           // Cache label URLs for printing buttons.
-          state.lastLabelUrls = result && Array.isArray(result.labelUrls) ? result.labelUrls : [];
+          state.lastLabelUrls =
+            result && Array.isArray(result.labelUrls) ? result.labelUrls : [];
           var a = result.attempted || 0;
           var s = result.succeeded || 0;
           var f = result.failed || 0;
-          var lines = [tf('sidebar.msg.send_summary', a, s, f)];
+          var lines = [tf("sidebar.msg.send_summary", a, s, f)];
           if (result && result.done === false && result.message) {
             lines.push(String(result.message));
           }
           if (state.lastLabelUrls.length > 0) {
-            lines.push(tf('sidebar.msg.labels_cached', state.lastLabelUrls.length));
+            lines.push(
+              tf("sidebar.msg.labels_cached", state.lastLabelUrls.length),
+            );
           }
           renderStructuredOutput(el.ordersOut, lines, result);
-          setOrdersStatus(tf('sidebar.msg.send_summary', a, s, f), f > 0 ? 'err' : 'ok');
+          setOrdersStatus(
+            tf("sidebar.msg.send_summary", a, s, f),
+            f > 0 ? "err" : "ok",
+          );
           return loadJournal();
         })
         .catch(function (err) {
-          setOrdersStatus(err.message || String(err), 'err');
+          setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-orders', false);
+          setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function syncSelection() {
       setOrdersBusy(true);
-      setSectionBusy('dt-orders', true);
-      setOrdersStatus(t('sidebar.msg.syncing'), null);
+      setSectionBusy("dt-orders", true);
+      setOrdersStatus(t("sidebar.msg.syncing"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer('sync_syncSelection')
+      runServer("sync_syncSelection")
         .then(function (result) {
           var a = result.attempted || 0;
           var s = result.succeeded || 0;
           var f = result.failed || 0;
-          var lines = [tf('sidebar.msg.sync_summary', a, s, f)];
+          var lines = [tf("sidebar.msg.sync_summary", a, s, f)];
           var iso =
             result.lastSyncSuccessIso != null
               ? result.lastSyncSuccessIso
-              : result.lastSyncIso || '';
+              : result.lastSyncIso || "";
           if (iso) {
-            lines.push(tf('sidebar.msg.sync_last_ok', iso));
+            lines.push(tf("sidebar.msg.sync_last_ok", iso));
           }
           renderStructuredOutput(el.ordersOut, lines, result);
-          var tail = iso ? tf('sidebar.msg.sync_last_ok', iso) : '';
-          setOrdersStatus(tf('sidebar.msg.sync_summary', a, s, f) + tail, f > 0 ? 'err' : 'ok');
+          var tail = iso ? tf("sidebar.msg.sync_last_ok", iso) : "";
+          setOrdersStatus(
+            tf("sidebar.msg.sync_summary", a, s, f) + tail,
+            f > 0 ? "err" : "ok",
+          );
           return loadSyncMeta().then(function () {
             return loadJournal();
           });
         })
         .catch(function (err) {
-          setOrdersStatus(err.message || String(err), 'err');
+          setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-orders', false);
+          setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function openLabelUrls_(urls) {
       if (!urls || !urls.length) {
-        setOrdersStatus(t('sidebar.msg.no_labels'), 'err');
+        setOrdersStatus(t("sidebar.msg.no_labels"), "err");
         return;
       }
       urls.forEach(function (u) {
         if (u && u.url) {
           try {
-            window.open(String(u.url), '_blank');
+            window.open(String(u.url), "_blank");
           } catch (e) {
             // Best effort only; errors surfaced via status.
           }
         }
       });
-      setOrdersStatus(tf('sidebar.msg.labels_opened', urls.length), 'ok');
+      setOrdersStatus(tf("sidebar.msg.labels_opened", urls.length), "ok");
     }
 
     function openAllMappedLabelUrls() {
       setOrdersBusy(true);
-      setSectionBusy('dt-orders', true);
-      setOrdersStatus(t('sidebar.msg.loading_labels'), null);
-      runServer('send_getAllLabelUrls')
+      setSectionBusy("dt-orders", true);
+      setOrdersStatus(t("sidebar.msg.loading_labels"), null);
+      runServer("send_getAllLabelUrls")
         .then(function (res) {
           var items = res && Array.isArray(res.items) ? res.items : [];
           renderStructuredOutput(
             el.ordersOut,
-            [tf('sidebar.msg.labels_found', items.length)],
-            res || { items: [] }
+            [tf("sidebar.msg.labels_found", items.length)],
+            res || { items: [] },
           );
           if (!items.length) {
-            setOrdersStatus(t('sidebar.msg.no_labels'), 'err');
+            setOrdersStatus(t("sidebar.msg.no_labels"), "err");
             return;
           }
           if (items.length > 20) {
-            var confirmMsg = tf('sidebar.msg.labels_confirm_many', items.length);
+            var confirmMsg = tf(
+              "sidebar.msg.labels_confirm_many",
+              items.length,
+            );
             if (!window.confirm(confirmMsg)) {
-              setOrdersStatus(t('sidebar.msg.labels_cancelled'), null);
+              setOrdersStatus(t("sidebar.msg.labels_cancelled"), null);
               return;
             }
           }
@@ -1698,17 +2242,17 @@
           }
         })
         .catch(function (err) {
-          setOrdersStatus(err.message || String(err), 'err');
+          setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-orders', false);
+          setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function saveMapping() {
       if (state.spreadsheetId == null || state.currentSheetId == null) {
-        setStatus(t('sidebar.msg.missing_context'), 'err');
+        setStatus(t("sidebar.msg.missing_context"), "err");
         return;
       }
       var columns = collectColumnsFromFields();
@@ -1723,290 +2267,342 @@
       };
 
       setBusy(true);
-      setSectionBusy('dt-setup', true);
-      setStatus(t('sidebar.msg.saving'), null);
+      setSectionBusy("dt-setup", true);
+      setStatus(t("sidebar.msg.saving"), null);
 
-      runServer('setup_saveMapping', payload)
+      runServer("setup_saveMapping", payload)
         .then(function (saved) {
           state.mapping = saved;
           state.mappingReady = mappingHasRequiredColumns_(state.mapping);
           refreshFlowReadiness_();
-          setStatus(t('sidebar.msg.mapping_saved'), 'ok');
+          setStatus(t("sidebar.msg.mapping_saved"), "ok");
         })
         .catch(function (err) {
-          setStatus(err.message || String(err), 'err');
+          setStatus(err.message || String(err), "err");
         })
         .then(function () {
-          setSectionBusy('dt-setup', false);
+          setSectionBusy("dt-setup", false);
           setBusy(false);
         });
     }
 
     function init() {
-      I18N =
-        typeof window.__DT_I18N__ === 'object' &&
-        window.__DT_I18N__ &&
-        !Array.isArray(window.__DT_I18N__)
-          ? window.__DT_I18N__
-          : {};
-      applyDomI18n();
-      initSectionFlowUi();
+      try {
+        I18N =
+          typeof window.__DT_I18N__ === "object" &&
+          window.__DT_I18N__ &&
+          !Array.isArray(window.__DT_I18N__)
+            ? window.__DT_I18N__
+            : {};
+        applyDomI18n();
+        // Never let flow-UI DOM reordering break the whole sidebar boot.
+        try {
+          initSectionFlowUi();
+        } catch (e) {
+          try {
+            if (typeof console !== "undefined" && console && console.warn) {
+              console.warn("initSectionFlowUi failed:", e);
+            }
+          } catch (_) {}
+        }
 
-      el.sheet = $('dt-sheet');
-      el.fields = $('dt-fields');
-      el.carrier = $('dt-carrier');
-      el.save = $('dt-save');
-      el.reload = $('dt-reload');
-      el.headerRow = $('dt-header-row');
-      el.status = $('dt-status');
-      el.ordersPreview = $('dt-orders-preview');
-      el.ordersSend = $('dt-orders-send');
-      el.ordersSync = $('dt-orders-sync');
-      el.ordersOut = $('dt-orders-out');
-      el.ordersStatus = $('dt-orders-status');
-      el.ordersPrintLabels = $('dt-orders-print-labels');
-      el.ordersPrintAll = $('dt-orders-print-all');
-      el.autoSyncStatus = $('dt-auto-sync-status');
-      el.autoSyncToggle = $('dt-auto-sync-toggle');
-      el.apiUrl = $('dt-api-url');
-      el.apiUrlSave = $('dt-api-url-save');
-      el.apiKey = $('dt-api-key');
-      el.apiKeySave = $('dt-api-key-save');
-      el.syncMeta = $('dt-sync-meta');
-      el.licenseCode = $('dt-license-code');
-      el.licenseRefresh = $('dt-license-refresh');
-      el.licenseClear = $('dt-license-clear');
-      el.licenseSummary = $('dt-license-summary');
-      el.licenseStatus = $('dt-license-status');
-      el.licenseBanner = $('dt-license-banner');
-      el.licenseBadge = $('dt-license-badge');
-      el.licenseTitle = $('dt-license-title');
-      el.licenseBody = $('dt-license-body');
-      el.licenseActivateCta = $('dt-license-activate-cta');
-      el.licenseContactCta = $('dt-license-contact-cta');
-      el.feeCarrier = $('dt-fee-carrier');
-      el.feeDefault = $('dt-fee-default');
-      el.feeWilaya = $('dt-fee-wilaya');
-      el.feeSave = $('dt-fee-save');
-      el.feeApply = $('dt-fee-apply');
-      el.feeOverwrite = $('dt-fee-overwrite');
-      el.feeStatus = $('dt-fee-status');
-      el.statsCompute = $('dt-stats-compute');
-      el.statsOut = $('dt-stats-out');
-      el.statsStatus = $('dt-stats-status');
-      el.wilayaValidate = $('dt-wilaya-validate');
-      el.wilayaAllowInvalid = $('dt-wilaya-allow-invalid');
-      el.communeWilaya = $('dt-commune-wilaya');
-      el.communeValidate = $('dt-commune-validate');
-      el.blacklistHighlight = $('dt-blacklist-highlight');
-      el.listsStatus = $('dt-lists-status');
-      el.statsFrom = $('dt-stats-from');
-      el.statsTo = $('dt-stats-to');
-      el.journalOut = $('dt-journal-out');
-      el.journalStatus = $('dt-journal-status');
-      el.journalRefresh = $('dt-journal-refresh');
-      el.journalClear = $('dt-journal-clear');
-      el.journalRetrySend = $('dt-journal-retry-send');
-      el.journalRetrySync = $('dt-journal-retry-sync');
-      el.carrierCredCarrier = $('dt-carrier-cred-carrier');
-      el.carrierCredKey = $('dt-carrier-cred-key');
-      el.carrierCredSave = $('dt-carrier-cred-save');
-      el.carrierCredStatus = $('dt-carrier-cred-status');
-      el.bizName = $('dt-biz-name');
-      el.bizPhone = $('dt-biz-phone');
-      el.bizAddress = $('dt-biz-address');
-      el.bizWilaya = $('dt-biz-wilaya');
-      el.bizWilayaCode = $('dt-biz-wilaya-code');
-      el.bizCommune = $('dt-biz-commune');
-      el.bizDefaultCarrier = $('dt-biz-default-carrier');
-      el.bizStopDeskId = $('dt-biz-stopdesk-id');
-      el.bizSave = $('dt-biz-save');
-      el.bizReload = $('dt-biz-reload');
-      el.bizStatus = $('dt-biz-status');
-      el.langSelect = $('dt-lang');
+        el.sheet = $("dt-sheet");
+        el.fields = $("dt-fields");
+        el.carrier = $("dt-carrier");
+        el.save = $("dt-save");
+        el.reload = $("dt-reload");
+        el.headerRow = $("dt-header-row");
+        el.status = $("dt-status");
+        el.ordersPreview = $("dt-orders-preview");
+        el.ordersSend = $("dt-orders-send");
+        el.ordersSync = $("dt-orders-sync");
+        el.ordersOut = $("dt-orders-out");
+        el.ordersStatus = $("dt-orders-status");
+        el.ordersPrintLabels = $("dt-orders-print-labels");
+        el.ordersPrintAll = $("dt-orders-print-all");
+        el.autoSyncStatus = $("dt-auto-sync-status");
+        el.autoSyncToggle = $("dt-auto-sync-toggle");
+        el.apiUrl = $("dt-api-url");
+        el.apiUrlSave = $("dt-api-url-save");
+        el.apiKey = $("dt-api-key");
+        el.apiKeySave = $("dt-api-key-save");
+        el.syncMeta = $("dt-sync-meta");
+        el.licenseCode = $("dt-license-code");
+        el.licenseRefresh = $("dt-license-refresh");
+        el.licenseClear = $("dt-license-clear");
+        el.licenseSummary = $("dt-license-summary");
+        el.licenseStatus = $("dt-license-status");
+        el.licenseStatusInline = $("dt-license-status-inline");
+        el.licenseBanner = $("dt-license-banner");
+        el.licenseBadge = $("dt-license-badge");
+        el.licenseTitle = $("dt-license-title");
+        el.licenseBody = $("dt-license-body");
+        el.licenseActivateCta = $("dt-license-activate-cta");
+        el.licenseContactCta = $("dt-license-contact-cta");
+        el.feeCarrier = $("dt-fee-carrier");
+        el.feeDefault = $("dt-fee-default");
+        el.feeWilaya = $("dt-fee-wilaya");
+        el.feeSave = $("dt-fee-save");
+        el.feeApply = $("dt-fee-apply");
+        el.feeOverwrite = $("dt-fee-overwrite");
+        el.feeStatus = $("dt-fee-status");
+        el.statsCompute = $("dt-stats-compute");
+        el.statsOut = $("dt-stats-out");
+        el.statsStatus = $("dt-stats-status");
+        el.wilayaValidate = $("dt-wilaya-validate");
+        el.wilayaAllowInvalid = $("dt-wilaya-allow-invalid");
+        el.communeWilaya = $("dt-commune-wilaya");
+        el.communeValidate = $("dt-commune-validate");
+        el.blacklistHighlight = $("dt-blacklist-highlight");
+        el.listsStatus = $("dt-lists-status");
+        el.statsFrom = $("dt-stats-from");
+        el.statsTo = $("dt-stats-to");
+        el.journalOut = $("dt-journal-out");
+        el.journalStatus = $("dt-journal-status");
+        el.journalRefresh = $("dt-journal-refresh");
+        el.journalClear = $("dt-journal-clear");
+        el.journalRetrySend = $("dt-journal-retry-send");
+        el.journalRetrySync = $("dt-journal-retry-sync");
+        el.carrierCredCarrier = $("dt-carrier-cred-carrier");
+        el.carrierCredSingleWrap = $("dt-carrier-cred-single-wrap");
+        el.carrierCredZrWrap = $("dt-carrier-cred-zr-wrap");
+        el.carrierCredKey = $("dt-carrier-cred-key");
+        el.carrierCredTenant = $("dt-carrier-cred-zr-tenant");
+        el.carrierCredSecret = $("dt-carrier-cred-zr-secret");
+        el.carrierCredSave = $("dt-carrier-cred-save");
+        el.carrierCredTest = $("dt-carrier-cred-test");
+        el.carrierCredStatus = $("dt-carrier-cred-status");
+        el.bizName = $("dt-biz-name");
+        el.bizPhone = $("dt-biz-phone");
+        el.bizAddress = $("dt-biz-address");
+        el.bizWilaya = $("dt-biz-wilaya");
+        el.bizWilayaCode = $("dt-biz-wilaya-code");
+        el.bizCommune = $("dt-biz-commune");
+        el.bizDefaultCarrier = $("dt-biz-default-carrier");
+        el.bizStopDeskId = $("dt-biz-stopdesk-id");
+        el.bizSave = $("dt-biz-save");
+        el.bizReload = $("dt-biz-reload");
+        el.bizStatus = $("dt-biz-status");
+        el.langSelect = $("dt-lang");
 
-      loadLicenseSidebar();
-      loadSyncMeta();
-      loadAutoSyncState();
-      loadJournal();
-      populateCommuneWilayaSelect();
+        if (!sidebarBridgeReady_()) {
+          notifyLicenseError_(
+            new Error(
+              "Google sidebar bridge unavailable. Reload the sheet and reopen Delivery Tool.",
+            ),
+          );
+        }
 
-      setBusy(true);
-      setStatus(t('sidebar.msg.loading'), null);
+        loadLicenseSidebar().catch(function () {
+          // Status line already updated inside loadLicenseSidebar().
+        });
+        loadSyncMeta();
+        loadAutoSyncState();
+        loadJournal();
+        populateCommuneWilayaSelect();
 
-      runServer('setup_getContext')
-        .then(function (ctx) {
-          state.spreadsheetId = ctx.spreadsheetId;
-          state.sheets = ctx.sheets || [];
-          state.carriers = ctx.carriers || [];
-          populateSheetSelect();
-          populateCarrierSelect();
-          populateBizCarrierSelect();
-          return loadFeeState().then(function () {
-            return loadCarrierCreds();
+        setBusy(true);
+        setStatus(t("sidebar.msg.loading"), null);
+
+        runServer("setup_getContext")
+          .then(function (ctx) {
+            state.spreadsheetId = ctx.spreadsheetId;
+            state.sheets = ctx.sheets || [];
+            state.carriers = ctx.carriers || [];
+            state.carriersWarning =
+              ctx && ctx.carriersWarning != null
+                ? String(ctx.carriersWarning)
+                : "";
+            populateSheetSelect();
+            populateCarrierSelect();
+            populateBizCarrierSelect();
+            return loadFeeState().then(function () {
+              return loadCarrierCreds();
+            });
+          })
+          .then(function () {
+            return loadBusinessSettings();
+          })
+          .then(function () {
+            if (el.feeCarrier) {
+              el.feeCarrier.addEventListener("change", function () {
+                fillFeeFormForCarrier(el.feeCarrier.value);
+              });
+            }
+            if (state.sheets.length && el.sheet) {
+              state.currentSheetId = parseInt(el.sheet.value, 10);
+              return loadHeadersAndMapping();
+            }
+            setStatus(t("sidebar.msg.no_sheets"), "err");
+            return null;
+          })
+          .catch(function (err) {
+            setStatus(err.message || String(err), "err");
+          })
+          .then(function () {
+            setBusy(false);
           });
-        })
-        .then(function () {
-          return loadBusinessSettings();
-        })
-        .then(function () {
-          if (el.feeCarrier) {
-            el.feeCarrier.addEventListener('change', function () {
-              fillFeeFormForCarrier(el.feeCarrier.value);
-            });
-          }
-          if (state.sheets.length) {
+
+        if (el.sheet) {
+          el.sheet.addEventListener("change", function () {
             state.currentSheetId = parseInt(el.sheet.value, 10);
-            return loadHeadersAndMapping();
-          }
-          setStatus(t('sidebar.msg.no_sheets'), 'err');
-          return null;
-        })
-        .catch(function (err) {
-          setStatus(err.message || String(err), 'err');
-        })
-        .then(function () {
-          setBusy(false);
-        });
+            loadHeadersAndMapping();
+          });
+        }
+        var headerRowInput = el.headerRow;
+        if (headerRowInput) {
+          headerRowInput.addEventListener("change", function () {
+            loadHeadersAndMapping();
+          });
+        }
 
-      el.sheet.addEventListener('change', function () {
-        state.currentSheetId = parseInt(el.sheet.value, 10);
-        loadHeadersAndMapping();
-      });
-      var headerRowInput = el.headerRow;
-      if (headerRowInput) {
-        headerRowInput.addEventListener('change', function () {
-          loadHeadersAndMapping();
-        });
-      }
+        if (el.save) {
+          el.save.addEventListener("click", saveMapping);
+        }
+        if (el.reload) {
+          el.reload.addEventListener("click", function () {
+            loadHeadersAndMapping();
+          });
+        }
 
-      el.save.addEventListener('click', saveMapping);
-      el.reload.addEventListener('click', function () {
-        loadHeadersAndMapping();
-      });
+        if (el.ordersPreview) {
+          el.ordersPreview.addEventListener("click", previewOrders);
+        }
+        if (el.ordersSend) {
+          el.ordersSend.addEventListener("click", sendSelection);
+        }
+        if (el.ordersSync) {
+          el.ordersSync.addEventListener("click", syncSelection);
+        }
+        if (el.ordersPrintLabels) {
+          el.ordersPrintLabels.addEventListener("click", function () {
+            openLabelUrls_(state.lastLabelUrls || []);
+          });
+        }
+        if (el.ordersPrintAll) {
+          el.ordersPrintAll.addEventListener("click", function () {
+            openAllMappedLabelUrls();
+          });
+        }
+        if (el.autoSyncToggle) {
+          el.autoSyncToggle.addEventListener("click", toggleAutoSync);
+        }
 
-      if (el.ordersPreview) {
-        el.ordersPreview.addEventListener('click', previewOrders);
-      }
-      if (el.ordersSend) {
-        el.ordersSend.addEventListener('click', sendSelection);
-      }
-      if (el.ordersSync) {
-        el.ordersSync.addEventListener('click', syncSelection);
-      }
-      if (el.ordersPrintLabels) {
-        el.ordersPrintLabels.addEventListener('click', function () {
-          openLabelUrls_(state.lastLabelUrls || []);
-        });
-      }
-      if (el.ordersPrintAll) {
-        el.ordersPrintAll.addEventListener('click', function () {
-          openAllMappedLabelUrls();
-        });
-      }
-      if (el.autoSyncToggle) {
-        el.autoSyncToggle.addEventListener('click', toggleAutoSync);
-      }
-
-      if (el.apiUrlSave) {
-        el.apiUrlSave.addEventListener('click', saveApiBaseUrl);
-      }
-      if (el.apiKeySave) {
-        el.apiKeySave.addEventListener('click', saveUserApiKey);
-      }
-      if (el.licenseRefresh) {
-        el.licenseRefresh.addEventListener('click', refreshLicense);
-      }
-      if (el.licenseClear) {
-        el.licenseClear.addEventListener('click', clearLicenseCache);
-      }
-      if (el.feeSave) {
-        el.feeSave.addEventListener('click', saveFeeRules);
-      }
-      if (el.feeApply) {
-        el.feeApply.addEventListener('click', applyFeeSelection);
-      }
-      if (el.statsCompute) {
-        el.statsCompute.addEventListener('click', computeSheetStats);
-      }
-      if (el.wilayaValidate) {
-        el.wilayaValidate.addEventListener('click', applyWilayaValidation);
-      }
-      if (el.communeValidate) {
-        el.communeValidate.addEventListener('click', applyCommuneValidation);
-      }
-      if (el.blacklistHighlight) {
-        el.blacklistHighlight.addEventListener('click', applyBlacklistHighlights);
-      }
-      if (el.journalRefresh) {
-        el.journalRefresh.addEventListener('click', function () {
-          setBusy(true);
-          setSectionBusy('dt-journal', true);
-          loadJournal()
-            .then(function () {
-              setSectionBusy('dt-journal', false);
-              setBusy(false);
-            })
-            .catch(function () {
-              setSectionBusy('dt-journal', false);
-              setBusy(false);
-            });
-        });
-      }
-      if (el.journalClear) {
-        el.journalClear.addEventListener('click', clearJournal);
-      }
-      if (el.journalRetrySend) {
-        el.journalRetrySend.addEventListener('click', selectFailedSendRows);
-      }
-      if (el.journalRetrySync) {
-        el.journalRetrySync.addEventListener('click', selectFailedSyncRows);
-      }
-      if (el.carrierCredSave) {
-        el.carrierCredSave.addEventListener('click', saveCarrierCred);
-      }
-      if (el.bizSave) {
-        el.bizSave.addEventListener('click', saveBusinessSettings);
-      }
-      if (el.bizReload) {
-        el.bizReload.addEventListener('click', function () {
-          setBusy(true);
-          setSectionBusy('dt-business', true);
-          loadBusinessSettings()
-            .then(function () {
-              setSectionBusy('dt-business', false);
-              setBusy(false);
-            })
-            .catch(function () {
-              setSectionBusy('dt-business', false);
-              setBusy(false);
-            });
-        });
-      }
-      if (el.langSelect) {
-        el.langSelect.value = typeof window.__DT_LANG__ === 'string' ? window.__DT_LANG__ : 'ar';
-        el.langSelect.addEventListener('change', function () {
-          var newLang = el.langSelect.value;
-          if (!newLang) {
-            return;
-          }
-          setBusy(true);
-          setLicenseStatus(t('sidebar.msg.saving'), null);
-          runServer('i18n_setLang', newLang)
-            .then(function () {
-              // Reload the sidebar so the server can send the new language pack.
-              window.location.reload();
-            })
-            .catch(function (err) {
-              setLicenseStatus(err.message || String(err), 'err');
-            })
-            .then(function () {
-              setBusy(false);
-            });
-        });
+        if (el.apiUrlSave) {
+          el.apiUrlSave.addEventListener("click", saveApiBaseUrl);
+        }
+        if (el.apiKeySave) {
+          el.apiKeySave.addEventListener("click", saveUserApiKey);
+        }
+        if (el.licenseRefresh) {
+          el.licenseRefresh.addEventListener("click", refreshLicense);
+        }
+        if (el.licenseClear) {
+          el.licenseClear.addEventListener("click", clearLicenseCache);
+        }
+        if (el.feeSave) {
+          el.feeSave.addEventListener("click", saveFeeRules);
+        }
+        if (el.feeApply) {
+          el.feeApply.addEventListener("click", applyFeeSelection);
+        }
+        if (el.statsCompute) {
+          el.statsCompute.addEventListener("click", computeSheetStats);
+        }
+        if (el.wilayaValidate) {
+          el.wilayaValidate.addEventListener("click", applyWilayaValidation);
+        }
+        if (el.communeValidate) {
+          el.communeValidate.addEventListener("click", applyCommuneValidation);
+        }
+        if (el.blacklistHighlight) {
+          el.blacklistHighlight.addEventListener(
+            "click",
+            applyBlacklistHighlights,
+          );
+        }
+        if (el.journalRefresh) {
+          el.journalRefresh.addEventListener("click", function () {
+            setBusy(true);
+            setSectionBusy("dt-journal", true);
+            loadJournal()
+              .then(function () {
+                setSectionBusy("dt-journal", false);
+                setBusy(false);
+              })
+              .catch(function () {
+                setSectionBusy("dt-journal", false);
+                setBusy(false);
+              });
+          });
+        }
+        if (el.journalClear) {
+          el.journalClear.addEventListener("click", clearJournal);
+        }
+        if (el.journalRetrySend) {
+          el.journalRetrySend.addEventListener("click", selectFailedSendRows);
+        }
+        if (el.journalRetrySync) {
+          el.journalRetrySync.addEventListener("click", selectFailedSyncRows);
+        }
+        if (el.carrierCredSave) {
+          el.carrierCredSave.addEventListener("click", saveCarrierCred);
+        }
+        if (el.carrierCredTest) {
+          el.carrierCredTest.addEventListener("click", testCarrierCred);
+        }
+        if (el.carrierCredCarrier) {
+          el.carrierCredCarrier.addEventListener("change", function () {
+            renderCarrierCredInputs_();
+            setCarrierCredStatus("", null);
+          });
+        }
+        if (el.bizSave) {
+          el.bizSave.addEventListener("click", saveBusinessSettings);
+        }
+        if (el.bizReload) {
+          el.bizReload.addEventListener("click", function () {
+            setBusy(true);
+            setSectionBusy("dt-business", true);
+            loadBusinessSettings()
+              .then(function () {
+                setSectionBusy("dt-business", false);
+                setBusy(false);
+              })
+              .catch(function () {
+                setSectionBusy("dt-business", false);
+                setBusy(false);
+              });
+          });
+        }
+        if (el.langSelect) {
+          el.langSelect.value =
+            typeof window.__DT_LANG__ === "string" ? window.__DT_LANG__ : "ar";
+          el.langSelect.addEventListener("change", function () {
+            var newLang = el.langSelect.value;
+            if (!newLang) {
+              return;
+            }
+            setBusy(true);
+            setLicenseStatus(t("sidebar.msg.saving"), null);
+            runServer("i18n_setLang", newLang)
+              .then(function () {
+                // Reload the sidebar so the server can send the new language pack.
+                window.location.reload();
+              })
+              .catch(function (err) {
+                setLicenseStatus(err.message || String(err), "err");
+              })
+              .then(function () {
+                setBusy(false);
+              });
+          });
+        }
+      } catch (e) {
+        notifyLicenseError_(e);
       }
     }
 
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener("DOMContentLoaded", init);
   })();
 </script>

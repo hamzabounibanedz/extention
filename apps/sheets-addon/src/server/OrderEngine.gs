@@ -272,7 +272,7 @@ function buildOrderFromRow_(
     }
   }
   if (wilayaCode == null) {
-    // Fallback: attempt to extract numeric prefix like "16 — Alger".
+    // Fallback: numeric prefix like "16 — Alger", then French/Arabic wilaya names.
     var m = wilaya.match(/^(\d{1,2})\b/);
     if (m) {
       var w = parseInt(m[1], 10);
@@ -280,6 +280,12 @@ function buildOrderFromRow_(
         wilayaCode = w;
       }
     }
+  }
+  if (wilayaCode == null) {
+    wilayaCode = wilaya_resolveCodeFromText_(wilaya);
+  }
+  if (wilayaCode == null && commune) {
+    wilayaCode = wilaya_resolveCodeFromText_(commune);
   }
   if (wilayaCode == null) {
     wilayaCode = 0;
@@ -429,8 +435,15 @@ function validateOrder_(sheet, rowNum, order, columns) {
     errors.push(i18n_t('val.phone_invalid'));
   }
 
+  var carrierForAddrCheck = String(order.carrier || '').trim().toLowerCase();
   if (isBlank_(order.address)) {
-    errors.push(i18n_t('val.address_required'));
+    // ZR uses territory IDs (wilaya+commune) instead of a free-text address,
+    // so address is not strictly required when wilaya+commune are present.
+    if (carrierForAddrCheck === 'zr' && !isBlank_(order.wilaya) && !isBlank_(order.commune)) {
+      // optional — no error
+    } else {
+      errors.push(i18n_t('val.address_required'));
+    }
   }
 
   if (isBlank_(order.wilaya)) {
@@ -454,7 +467,15 @@ function validateOrder_(sheet, rowNum, order, columns) {
   }
 
   if (order.deliveryType === 'pickup-point' && (!order.stopDeskId || order.stopDeskId.trim() === '')) {
-    errors.push(i18n_t('val.stopdesk_required'));
+    var carrierLc = String(order.carrier || '').trim().toLowerCase();
+    var isZr = carrierLc === 'zr';
+    errors.push(i18n_t(isZr ? 'val.stopdesk_required_zr' : 'val.stopdesk_required'));
+  }
+
+  // ZR home deliveries require commune for territory resolution on backend.
+  var carrierIdLc = String(order.carrier || '').trim().toLowerCase();
+  if (carrierIdLc === 'zr' && order.deliveryType === 'home' && isBlank_(order.commune)) {
+    errors.push(i18n_t('val.commune_required_zr_home'));
   }
 
   if (order.externalShipmentId) {
@@ -712,16 +733,23 @@ function isPlausiblePhone_(phone) {
     return false;
   }
   var digits = String(phone).replace(/\D/g, '');
-  if (/^0[567]\d{8}$/.test(digits)) {
-    return true;
+  if (!digits || digits.length < 9) {
+    return false;
   }
-  if (/^213[567]\d{8}$/.test(digits)) {
-    return true;
+
+  // Strip international prefixes: 00213, 213
+  if (digits.indexOf('00213') === 0) {
+    digits = digits.slice(5);
+  } else if (digits.indexOf('213') === 0 && digits.length >= 12) {
+    digits = digits.slice(3);
   }
-  if (/^[567]\d{8}$/.test(digits)) {
-    return true;
+
+  // Strip trunk prefix 0
+  if (digits.charAt(0) === '0' && digits.length === 10) {
+    digits = digits.slice(1);
   }
-  return false;
+
+  return /^[567]\d{8}$/.test(digits);
 }
 
 /**

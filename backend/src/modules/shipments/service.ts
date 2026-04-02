@@ -47,8 +47,85 @@ function normalizeText_(value: unknown): string {
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .replace(/ة/g, 'ه')
+    .replace(/[''`ʼ']/g, '')
     .replace(/[\s_./-]+/g, ' ')
     .trim();
+}
+
+/**
+ * Arabic → normalized-French lookup for all 58 Algerian wilayas + their capital communes.
+ * Keys are normalizeText_() output of the Arabic name.
+ */
+const ARABIC_TO_FRENCH_CITY_: Record<string, string> = {
+  'ادرار': 'adrar',
+  'الشلف': 'chlef', 'شلف': 'chlef',
+  'الاغواط': 'laghouat', 'اغواط': 'laghouat',
+  'ام البواقي': 'oum el bouaghi',
+  'باتنه': 'batna', 'باتنا': 'batna',
+  'بجايه': 'bejaia', 'بجاييه': 'bejaia',
+  'بسكره': 'biskra',
+  'بشار': 'bechar',
+  'البليده': 'blida', 'بليده': 'blida',
+  'البويره': 'bouira', 'بويره': 'bouira',
+  'تمنراست': 'tamanrasset',
+  'تبسه': 'tebessa',
+  'تلمسان': 'tlemcen',
+  'تيارت': 'tiaret',
+  'تيزي وزو': 'tizi ouzou',
+  'الجزائر': 'alger', 'جزائر': 'alger',
+  'الجلفه': 'djelfa', 'جلفه': 'djelfa',
+  'جيجل': 'jijel',
+  'سطيف': 'setif',
+  'سعيده': 'saida',
+  'سكيكده': 'skikda',
+  'سيدي بلعباس': 'sidi bel abbes',
+  'عنابه': 'annaba',
+  'قالمه': 'guelma',
+  'قسنطينه': 'constantine',
+  'المديه': 'medea', 'مديه': 'medea',
+  'مستغانم': 'mostaganem',
+  'المسيله': 'msila', 'مسيله': 'msila',
+  'معسكر': 'mascara',
+  'ورقله': 'ouargla',
+  'وهران': 'oran',
+  'البيض': 'el bayadh', 'بيض': 'el bayadh',
+  'اليزي': 'illizi', 'يزي': 'illizi',
+  'برج بوعريريج': 'bordj bou arreridj',
+  'بومرداس': 'boumerdes',
+  'الطارف': 'el tarf', 'طارف': 'el tarf',
+  'تندوف': 'tindouf',
+  'تيسمسيلت': 'tissemsilt',
+  'الوادي': 'el oued', 'وادي': 'el oued',
+  'خنشله': 'khenchela',
+  'سوق اهراس': 'souk ahras',
+  'تيبازه': 'tipaza',
+  'ميله': 'mila',
+  'عين الدفلي': 'ain defla', 'عين دفلي': 'ain defla',
+  'النعامه': 'naama', 'نعامه': 'naama',
+  'عين تموشنت': 'ain temouchent',
+  'غردايه': 'ghardaia',
+  'غليزان': 'relizane',
+  'تيميمون': 'timimoun',
+  'برج باجي مختار': 'bordj badji mokhtar',
+  'اولاد جلال': 'ouled djellal',
+  'بني عباس': 'beni abbes',
+  'عين صالح': 'in salah',
+  'عين قزام': 'in guezzam',
+  'توقرت': 'touggourt',
+  'جانت': 'djanet',
+  'المغير': 'el meghaier', 'مغير': 'el meghaier',
+  'المنيعه': 'el meniaa', 'منيعه': 'el meniaa',
+};
+
+function tryArabicToFrench_(normalizedArabic: string): string | null {
+  if (ARABIC_TO_FRENCH_CITY_[normalizedArabic]) {
+    return ARABIC_TO_FRENCH_CITY_[normalizedArabic];
+  }
+  const withoutArticle = normalizedArabic.replace(/^ال/, '');
+  if (withoutArticle !== normalizedArabic && ARABIC_TO_FRENCH_CITY_[withoutArticle]) {
+    return ARABIC_TO_FRENCH_CITY_[withoutArticle];
+  }
+  return null;
 }
 
 function similarity_(a: string, b: string): number {
@@ -67,16 +144,24 @@ function similarity_(a: string, b: string): number {
 }
 
 function normalizeDzPhone_(raw: unknown): string | null {
-  const digits = String(raw ?? '').replace(/[^\d+]/g, '').replace(/\+/g, '');
-  if (!digits) return null;
-  if (/^0\d{9}$/.test(digits)) {
-    return `+213${digits.slice(1)}`;
+  let digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits || digits.length < 9) return null;
+
+  // Strip international prefixes: 00213, 213
+  if (digits.startsWith('00213')) {
+    digits = digits.slice(5);
+  } else if (digits.startsWith('213') && digits.length >= 12) {
+    digits = digits.slice(3);
   }
-  if (/^213\d{9}$/.test(digits)) {
-    return `+${digits}`;
+
+  // Strip trunk prefix 0 (e.g. 0779... → 779...)
+  if (digits.startsWith('0') && digits.length === 10) {
+    digits = digits.slice(1);
   }
-  if (/^\+213\d{9}$/.test(String(raw ?? '').replace(/[^\d+]/g, ''))) {
-    return String(raw).replace(/[^\d+]/g, '');
+
+  // Must be 9-digit Algerian mobile: [5|6|7] + 8 digits
+  if (/^[567]\d{8}$/.test(digits)) {
+    return `+213${digits}`;
   }
   return null;
 }
@@ -196,6 +281,16 @@ function resolveTerritories_(
       return { error: `Ambiguous wilaya "${String(wilayaRaw)}".` };
     }
   }
+  // Arabic→French fallback for wilaya name
+  if (!wilaya && wilayaNorm) {
+    const frWilaya = tryArabicToFrench_(wilayaNorm);
+    if (frWilaya) {
+      const frCandidates = (index.byName.get(frWilaya) || []).filter((x) => x.level === 'wilaya');
+      if (frCandidates.length === 1) {
+        wilaya = frCandidates[0];
+      }
+    }
+  }
   if (!wilaya && wilayaNorm) {
     let best: TerritoryRecord | null = null;
     let bestScore = 0;
@@ -219,33 +314,56 @@ function resolveTerritories_(
   }
 
   const communeCandidates = index.communesByWilayaId.get(wilaya.id) || [];
-  const exact = communeCandidates.filter((x) => normalizeText_(x.name) === communeNorm);
-  if (exact.length === 1) {
-    return {
-      cityTerritoryId: wilaya.id,
-      districtTerritoryId: exact[0].id,
-      city: wilaya,
-      district: exact[0],
-    };
-  }
-  let best: TerritoryRecord | null = null;
-  let bestScore = 0;
-  for (const c of communeCandidates) {
-    const score = similarity_(communeNorm, normalizeText_(c.name));
-    if (score > bestScore) {
-      bestScore = score;
-      best = c;
+
+  const matchCommune = (nameToMatch: string): TerritoryResolution | null => {
+    const exact = communeCandidates.filter((x) => normalizeText_(x.name) === nameToMatch);
+    if (exact.length === 1) {
+      return {
+        cityTerritoryId: wilaya.id,
+        districtTerritoryId: exact[0].id,
+        city: wilaya,
+        district: exact[0],
+      };
     }
+    let best: TerritoryRecord | null = null;
+    let bestScore = 0;
+    for (const c of communeCandidates) {
+      const score = similarity_(nameToMatch, normalizeText_(c.name));
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    if (best && bestScore >= 0.88) {
+      return {
+        cityTerritoryId: wilaya.id,
+        districtTerritoryId: best.id,
+        city: wilaya,
+        district: best,
+      };
+    }
+    return null;
+  };
+
+  const directMatch = matchCommune(communeNorm);
+  if (directMatch) return directMatch;
+
+  // Arabic→French fallback: user has Arabic commune name, ZR stores French
+  const frenchName = tryArabicToFrench_(communeNorm);
+  if (frenchName) {
+    const translatedMatch = matchCommune(frenchName);
+    if (translatedMatch) return translatedMatch;
   }
-  if (best && bestScore >= 0.88) {
-    return {
-      cityTerritoryId: wilaya.id,
-      districtTerritoryId: best.id,
-      city: wilaya,
-      district: best,
-    };
+
+  // Wilaya-capital fallback: if user put the wilaya name as commune,
+  // find the commune whose name matches the wilaya's ZR name.
+  const wilayaNameNorm = normalizeText_(wilaya.name);
+  if (wilayaNameNorm && wilayaNameNorm !== communeNorm) {
+    const capitalMatch = matchCommune(wilayaNameNorm);
+    if (capitalMatch) return capitalMatch;
   }
-  const suggestions = communeCandidates.slice(0, 3).map((x) => x.name);
+
+  const suggestions = communeCandidates.slice(0, 5).map((x) => x.name);
   return {
     error: `Unresolved commune "${String(communeRaw)}" in wilaya "${wilaya.name}". Suggestions: ${suggestions.join(', ')}`,
   };
@@ -365,7 +483,7 @@ export async function sendOrdersBulk(
         errorMessage:
           error instanceof Error
             ? error.message
-            : 'Unable to resolve carrier territories. Please check ZR credentials (tenantId/apiKey).',
+            : 'Unable to resolve carrier territories. Please check ZR credentials (tenantId/secretKey).',
       };
     }
   }
@@ -380,7 +498,11 @@ export async function sendOrdersBulk(
       ? String(input.businessSettings.defaultHubStockId)
       : null;
   const defaultHubId =
-    input.businessSettings?.defaultHubId != null ? String(input.businessSettings.defaultHubId) : null;
+    input.businessSettings?.defaultHubId != null
+      ? String(input.businessSettings.defaultHubId)
+      : input.businessSettings?.stopDeskId != null
+        ? String(input.businessSettings.stopDeskId)
+        : null;
 
   for (let i = 0; i < input.orders.length; i++) {
     const row = input.orders[i];
@@ -445,14 +567,8 @@ export async function sendOrdersBulk(
         });
         continue;
       }
-      if (territory.city.hasHomeDelivery == null || territory.district.hasHomeDelivery == null) {
-        localFailures.push({
-          index: i,
-          errorCode: 'HOME_DELIVERY_UNVERIFIED',
-          errorMessage: `Unable to verify home delivery capability for row ${rowIndex}.`,
-        });
-        continue;
-      }
+      // null means the carrier's territory data doesn't include delivery capability info;
+      // allow the order through and let the carrier API reject if unsupported.
     }
 
     const quantity = Math.max(1, Number(row.quantity ?? 1));
@@ -622,7 +738,8 @@ async function searchTrackingOne_(
     pageNumber: 1,
     pageSize: 10,
     advancedSearch: {
-      fields: [{ field: 'trackingNumber', keyword: trackingNumber }],
+      field: 'trackingNumber',
+      keyword: trackingNumber,
     },
   };
   const result = await adapter.searchParcels({ body, credentials });
@@ -643,7 +760,7 @@ async function searchTrackingOne_(
       }
     }
     if (detail === 'missing_credentials') {
-      detail = 'Missing ZR credentials (tenantId/apiKey).';
+      detail = 'Missing ZR credentials (tenantId/secretKey).';
     }
     throw new Error(
       detail

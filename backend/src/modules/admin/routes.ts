@@ -70,7 +70,7 @@ export async function registerAdminRoutes(
     },
   );
 
-  app.get<{ Querystring: { limit?: string } }>(
+  app.get<{ Querystring: { limit?: string; search?: string } }>(
     '/admin/v1/license-codes',
     {
       schema: {
@@ -78,13 +78,27 @@ export async function registerAdminRoutes(
           type: 'object',
           properties: {
             limit: { type: 'string' },
+            search: { type: 'string' },
           },
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const lim = request.query.limit != null ? Number(request.query.limit) : 50;
-      const rows = await listAdminLicenseCodes(pool, Number.isFinite(lim) ? lim : 50);
+      const searchRaw =
+        request.query.search != null ? String(request.query.search).trim().toLowerCase() : '';
+      let activatedBy: string | null = null;
+      if (searchRaw) {
+        if (!env.licensePepper) {
+          return reply
+            .code(500)
+            .send({ error: 'license_pepper_required', code: 'LICENSE_PEPPER_REQUIRED' });
+        }
+        activatedBy = hashClientIdentity(searchRaw, env.licensePepper);
+      }
+      const rows = await listAdminLicenseCodes(pool, Number.isFinite(lim) ? lim : 50, {
+        activatedBy,
+      });
       return {
         items: rows.map((row) => ({
           id: row.id,

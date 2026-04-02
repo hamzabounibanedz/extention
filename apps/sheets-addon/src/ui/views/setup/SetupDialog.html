@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="<?= lang ?>" dir="<?= lang === 'ar' ? 'rtl' : 'ltr' ?>">
   <head>
     <base target="_top" />
@@ -15,7 +15,7 @@
         --dt-accent: #1a73e8;
         --dt-accent-hover: #1558b0;
         --dt-radius: 8px;
-        --dt-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        --dt-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
       *,
       *::before,
@@ -94,7 +94,9 @@
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
-        transition: background 0.12s ease, border-color 0.12s ease;
+        transition:
+          background 0.12s ease,
+          border-color 0.12s ease;
       }
       button:hover:not(:disabled) {
         background: var(--dt-surface-secondary);
@@ -180,52 +182,83 @@
   </head>
   <body>
     <div class="dt-setup-root">
-      <h1><?= HtmlService.createHtmlOutput(i18n_t('setup.title')).getContent(); ?></h1>
-      <p class="dt-lead"><?= HtmlService.createHtmlOutput(i18n_t('setup.intro_short')).getContent(); ?></p>
+      <h1>
+        <?= HtmlService.createHtmlOutput(i18n_t('setup.title')).getContent(); ?>
+      </h1>
+      <p class="dt-lead">
+        <?= HtmlService.createHtmlOutput(i18n_t('setup.intro_short')).getContent(); ?>
+      </p>
 
       <div class="dt-section">
         <div class="dt-section-title">
-          <?= HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_title')).getContent(); ?>
+          <?=
+          HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_title')).getContent();
+          ?>
         </div>
-        <p><?= HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_body')).getContent(); ?></p>
+        <p>
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.mapping_section_body')).getContent(); ?>
+        </p>
       </div>
 
       <div class="dt-section">
         <div class="dt-section-title">
-          <?= HtmlService.createHtmlOutput(i18n_t('setup.license_section_title')).getContent(); ?>
+          <?=
+          HtmlService.createHtmlOutput(i18n_t('setup.license_section_title')).getContent();
+          ?>
         </div>
-        <p><?= HtmlService.createHtmlOutput(i18n_t('setup.license_section_body')).getContent(); ?></p>
+        <p>
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.license_section_body')).getContent(); ?>
+        </p>
       </div>
 
       <div class="dt-checklist" aria-live="polite">
         <p class="dt-checklist-title">
-          <?= HtmlService.createHtmlOutput(i18n_t('setup.checklist_title')).getContent(); ?>
+          <?=
+          HtmlService.createHtmlOutput(i18n_t('setup.checklist_title')).getContent();
+          ?>
         </p>
         <ul class="dt-checklist-list">
           <li class="dt-checklist-item">
-            <span class="dt-checklist-badge" id="dt-check-backend" data-step="1">1</span>
-            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.backend')).getContent(); ?></span>
+            <span class="dt-checklist-badge" id="dt-check-backend" data-step="1"
+              >1</span
+            >
+            <span
+              ><?= HtmlService.createHtmlOutput(i18n_t('setup.check.backend')).getContent(); ?></span
+            >
           </li>
           <li class="dt-checklist-item">
-            <span class="dt-checklist-badge" id="dt-check-mapping" data-step="2">2</span>
-            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.mapping')).getContent(); ?></span>
+            <span class="dt-checklist-badge" id="dt-check-mapping" data-step="2"
+              >2</span
+            >
+            <span
+              ><?= HtmlService.createHtmlOutput(i18n_t('setup.check.mapping')).getContent(); ?></span
+            >
           </li>
           <li class="dt-checklist-item">
-            <span class="dt-checklist-badge" id="dt-check-test" data-step="3">3</span>
-            <span><?= HtmlService.createHtmlOutput(i18n_t('setup.check.test_send')).getContent(); ?></span>
+            <span class="dt-checklist-badge" id="dt-check-test" data-step="3"
+              >3</span
+            >
+            <span
+              ><?= HtmlService.createHtmlOutput(i18n_t('setup.check.test_send')).getContent(); ?></span
+            >
           </li>
         </ul>
       </div>
 
       <div class="dt-footer">
-        <?= HtmlService.createHtmlOutput(i18n_t('setup.footer_hint')).getContent(); ?>
+        <?=
+        HtmlService.createHtmlOutput(i18n_t('setup.footer_hint')).getContent();
+        ?>
       </div>
       <div class="dt-actions">
         <button type="button" class="dt-primary" id="dt-open-sidebar">
-          <?= HtmlService.createHtmlOutput(i18n_t('menu.open_sidebar')).getContent(); ?>
+          <?=
+          HtmlService.createHtmlOutput(i18n_t('menu.open_sidebar')).getContent();
+          ?>
         </button>
         <button type="button" id="dt-close">
-          <?= HtmlService.createHtmlOutput(i18n_t('general.close')).getContent(); ?>
+          <?=
+          HtmlService.createHtmlOutput(i18n_t('general.close')).getContent(); ?>
         </button>
       </div>
       <p id="dt-status" class="dt-status" role="status"></p>
