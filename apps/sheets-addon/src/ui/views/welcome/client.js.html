@@ -1622,9 +1622,11 @@
     }
 
     function isZrCarrier_(carrierId) {
-      return String(carrierId || "")
-        .trim()
-        .toLowerCase() === "zr";
+      return (
+        String(carrierId || "")
+          .trim()
+          .toLowerCase() === "zr"
+      );
     }
 
     function carrierCredHasSaved_(carrierId) {
@@ -1693,7 +1695,9 @@
           clearCarrierCredDraftInputs_();
           renderCarrierCredInputs_();
           setCarrierCredStatus(
-            err && err.message ? String(err.message) : t("error.backend_carriers_load"),
+            err && err.message
+              ? String(err.message)
+              : t("error.backend_carriers_load"),
             "err",
           );
         });
@@ -1706,9 +1710,15 @@
         return;
       }
       var zr = isZrCarrier_(cid);
-      var key = el.carrierCredKey ? String(el.carrierCredKey.value || "").trim() : "";
-      var tenant = el.carrierCredTenant ? String(el.carrierCredTenant.value || "").trim() : "";
-      var secret = el.carrierCredSecret ? String(el.carrierCredSecret.value || "").trim() : "";
+      var key = el.carrierCredKey
+        ? String(el.carrierCredKey.value || "").trim()
+        : "";
+      var tenant = el.carrierCredTenant
+        ? String(el.carrierCredTenant.value || "").trim()
+        : "";
+      var secret = el.carrierCredSecret
+        ? String(el.carrierCredSecret.value || "").trim()
+        : "";
       if (zr && ((tenant && !secret) || (!tenant && secret))) {
         setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
         return;
@@ -1748,10 +1758,19 @@
         return;
       }
       var zr = isZrCarrier_(cid);
-      var keyDraft = el.carrierCredKey ? String(el.carrierCredKey.value || "").trim() : "";
-      var tenantDraft = el.carrierCredTenant ? String(el.carrierCredTenant.value || "").trim() : "";
-      var secretDraft = el.carrierCredSecret ? String(el.carrierCredSecret.value || "").trim() : "";
-      if (zr && ((tenantDraft && !secretDraft) || (!tenantDraft && secretDraft))) {
+      var keyDraft = el.carrierCredKey
+        ? String(el.carrierCredKey.value || "").trim()
+        : "";
+      var tenantDraft = el.carrierCredTenant
+        ? String(el.carrierCredTenant.value || "").trim()
+        : "";
+      var secretDraft = el.carrierCredSecret
+        ? String(el.carrierCredSecret.value || "").trim()
+        : "";
+      if (
+        zr &&
+        ((tenantDraft && !secretDraft) || (!tenantDraft && secretDraft))
+      ) {
         setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
         return;
       }
