@@ -341,12 +341,11 @@ const Header: React.FC<{
 
   return (
     <header className="bg-dt-surface border-b border-dt-border shadow-sm">
-      <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div className="max-w-6xl mx-auto px-6 py-4 flex flex-row gap-2 items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-dt-text">
             {t(lang, 'app_title')}
           </h1>
-          <p className="text-sm text-dt-text-secondary">{t(lang, 'app_subtitle')}</p>
         </div>
 
         <div className="inline-flex items-center gap-2">
