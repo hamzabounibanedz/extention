@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import './style.css';
 
@@ -27,6 +27,8 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_success: 'تم إصدار {0} ({1}).',
     list_title: 'أحدث الأكواد',
     list_refresh: 'تحديث القائمة',
+    list_search_placeholder: 'تصفية الأكواد حسب البريد (اختياري)…',
+    list_search_label: 'تصفية الأكواد حسب البريد',
     clients_title: 'العملاء',
     clients_reload: 'إعادة تحميل العملاء',
     clients_search_placeholder: 'تصفية حسب البريد (اختياري)…',
@@ -94,6 +96,8 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_success: 'Code {0} émis ({1}).',
     list_title: 'Codes récents',
     list_refresh: 'Actualiser la liste',
+    list_search_placeholder: 'Filtrer les codes par email (optionnel)…',
+    list_search_label: 'Filtrer les codes par email',
     clients_title: 'Clients',
     clients_reload: 'Recharger les clients',
     clients_search_placeholder: 'Filtrer par email (optionnel)…',
@@ -161,6 +165,8 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_success: 'Issued {0} ({1}).',
     list_title: 'Recent codes',
     list_refresh: 'Refresh list',
+    list_search_placeholder: 'Filter codes by email (optional)…',
+    list_search_label: 'Filter codes by email',
     clients_title: 'Clients',
     clients_reload: 'Reload clients',
     clients_search_placeholder: 'Filter by email (optional)…',
@@ -490,6 +496,7 @@ const App: React.FC = () => {
   const [codes, setCodes] = useState<LicenseItem[] | null>(null);
   const [codesLoading, setCodesLoading] = useState(false);
   const [codesError, setCodesError] = useState<string | null>(null);
+  const [codesSearch, setCodesSearch] = useState('');
 
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [clientsLoading, setClientsLoading] = useState(false);
@@ -518,7 +525,7 @@ const App: React.FC = () => {
 
   const canQuery = secret.trim().length > 0;
 
-  const loadCodes = async () => {
+  const loadCodes = useCallback(async () => {
     setCodesError(null);
     setIssueMessage(null);
     if (!canQuery) {
@@ -527,7 +534,11 @@ const App: React.FC = () => {
     }
     setCodesLoading(true);
     try {
-      const data = await api<{ items: LicenseItem[] }>('/admin/v1/license-codes?limit=50');
+      const search = codesSearch.trim();
+      const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+      const data = await api<{ items: LicenseItem[] }>(
+        `/admin/v1/license-codes?limit=50${qs}`,
+      );
       setCodes(data.items ?? []);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
@@ -536,7 +547,7 @@ const App: React.FC = () => {
     } finally {
       setCodesLoading(false);
     }
-  };
+  }, [canQuery, codesSearch]);
 
   const loadClients = async () => {
     setClientsError(null);
@@ -580,12 +591,26 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (canQuery) {
-      void loadCodes();
-      void loadClients();
-      void loadStats();
+    if (!canQuery) {
+      setClients(null);
+      setStats(null);
+      return;
     }
+    void loadClients();
+    void loadStats();
   }, [canQuery]);
+
+  useEffect(() => {
+    if (!canQuery) {
+      setCodes(null);
+      return;
+    }
+    const delay = codesSearch === '' ? 0 : 250;
+    const id = window.setTimeout(() => {
+      void loadCodes();
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [canQuery, codesSearch, loadCodes]);
 
   const handleIssueCode = async () => {
     setIssueMessage(null);
@@ -828,13 +853,33 @@ const App: React.FC = () => {
             <p className="text-sm text-dt-text-secondary">
               {canQuery ? t(lang, 'list_title') : t(lang, 'enter_secret_codes')}
             </p>
-            <SecondaryButton
-              type="button"
-              onClick={() => void loadCodes()}
-              disabled={!canQuery || codesLoading}
-            >
-              {t(lang, 'list_refresh')}
-            </SecondaryButton>
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:max-w-md sm:flex-initial">
+              <label className="sr-only" htmlFor="codes-search">
+                {t(lang, 'list_search_label')}
+              </label>
+              <input
+                id="codes-search"
+                type="search"
+                value={codesSearch}
+                onChange={(e) => setCodesSearch(e.target.value)}
+                placeholder={t(lang, 'list_search_placeholder')}
+                disabled={!canQuery}
+                className="min-w-0 flex-1 rounded-dt-sm border border-dt-border bg-dt-surface px-2.5 py-2 text-sm text-dt-text outline-none focus:border-dt-accent focus:ring-2 focus:ring-dt-accent/40 disabled:opacity-60 sm:min-w-[200px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void loadCodes();
+                  }
+                }}
+              />
+              <SecondaryButton
+                type="button"
+                onClick={() => void loadCodes()}
+                disabled={!canQuery || codesLoading}
+              >
+                {t(lang, 'list_refresh')}
+              </SecondaryButton>
+            </div>
           </div>
 
           {codesError ? (
