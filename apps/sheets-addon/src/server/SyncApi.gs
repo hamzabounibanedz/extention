@@ -18,6 +18,7 @@ var SYNC_TRIGGER_FREQ_HOURS_ = 1;
  * @param {string} defaultCarrierId
  * @param {string} spreadsheetId
  * @param {boolean} isAuto
+ * @param {Array<number>|undefined} selectedRowNumbers when set, allValues must be rows headerRow..lastRow (inclusive)
  */
 function sync_runCore_(
   sheet,
@@ -29,7 +30,8 @@ function sync_runCore_(
   allValues,
   defaultCarrierId,
   spreadsheetId,
-  isAuto
+  isAuto,
+  selectedRowNumbers
 ) {
   var columns = saved.columns || {};
   if (columns.trackingColumn == null) {
@@ -45,9 +47,21 @@ function sync_runCore_(
   var lastCol = sheet.getLastColumn();
   var byCarrier = {};
 
-  for (var rowNum = startRow; rowNum <= endRow; rowNum++) {
+  var rowNums = [];
+  var idxFromHeader = false;
+  if (selectedRowNumbers != null && selectedRowNumbers.length > 0) {
+    rowNums = selectedRowNumbers;
+    idxFromHeader = true;
+  } else {
+    for (var r = startRow; r <= endRow; r++) {
+      rowNums.push(r);
+    }
+  }
+
+  for (var ri = 0; ri < rowNums.length; ri++) {
+    var rowNum = rowNums[ri];
     if (rowNum <= headerRow) continue;
-    var idx = rowNum - startRow;
+    var idx = idxFromHeader ? rowNum - headerRow : rowNum - startRow;
     var row = allValues[idx] || [];
     if (!row.length && lastCol >= 1) {
       row = sheet.getRange(rowNum, 1, 1, lastCol).getDisplayValues()[0] || [];
@@ -120,6 +134,10 @@ function sync_runCore_(
           if (item) {
             var pseudo = {
               ok: true,
+              stateName: item.stateName != null ? String(item.stateName) : '',
+              status: item.status != null ? String(item.status) : '',
+              labelFr: item.label && item.label.fr ? String(item.label.fr) : '',
+              labelAr: item.label && item.label.ar ? String(item.label.ar) : '',
               rawStatus:
                 item.label && item.label.fr
                   ? String(item.label.fr)
@@ -156,6 +174,14 @@ function sync_runCore_(
 
   SpreadsheetApp.flush();
 
+  if (succeeded > 0) {
+    try {
+      if (typeof mobile_refreshCompanionArtifactsForSheet_ === 'function') {
+        mobile_refreshCompanionArtifactsForSheet_(sheet.getParent(), sheet, saved);
+      }
+    } catch (refreshErr) {}
+  }
+
   if (attempted > 0) {
     try {
       ops_appendLogEntry_(spreadsheetId, {
@@ -182,9 +208,10 @@ function sync_runCore_(
 }
 
 /**
- * Sync tracking for the current selection.
+ * Sync tracking for the current selection or a manual row override.
+ * @param {string=} rowSelectionSpec
  */
-function sync_syncSelection() {
+function sync_syncSelection(rowSelectionSpec) {
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(15000)) {
     throw new Error(i18n_t('error.sync_in_progress'));
@@ -222,19 +249,16 @@ function sync_syncSelection() {
     headerRow = 1;
   }
 
-  var range = sheet.getActiveRange();
-  if (!range) {
+  var selectedRows = sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec);
+  if (!selectedRows.length) {
     throw new Error(i18n_t('error.select_rows_tracking'));
   }
 
-  var startRow = range.getRow();
-  var numRows = range.getNumRows();
-  var endRow = startRow + numRows - 1;
-
+  var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
   var allValues =
-    lastCol >= 1
-      ? sheet.getRange(startRow, 1, numRows, lastCol).getDisplayValues()
+    lastCol >= 1 && lastRow >= headerRow
+      ? sheet.getRange(headerRow, 1, lastRow - headerRow + 1, lastCol).getDisplayValues()
       : [];
 
   return sync_runCore_(
@@ -242,12 +266,13 @@ function sync_syncSelection() {
     sheetId,
     saved,
     headerRow,
-    startRow,
-    endRow,
+    selectedRows[0],
+    selectedRows[selectedRows.length - 1],
     allValues,
     defaultCarrierId,
     spreadsheetId,
-    false
+    false,
+    selectedRows
   );
   } finally {
     lock.releaseLock();
@@ -279,29 +304,28 @@ function sync_getMeta() {
  * @param {Object} res
  */
 function writeTrackingResultToRow_(sheet, rowNum, columns, res) {
-  if (!res || columns.statusColumn == null) {
+  if (!res) {
     return;
   }
-  var text;
-  if (res.ok) {
-    if (res.rawStatus != null && res.rawStatus !== '') {
-      text = String(res.rawStatus);
-    } else if (res.status != null && res.status !== '') {
-      text = String(res.status);
-    } else {
-      text = i18n_t('sync.updated').replace('{0}', '1');
-    }
-  } else {
+  if (!res.ok) {
+    var nonStatusMsg;
     if (res.statusCode === 404 || (res.error && String(res.error).indexOf('not_found') !== -1)) {
-      text = i18n_t('sync.not_found');
+      nonStatusMsg = i18n_t('sync.not_found');
     } else {
-      text = i18n_format('sync.error', res.errorMessage || '');
+      nonStatusMsg = i18n_format('sync.error', res.errorMessage || '');
     }
+    sync_writeTrackingMessageNote_(sheet, rowNum, columns, nonStatusMsg);
+    return;
   }
+  if (columns.statusColumn == null) {
+    return;
+  }
+  var text = sync_resolveSheetStatusText_(res);
   if (text.length > 500) {
     text = text.slice(0, 497) + '...';
   }
   sheet.getRange(rowNum, Number(columns.statusColumn)).setValue(text);
+  sync_writeTrackingMessageNote_(sheet, rowNum, columns, '');
 }
 
 /**
@@ -311,14 +335,149 @@ function writeTrackingResultToRow_(sheet, rowNum, columns, res) {
  * @param {string} message
  */
 function writeTrackingErrorToRow_(sheet, rowNum, columns, message) {
-  if (columns.statusColumn == null) {
+  sync_writeTrackingMessageNote_(sheet, rowNum, columns, i18n_format('sync.error', message));
+}
+
+/**
+ * Convert provider payload into a stable sheet status label.
+ * We prefer canonical bucket labels so companion sheets stay consistent.
+ * @param {Object} res
+ * @return {string}
+ */
+function sync_resolveSheetStatusText_(res) {
+  var stateName = res && res.stateName != null ? String(res.stateName) : '';
+  var bucket = sync_bucketFromCarrierStateName_(stateName);
+  var candidates = [
+    res && res.rawStatus != null ? String(res.rawStatus) : '',
+    res && res.status != null ? String(res.status) : '',
+    res && res.labelFr != null ? String(res.labelFr) : '',
+    res && res.labelAr != null ? String(res.labelAr) : '',
+    stateName,
+  ];
+  if (!bucket && typeof classifyShipmentBucket_ === 'function') {
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = String(candidates[i] || '').trim();
+      if (!candidate) {
+        continue;
+      }
+      try {
+        var b = classifyShipmentBucket_(candidate, false);
+        if (b && b !== 'unknown') {
+          bucket = b;
+          break;
+        }
+      } catch (e0) {}
+    }
+  }
+  if (bucket) {
+    return sync_bucketToSheetStatusLabel_(bucket);
+  }
+  for (var j = 0; j < candidates.length; j++) {
+    var fallback = String(candidates[j] || '').trim();
+    if (fallback) {
+      return fallback;
+    }
+  }
+  return i18n_t('sync.updated').replace('{0}', '1');
+}
+
+/**
+ * @param {string} stateName
+ * @return {string|null}
+ */
+function sync_bucketFromCarrierStateName_(stateName) {
+  var token = String(stateName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-./]+/g, '_');
+  if (!token) {
+    return null;
+  }
+  if (
+    token === 'livre' ||
+    token === 'delivered' ||
+    token === 'delivered_success' ||
+    token.indexOf('deliver') >= 0 ||
+    token.indexOf('livr') >= 0
+  ) {
+    return 'delivered';
+  }
+  if (token === 'returned' || token.indexOf('retour') >= 0 || token.indexOf('return') >= 0) {
+    return 'returned';
+  }
+  if (
+    token === 'en_transit' ||
+    token === 'en_cours' ||
+    token.indexOf('transit') >= 0 ||
+    token.indexOf('shipping') >= 0 ||
+    token.indexOf('dispatch') >= 0 ||
+    token.indexOf('shipped') >= 0
+  ) {
+    return 'in_transit';
+  }
+  if (
+    token === 'commande_recue' ||
+    token === 'pending' ||
+    token.indexOf('attente') >= 0 ||
+    token.indexOf('waiting') >= 0
+  ) {
+    return 'pending';
+  }
+  if (token.indexOf('confirm') >= 0) {
+    return 'confirmed';
+  }
+  if (token.indexOf('cancel') >= 0 || token.indexOf('annul') >= 0) {
+    return 'cancelled';
+  }
+  if (token.indexOf('fail') >= 0 || token.indexOf('echec') >= 0 || token.indexOf('error') >= 0) {
+    return 'failed';
+  }
+  return null;
+}
+
+/**
+ * @param {string} bucket
+ * @return {string}
+ */
+function sync_bucketToSheetStatusLabel_(bucket) {
+  var key = String(bucket || '').trim();
+  if (
+    key !== 'delivered' &&
+    key !== 'returned' &&
+    key !== 'failed' &&
+    key !== 'cancelled' &&
+    key !== 'in_transit' &&
+    key !== 'confirmed' &&
+    key !== 'pending'
+  ) {
+    return i18n_t('sync.updated').replace('{0}', '1');
+  }
+  return i18n_t('stats.bucket.' + key);
+}
+
+/**
+ * Keep sync errors as notes (non-destructive) instead of overwriting status.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} rowNum
+ * @param {Object} columns
+ * @param {string} message
+ */
+function sync_writeTrackingMessageNote_(sheet, rowNum, columns, message) {
+  var targetCol = null;
+  if (columns && columns.notesColumn != null && isFinite(Number(columns.notesColumn))) {
+    targetCol = Number(columns.notesColumn);
+  } else if (columns && columns.statusColumn != null && isFinite(Number(columns.statusColumn))) {
+    targetCol = Number(columns.statusColumn);
+  }
+  if (targetCol == null || targetCol < 1) {
     return;
   }
-  var t = i18n_format('sync.error', message);
-  if (t.length > 500) {
-    t = t.slice(0, 497) + '...';
+  var note = String(message || '').trim();
+  if (note.length > 500) {
+    note = note.slice(0, 497) + '...';
   }
-  sheet.getRange(rowNum, Number(columns.statusColumn)).setValue(t);
+  var cell = sheet.getRange(rowNum, Math.floor(targetCol));
+  cell.setNote(note ? 'SYNC: ' + note : '');
 }
 
 /**

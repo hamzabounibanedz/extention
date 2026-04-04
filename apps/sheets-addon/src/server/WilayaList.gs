@@ -231,9 +231,29 @@ function wilaya_getArabicAliasesByCode_() {
  * @param {string|null|undefined} s
  * @return {string}
  */
+function wilaya_digitsToAscii_(s) {
+  var src = String(s || "");
+  var out = "";
+  for (var i = 0; i < src.length; i++) {
+    var c = src.charCodeAt(i);
+    if (c >= 0x0660 && c <= 0x0669) {
+      out += String(c - 0x0660);
+    } else if (c >= 0x06f0 && c <= 0x06f9) {
+      out += String(c - 0x06f0);
+    } else {
+      out += src.charAt(i);
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {string|null|undefined} s
+ * @return {string}
+ */
 function wilaya_normalizeLatinForMatch_(s) {
   if (s == null) return "";
-  return String(s)
+  return wilaya_digitsToAscii_(String(s))
     .trim()
     .toLowerCase()
     .normalize("NFD")
@@ -289,6 +309,33 @@ function wilaya_arabicNamesMatch_(a, b) {
 }
 
 /**
+ * Parse common code formats from text: "16 - Alger", "Wilaya 16", "ولاية 16".
+ * @param {string} raw
+ * @return {number|null}
+ */
+function wilaya_parseCodeHint_(raw) {
+  var t = wilaya_digitsToAscii_(String(raw || "").trim());
+  if (!t) return null;
+
+  var mStart = t.match(/^(\d{1,2})\b/);
+  if (mStart) {
+    var startCode = parseInt(mStart[1], 10);
+    if (!isNaN(startCode) && startCode >= 1 && startCode <= 58) {
+      return startCode;
+    }
+  }
+
+  var mPref = t.match(/^(?:wilaya|w|code|ولاية)\s*[:\-]?\s*(\d{1,2})\b/i);
+  if (mPref) {
+    var prefCode = parseInt(mPref[1], 10);
+    if (!isNaN(prefCode) && prefCode >= 1 && prefCode <= 58) {
+      return prefCode;
+    }
+  }
+  return null;
+}
+
+/**
  * Resolve official wilaya code (1–58) from a cell: leading digits, French label, or Arabic name.
  * @param {string|null|undefined} raw
  * @return {number|null}
@@ -298,12 +345,9 @@ function wilaya_resolveCodeFromText_(raw) {
   var t = String(raw).trim();
   if (!t) return null;
 
-  var m = t.match(/^(\d{1,2})\b/);
-  if (m) {
-    var w = parseInt(m[1], 10);
-    if (!isNaN(w) && w >= 1 && w <= 58) {
-      return w;
-    }
+  var hintedCode = wilaya_parseCodeHint_(t);
+  if (hintedCode != null) {
+    return hintedCode;
   }
 
   var normL = wilaya_normalizeLatinForMatch_(t);
