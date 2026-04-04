@@ -21,13 +21,19 @@ Create or update root `.env` with test-safe values:
 
 Never use production secrets in local environments.
 
-## 3) Start backend + database
+## 3) Start full local stack (Postgres + backend + admin dashboard)
 
-From `infrastructure/docker`:
+From repo root:
 
 ```bash
-docker compose --env-file ../../.env up -d --build
+npm run docker:up
 ```
+
+Optional port overrides (root `.env`) if a host port is already taken:
+
+- `POSTGRES_HOST_PORT`
+- `BACKEND_HOST_PORT`
+- `ADMIN_DASHBOARD_HOST_PORT`
 
 Health check:
 
@@ -35,18 +41,9 @@ Health check:
 curl http://localhost:3000/health
 ```
 
-## 4) Start admin dashboard
+## 4) Open admin dashboard
 
-From repo root:
-
-```bash
-npm install
-npm run dev:admin
-```
-
-Open:
-
-- http://localhost:5173
+Open: http://localhost:5173
 
 Paste your `ADMIN_SECRET` in the dashboard login input.
 
@@ -69,10 +66,10 @@ For end-to-end API checks, validate:
 
 ## 6) Shutdown
 
-From `infrastructure/docker`:
+From repo root:
 
 ```bash
-docker compose down
+npm run docker:down
 ```
 ## Delivery Tool operations overview
 

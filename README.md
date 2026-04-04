@@ -155,7 +155,7 @@ It talks only to the backend’s `/admin/*` endpoints.
 
 - Node.js `20.x` (see `.nvmrc`).
 - npm (bundled with Node).
-- Docker (optional, for running Postgres + backend quickly).
+- Docker Desktop (recommended for full local stack: Postgres + backend + admin dashboard).
 - Access to a Google Workspace account to deploy / test the add-on.
 
 ### Install dependencies
@@ -168,37 +168,40 @@ npm install
 
 This uses npm workspaces to install all package dependencies (`shared`, `carriers`, `backend`, apps, etc.).
 
-### Run the backend locally
+### Run full local stack with Docker
 
-With Docker (recommended):
-
-```bash
-cd infrastructure/docker
-docker compose up --build
-```
-
-This will:
-
-- Start a PostgreSQL instance.
-- Build and start the backend service with environment variables defined in the Compose file.
-- Load variables from the repository root `.env` (mounted via `env_file: ../../.env`).
-
-Without Docker, define the backend variables once in the repository root `.env`, then run:
+From the repository root:
 
 ```bash
-npm run dev:backend
+npm run docker:up
 ```
 
-The backend now loads `./.env` from the repository root automatically on startup.
+This starts all required local services:
 
-### Run the admin dashboard (dev)
+- PostgreSQL (`localhost:5432`)
+- Backend API (`localhost:3000`)
+- Admin dashboard (`localhost:5173`)
+
+If any port is already in use, set one or more optional host-port overrides in root `.env`:
+
+- `POSTGRES_HOST_PORT`
+- `BACKEND_HOST_PORT`
+- `ADMIN_DASHBOARD_HOST_PORT`
+
+The admin dashboard proxies `/admin/*` to the backend container automatically through Docker networking.
+
+To stop everything:
 
 ```bash
-cd apps/admin-dashboard
-npm run dev
+npm run docker:down
 ```
 
-The Vite dev server proxies `/admin/*` requests to the local backend, as configured in `vite.config.ts`.
+To inspect status/logs:
+
+```bash
+npm run docker:ps
+npm run docker:logs
+```
 
 ### Develop the Sheets add-on
 
