@@ -79,7 +79,8 @@ type ResolveInput = {
 /**
  * Resolves current license/trial state using the migrated schema.
  *
- * Email is never persisted in plaintext: all lookups use `user_email_hmac`.
+ * Identity lookups still use `user_email_hmac`; optional `google_email` is
+ * populated only for admin search/display convenience.
  */
 export async function resolveLicenseWithPool(
   pool: Pool | null,
@@ -109,6 +110,12 @@ export async function resolveLicenseWithPool(
   );
   const lic = licenseRes.rows[0];
   if (lic) {
+    await pool.query(
+      `UPDATE dt_license
+       SET google_email = COALESCE(google_email, $1)
+       WHERE user_email_hmac = $2`,
+      [email.trim().toLowerCase(), userEmailHmac],
+    );
     await pool.query(
       `UPDATE dt_trial_entitlement
        SET used = TRUE
@@ -229,17 +236,18 @@ export async function activateLicenseCode(
     );
 
     const upsert = await client.query<{ expires_at: Date }>(
-      `INSERT INTO dt_license (user_email_hmac, code_id, activated_at, expires_at, revoked, revoked_at, plan)
-       VALUES ($1, $2, $3, $4, FALSE, NULL, 'standard')
+      `INSERT INTO dt_license (user_email_hmac, code_id, activated_at, expires_at, revoked, revoked_at, plan, google_email)
+       VALUES ($1, $2, $3, $4, FALSE, NULL, 'standard', $5)
        ON CONFLICT (user_email_hmac) DO UPDATE
        SET code_id = EXCLUDED.code_id,
            activated_at = EXCLUDED.activated_at,
            expires_at = GREATEST(dt_license.expires_at, EXCLUDED.expires_at),
            revoked = FALSE,
            revoked_at = NULL,
-           plan = 'standard'
+           plan = 'standard',
+           google_email = COALESCE(dt_license.google_email, EXCLUDED.google_email)
        RETURNING expires_at`,
-      [userEmailHmac, row.id, activatedAt, candidateExpiresAt],
+      [userEmailHmac, row.id, activatedAt, candidateExpiresAt, normalizedEmail],
     );
     const expiresAt = upsert.rows[0] ? new Date(upsert.rows[0].expires_at) : candidateExpiresAt;
     await client.query(

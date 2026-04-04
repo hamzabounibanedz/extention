@@ -143,23 +143,56 @@ function similarity_(a: string, b: string): number {
   return common / all.size;
 }
 
+/** Map Arabic-Indic / Eastern Arabic digits so /\D/ stripping does not erase the whole number. */
+function mapUnicodeDigitsToAscii_(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (c == null) continue;
+    if (c >= 0x0660 && c <= 0x0669) {
+      out += String(c - 0x0660);
+    } else if (c >= 0x06f0 && c <= 0x06f9) {
+      out += String(c - 0x06f0);
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+function digitsOnlyAscii_(raw: unknown): string {
+  const s = mapUnicodeDigitsToAscii_(String(raw ?? '').trim());
+  return s.replace(/\D/g, '');
+}
+
+/**
+ * Normalize Algerian mobile numbers to E.164 +2135/6/7XXXXXXXX.
+ * Handles 00213, 213, stray leading zeros after country code, and Arabic digits in pasted values.
+ */
 function normalizeDzPhone_(raw: unknown): string | null {
-  let digits = String(raw ?? '').replace(/\D/g, '');
+  let digits = digitsOnlyAscii_(raw);
   if (!digits || digits.length < 9) return null;
 
-  // Strip international prefixes: 00213, 213
-  if (digits.startsWith('00213')) {
-    digits = digits.slice(5);
-  } else if (digits.startsWith('213') && digits.length >= 12) {
-    digits = digits.slice(3);
+  for (let guard = 0; guard < 6; guard++) {
+    if (digits.startsWith('00213')) {
+      digits = digits.slice(5);
+    } else if (digits.startsWith('213') && digits.length >= 12) {
+      digits = digits.slice(3);
+    } else {
+      break;
+    }
   }
 
-  // Strip trunk prefix 0 (e.g. 0779... → 779...)
+  // 00213055… → 0055… (11+ digits): peel spare leading zeros before national 0 + 9 digits
+  while (digits.startsWith('0') && digits.length > 10) {
+    digits = digits.slice(1);
+  }
+
+  // Trunk 0 + 9-digit national (05x, 06x, 07x)
   if (digits.startsWith('0') && digits.length === 10) {
     digits = digits.slice(1);
   }
 
-  // Must be 9-digit Algerian mobile: [5|6|7] + 8 digits
   if (/^[567]\d{8}$/.test(digits)) {
     return `+213${digits}`;
   }
