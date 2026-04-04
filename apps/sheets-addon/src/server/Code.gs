@@ -8,6 +8,13 @@
  */
 function onOpen() {
   installDeliveryToolMenu_();
+  try {
+    if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
+      mobile_ensureOnEditTriggerForSpreadsheet_(SpreadsheetApp.getActiveSpreadsheet());
+    }
+  } catch (e) {
+    // Best-effort only.
+  }
 }
 
 /**
@@ -15,4 +22,11 @@ function onOpen() {
  */
 function onInstall() {
   installDeliveryToolMenu_();
+  try {
+    if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
+      mobile_ensureOnEditTriggerForSpreadsheet_(SpreadsheetApp.getActiveSpreadsheet());
+    }
+  } catch (e) {
+    // Best-effort only.
+  }
 }
