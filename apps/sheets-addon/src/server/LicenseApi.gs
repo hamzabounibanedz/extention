@@ -44,6 +44,25 @@ function license_getCurrentEmail_() {
 }
 
 /**
+ * Enrich sidebar state with deployment UI settings and backend config flags.
+ * @param {Object} state
+ * @return {Object}
+ */
+function license_attachUiSettings_(state) {
+  state = state || {};
+  var ui = config_getUiSettings_();
+  state.uiMode = ui.uiMode;
+  state.allowBackendConfig = ui.allowBackendConfig;
+  state.showTechnicalDetails = ui.showTechnicalDetails;
+  var base = getApiBaseUrl_();
+  state.apiBaseUrl = base || '';
+  var key = getUserApiKey_ && getUserApiKey_();
+  state.apiKeyConfigured = !!(key && String(key).trim() !== '');
+  state.apiConfigured = !!(base && String(base).trim() !== '');
+  return state;
+}
+
+/**
  * Called on every sidebar open — auto-starts trial if needed via backend.
  * Returns a simplified state for the client UI.
  * @return {Object}
@@ -57,16 +76,7 @@ function license_getSidebarState() {
     Date.now() - cached._cachedAt < LICENSE_CACHE_TTL_MS_
   ) {
     var stateFromCache = license_buildSidebarState_(cached);
-    // Enrich with API configuration hints for the sidebar UI.
-    var baseCached = getApiBaseUrl_();
-    stateFromCache.apiBaseUrl = baseCached || "";
-    var userKeyCached = getUserApiKey_ && getUserApiKey_();
-    stateFromCache.apiKeyConfigured = !!(
-      userKeyCached && String(userKeyCached).trim() !== ""
-    );
-    stateFromCache.apiConfigured = !!(
-      baseCached && String(baseCached).trim() !== ""
-    );
+    license_attachUiSettings_(stateFromCache);
     stateFromCache.record = cached;
     return stateFromCache;
   }
@@ -74,15 +84,11 @@ function license_getSidebarState() {
   // 2. Cache miss or expired — call backend
   var email = license_getCurrentEmail_();
   if (!email) {
-    var baseNoEmail = getApiBaseUrl_();
-    return {
+    return license_attachUiSettings_({
       status: "no_email",
       message: i18n_t("general.error"),
-      apiBaseUrl: baseNoEmail || "",
-      apiConfigured: !!(baseNoEmail && String(baseNoEmail).trim() !== ""),
-      apiKeyConfigured: false,
       record: null,
-    };
+    });
   }
   try {
     var record = apiJsonPost_("/v1/license/status", { email: email });
@@ -90,11 +96,7 @@ function license_getSidebarState() {
     DeliveryToolStorage.setLicenseCacheJson(JSON.stringify(record));
     DeliveryToolStorage.setAccessToken(record.accessToken || null);
     var state = license_buildSidebarState_(record);
-    var base = getApiBaseUrl_();
-    state.apiBaseUrl = base || "";
-    var userKey = getUserApiKey_ && getUserApiKey_();
-    state.apiKeyConfigured = !!(userKey && String(userKey).trim() !== "");
-    state.apiConfigured = !!(base && String(base).trim() !== "");
+    license_attachUiSettings_(state);
     state.record = record;
     return state;
   } catch (e) {
@@ -102,27 +104,15 @@ function license_getSidebarState() {
     var stale = license_getCachedRecord_();
     if (stale) {
       var stateStale = license_buildSidebarState_(stale);
-      var baseStale = getApiBaseUrl_();
-      stateStale.apiBaseUrl = baseStale || "";
-      var userKeyStale = getUserApiKey_ && getUserApiKey_();
-      stateStale.apiKeyConfigured = !!(
-        userKeyStale && String(userKeyStale).trim() !== ""
-      );
-      stateStale.apiConfigured = !!(
-        baseStale && String(baseStale).trim() !== ""
-      );
+      license_attachUiSettings_(stateStale);
       stateStale.record = stale;
       return stateStale;
     }
-    var baseErr = getApiBaseUrl_();
-    return {
+    return license_attachUiSettings_({
       status: "error",
       message: i18n_format("general.error", e && e.message ? e.message : e),
-      apiBaseUrl: baseErr || "",
-      apiConfigured: !!(baseErr && String(baseErr).trim() !== ""),
-      apiKeyConfigured: false,
       record: null,
-    };
+    });
   }
 }
 

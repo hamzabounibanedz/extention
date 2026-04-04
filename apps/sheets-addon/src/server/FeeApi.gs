@@ -70,6 +70,7 @@ function fee_saveCarrierRules(payload) {
 /**
  * Writes frais column for each non-empty row in the active selection.
  * @param {boolean} [overwrite] If true, replace existing fee cells (default true).
+ * @param {string=} rowSelectionSpec optional manual row selector like "4,8,10-12"
  * @return {{
  *   applied: number,
  *   skippedEmpty: number,
@@ -78,7 +79,7 @@ function fee_saveCarrierRules(payload) {
  *   skippedNoCarrier: number
  * }}
  */
-function fee_applySelection(overwrite) {
+function fee_applySelection(overwrite, rowSelectionSpec) {
   license_assertOperationsAllowed_();
   var doOverwrite = overwrite !== false && overwrite !== 'false' && overwrite !== 0;
 
@@ -111,17 +112,14 @@ function fee_applySelection(overwrite) {
       ? String(saved.defaultCarrier).trim()
       : null;
 
-  var range = sheet.getActiveRange();
-  if (!range) {
+  var selectedRows = sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec);
+  if (!selectedRows.length) {
     throw new Error(i18n_t('error.select_rows'));
   }
 
   var rules = parseFeeRulesJson_(DeliveryToolStorage.getFeeRulesJson(spreadsheetId));
   var feeCol = Number(columns.shippingFeeColumn);
   var now = isoNow_();
-
-  var startRow = range.getRow();
-  var endRow = startRow + range.getNumRows() - 1;
 
   var lastSheetRow = Math.max(sheet.getLastRow(), 2);
   var lastCol = sheet.getLastColumn();
@@ -143,7 +141,8 @@ function fee_applySelection(overwrite) {
   var skippedExisting = 0;
   var skippedNoCarrier = 0;
 
-  for (var rowNum = startRow; rowNum <= endRow; rowNum++) {
+  for (var si = 0; si < selectedRows.length; si++) {
+    var rowNum = selectedRows[si];
     if (rowNum <= headerRow) {
       continue;
     }
@@ -246,6 +245,11 @@ function parseFeeAmount_(raw) {
  */
 function parseWilayaLines_(text) {
   var map = {};
+  var wilayaRows = typeof wilaya_getAll_ === 'function' ? wilaya_getAll_() : [];
+  var wilayaFrByCode = {};
+  for (var wi = 0; wi < wilayaRows.length; wi++) {
+    wilayaFrByCode[String(wilayaRows[wi].code)] = String(wilayaRows[wi].fr || '');
+  }
   var lines = String(text).split(/\r?\n/);
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i].trim();
@@ -272,6 +276,20 @@ function parseWilayaLines_(text) {
       continue;
     }
     map[key] = val;
+    if (typeof wilaya_resolveCodeFromText_ === 'function') {
+      var code = wilaya_resolveCodeFromText_(keyPart);
+      if (code != null && code >= 1 && code <= 58) {
+        var codeKey = String(code);
+        map[codeKey] = val;
+        var fr = wilayaFrByCode[codeKey] || '';
+        if (fr) {
+          var frKey = normalizeWilayaKeyForFee_(fr);
+          if (frKey) {
+            map[frKey] = val;
+          }
+        }
+      }
+    }
   }
   return map;
 }
@@ -284,11 +302,21 @@ function normalizeWilayaKeyForFee_(raw) {
   if (raw == null || String(raw).trim() === '') {
     return '';
   }
-  var s = String(raw)
+  var s = String(raw);
+  if (typeof wilaya_digitsToAscii_ === 'function') {
+    s = wilaya_digitsToAscii_(s);
+  }
+  s = s
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ' ');
-  return s;
+  if (!/[\u0600-\u06FF]/.test(s) && typeof wilaya_normalizeLatinForMatch_ === 'function') {
+    var latin = wilaya_normalizeLatinForMatch_(s);
+    if (latin) {
+      return latin;
+    }
+  }
+  return s.trim();
 }
 
 /**
@@ -298,31 +326,51 @@ function normalizeWilayaKeyForFee_(raw) {
  */
 function wilaya_feeLookupKeys_(raw) {
   var out = [];
+  function addKey_(k) {
+    if (!k) {
+      return;
+    }
+    if (out.indexOf(k) < 0) {
+      out.push(k);
+    }
+  }
   if (raw == null || String(raw).trim() === '') {
     return out;
   }
   var full = normalizeWilayaKeyForFee_(raw);
   if (full) {
-    out.push(full);
+    addKey_(full);
   }
   var t = String(raw).trim();
+  if (typeof wilaya_digitsToAscii_ === 'function') {
+    t = wilaya_digitsToAscii_(t);
+  }
+  if (typeof wilaya_resolveCodeFromText_ === 'function') {
+    var resolvedCode = wilaya_resolveCodeFromText_(t);
+    if (resolvedCode != null && resolvedCode >= 1 && resolvedCode <= 58) {
+      addKey_(String(resolvedCode));
+      if (typeof wilaya_getAll_ === 'function') {
+        var rows = wilaya_getAll_();
+        for (var ri = 0; ri < rows.length; ri++) {
+          if (Number(rows[ri].code) === Number(resolvedCode)) {
+            addKey_(normalizeWilayaKeyForFee_(rows[ri].fr));
+            break;
+          }
+        }
+      }
+    }
+  }
   var m = t.match(/^(\d{1,2})\s*[-—–]\s*(.+)$/);
   if (m) {
     var code = String(parseInt(m[1], 10));
     var namePart = normalizeWilayaKeyForFee_(m[2]);
-    if (code && out.indexOf(code) < 0) {
-      out.push(code);
-    }
-    if (namePart && out.indexOf(namePart) < 0) {
-      out.push(namePart);
-    }
+    addKey_(code);
+    addKey_(namePart);
   }
   var m2 = t.match(/^(\d{1,2})\b/);
   if (m2) {
     var c2 = String(parseInt(m2[1], 10));
-    if (out.indexOf(c2) < 0) {
-      out.push(c2);
-    }
+    addKey_(c2);
   }
   return out;
 }

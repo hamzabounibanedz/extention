@@ -102,7 +102,7 @@ var I18N_DICT_ = {
     "help.trouble_backend":
       "تأكد أن عنوان الخادم صحيح ويمكن الوصول إليه من الإنترنت.",
     "help.trouble_labels":
-      'زر «طباعة الكل» يعتمد على ربط عمود رابط البوليصة في قسم «ربط أعمدة الورقة».',
+      "زر «طباعة الكل» يعتمد على ربط عمود رابط البوليصة في قسم «ربط أعمدة الورقة».",
     "help.support":
       "إذا استمرت المشكلة، التقط لقطة للشاشة من الحالة الظاهرة وأرسلها لفريق الدعم.",
     // Trial
@@ -142,6 +142,8 @@ var I18N_DICT_ = {
       "اربط عمود رابط البوليصة أولاً من قسم «ربط أعمدة الورقة» في الشريط الجانبي.",
     "error.label_column_invalid": "عمود رابط البوليصة غير صالح.",
     "error.url_must_be_http": "يجب أن يبدأ الرابط بـ http:// أو https://",
+    "error.backend_config_locked":
+      "إعدادات الخادم مقفلة في هذا الإصدار المنشور.",
     "error.backend_url_missing": "عنوان الخادم غير مهيأ.",
     "error.api_http": "خطأ API ({0})",
     "error.api_invalid_json": "استجابة API غير صالحة (JSON مطلوب).",
@@ -169,6 +171,8 @@ var I18N_DICT_ = {
     "error.blacklist_column_required": "اربط عمود القائمة السوداء أولاً.",
     "error.blacklist_column_invalid": "عمود القائمة السوداء غير صالح.",
     "error.invalid_data": "البيانات غير صالحة.",
+    "error.row_selection_invalid":
+      "صيغة الصفوف غير صالحة. مثال: 40,42,50-55",
     "error.default_fee_invalid": "رسوم افتراضية غير صالحة (رقم مطلوب).",
     "error.fee_rules_too_large": "قواعد الرسوم كبيرة جداً. قلل عدد السطور.",
     "error.shipping_fee_column_required":
@@ -248,6 +252,14 @@ var I18N_DICT_ = {
       "لم يُربَط عمود «الحالة». اربطه من قسم «ربط أعمدة الورقة» في الشريط الجانبي.",
     "stats.note":
       "يُستخرج التصنيف من نص «الحالة» و«رقم التتبع» المربوطين. لتصفية حسب الفترة اربط عمود «تاريخ الطلب».",
+    "stats.bucket.delivered": "تم التسليم",
+    "stats.bucket.in_transit": "قيد النقل",
+    "stats.bucket.returned": "مرتجع",
+    "stats.bucket.failed": "فشل",
+    "stats.bucket.confirmed": "مؤكد",
+    "stats.bucket.pending": "معلق",
+    "stats.bucket.cancelled": "ملغي",
+    "stats.bucket.unknown": "غير معروف",
     // Setup
     "setup.title": "إعداد وربط الأعمدة",
     "setup.step": "الخطوة {0} من {1}",
@@ -296,6 +308,7 @@ var I18N_DICT_ = {
     "sidebar.lang.ar": "العربية",
     "sidebar.lang.fr": "Français",
     "sidebar.lang.en": "English",
+    "sidebar.btn.apply_lang": "تطبيق اللغة",
     "sidebar.brand": "Delivery Tool",
     "sidebar.section.license": "الترخيص",
     "sidebar.section.collapse": "إخفاء",
@@ -304,7 +317,7 @@ var I18N_DICT_ = {
     "sidebar.ph.backend_url": "https://your-api.example.com",
     "sidebar.btn.save_url": "حفظ العنوان",
     "sidebar.hint.backend_url":
-      "يجب أن يكون الخادم متاحاً على الإنترنت (ليس localhost). يُحفظ لكل حساب Google. يمكن تعيين افتراضي عبر خاصية السكربت dt.api.baseUrl.",
+      "",
     "sidebar.label.api_key_optional": "مفتاح API (اختياري)",
     "sidebar.ph.api_key": "إذا وُجدت API_KEY على الخادم",
     "sidebar.ph.api_key_replace": "مفتاح محفوظ (أدخل للاستبدال)",
@@ -321,7 +334,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "إعدادات متقدمة وتشخيص",
     "sidebar.section.carrier_keys": "اعتمادات شركات التوصيل",
     "sidebar.hint.carrier_keys":
-      "تُحفظ لكل حساب Google وليس في الخلايا. تُستخدم عند «إرسال التحديد» و«مزامنة التتبع» فقط. لشركة ZR: أدخل معرّف المستأجر (tenantId) والمفتاح السري (secretKey) ثم احفظ واختبر الاتصال.",
+      "اختر شركة التوصيل ثم احصل على رمز API من موقعهم الخاص",
     "sidebar.label.carrier": "شركة التوصيل",
     "sidebar.label.api_token": "مفتاح / رمز API",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -349,6 +362,11 @@ var I18N_DICT_ = {
     "sidebar.label.sheet": "الورقة",
     "sidebar.label.carrier_default": "شركة التوصيل",
     "sidebar.label.header_row_optional": "صف العناوين (اختياري)",
+    "sidebar.section.row_selection": "تحديد الصفوف",
+    "sidebar.label.row_selection_optional": "الصفوف (اختياري)",
+    "sidebar.hint.row_selection":
+      "بديل موثوق عندما لا يلتقط Google Sheets التحديد المتعدد من الشريط الجانبي. اكتب أرقام الصفوف أو النطاقات مثل 40,42,50-55. عند تعبئته يُستخدم في الفحص والإرسال والمزامنة وحساب الرسوم.",
+    "sidebar.ph.row_selection": "مثال: 40,42,50-55",
     "sidebar.section.fees": "حساب رسوم التوصيل",
     "sidebar.hint.fees":
       "تعريف مبلغ الشحن بالدينار حسب شركة التوصيل وعمود الولاية المربوط. زر «تطبيق على التحديد» يكتب الرسوم في عمود «رسوم الشحن» المربوط — لا علاقة له بالقائمة السوداء.",
@@ -376,7 +394,7 @@ var I18N_DICT_ = {
     "sidebar.btn.blacklist_highlight": "تلوين القائمة السوداء",
     "sidebar.section.orders": "إرسال الطلبات ومتابعة التتبع",
     "sidebar.hint.select_rows":
-      "١) اربط الأعمدة واحفظ. ٢) حدّد في الورقة صفوف الطلبات (ليس صف العناوين). ٣) «فحص الصفوف المحددة» للتحقق. ٤) «إنشاء الشحنات من التحديد». ٥) «مزامنة التتبع» لتحديث الحالة ورقم التتبع في الورقة.",
+      "١) اربط الأعمدة واحفظ. ٢) إذا كان تحديد عدة صفوف منفصلة في Google Sheets يحلل آخر صف فقط، اكتب أرقام الصفوف في الحقل أدناه مثل 40,42,50-55. ٣) «فحص الصفوف المحددة» للتحقق. ٤) «إنشاء الشحنات من التحديد». ٥) «مزامنة التتبع» لتحديث الحالة ورقم التتبع في الورقة.",
     "sidebar.btn.analyze_selection": "فحص الصفوف المحددة",
     "sidebar.btn.send_selection": "إنشاء الشحنات من التحديد",
     "sidebar.btn.sync_tracking": "مزامنة التتبع",
@@ -396,6 +414,17 @@ var I18N_DICT_ = {
     "sidebar.label.date_from_optional": "من (اختياري)",
     "sidebar.label.date_to_optional": "إلى (اختياري)",
     "sidebar.btn.compute_stats": "احسب",
+    "sidebar.btn.stats_dashboard": "لوحة الإحصائيات",
+    "sidebar.stats.modal_title": "لوحة إحصائيات الطلبات",
+    "sidebar.stats.empty": "لا توجد بيانات إحصائية لعرضها.",
+    "sidebar.stats.analyzed_rows": "الصفوف المحللة",
+    "sidebar.stats.filter_range": "فترة التصفية",
+    "sidebar.stats.total_rows": "إجمالي الصفوف",
+    "sidebar.stats.distribution": "توزيع الحالات",
+    "sidebar.stats.by_carrier": "حسب شركة التوصيل",
+    "sidebar.stats.top_products": "أعلى المنتجات",
+    "sidebar.stats.col_item": "العنصر",
+    "sidebar.stats.col_total": "الإجمالي",
     "sidebar.map.orderId": "رقم الطلب",
     "sidebar.map.firstName": "الاسم",
     "sidebar.map.lastName": "اسم العائلة",
@@ -425,7 +454,7 @@ var I18N_DICT_ = {
       "مطلوب للإرسال: رقم الطلب، الهاتف، العنوان، الولاية، مبلغ التحصيل، واسم المستلم — اربط «الاسم الكامل» أو «الاسم» أو «اسم العائلة» (عمود واحد على الأقل يحتوي الاسم).",
     "sidebar.map.group_recommended": "أعمدة مُستحسَنة",
     "sidebar.map.group_recommended_hint":
-      "يُفضَّل ربط البلدية، ونوع التوصيل، ومعرّف المكتب عند التوصيل إلى نقطة استلام، وأعمدة الحالة والتتبع لمزامنة النتائج من شركة التوصيل.",
+      "",
     "sidebar.map.group_optional": "أعمدة اختيارية",
     "sidebar.map.group_optional_hint":
       "متقدمة: تتبع خارجي، روابط البوليصات، ملاحظات، وقوائم سوداء.",
@@ -437,6 +466,8 @@ var I18N_DICT_ = {
     "sidebar.msg.ready": "جاهز.",
     "sidebar.msg.no_sheets": "لا توجد أوراق.",
     "sidebar.msg.saving": "جاري الحفظ…",
+    "sidebar.msg.lang_switching": "جاري تطبيق اللغة…",
+    "sidebar.msg.lang_already_selected": "اللغة المحددة مفعّلة بالفعل.",
     "sidebar.msg.mapping_saved": "تم حفظ الربط.",
     "sidebar.msg.missing_context": "سياق مفقود.",
     "sidebar.msg.analyzing": "جاري فحص الصفوف المحددة…",
@@ -538,6 +569,18 @@ var I18N_DICT_ = {
     "sidebar.msg.stats_bucket_line":
       "تم التسليم: {0} · قيد النقل: {1} · مرتجع: {2} · فشل: {3}",
     "sidebar.msg.stats_filtered": "تم تطبيق فلتر التاريخ على النتائج.",
+    "sidebar.msg.stats_filter_excluded":
+      "خارج الفترة: قبل البداية {0} · بعد النهاية {1} · بلا تاريخ صالح {2}",
+    "sidebar.msg.stats_detected_date_range":
+      "نطاق التواريخ المكتشف في عمود التاريخ المستخدم: من {0} إلى {1}",
+    "sidebar.msg.stats_zero_after_filter":
+      "لا توجد صفوف مطابقة لفلتر التاريخ الحالي. تحقق من ربط «تاريخ الطلب» أو امسح حقلي «من/إلى».",
+    "sidebar.msg.stats_order_date_unusable":
+      "طُلب فلتر التاريخ، لكن لم يتم العثور على عمود «تاريخ الطلب» صالح. الإحصائيات المعروضة أدناه بدون فلتر؛ راجع ربط هذا العمود من الإعدادات.",
+    "sidebar.msg.stats_order_date_auto_detected":
+      "تم استخدام عمود تاريخ مكتشف تلقائياً: {0}",
+    "sidebar.msg.stats_order_date_current_mapping":
+      "الربط الحالي لعمود التاريخ: {0}",
     "sidebar.carrier_configured": " ✓",
   },
   fr: {
@@ -601,6 +644,8 @@ var I18N_DICT_ = {
       "Mappez d’abord la colonne URL étiquette (section Cartographie des colonnes).",
     "error.label_column_invalid": "Colonne URL étiquette invalide.",
     "error.url_must_be_http": "L'URL doit commencer par http:// ou https://",
+    "error.backend_config_locked":
+      "La configuration backend est verrouillée dans ce déploiement.",
     "error.backend_url_missing": "URL backend non configurée.",
     "error.api_http": "Erreur API ({0})",
     "error.api_invalid_json": "Réponse API invalide (JSON attendu).",
@@ -633,6 +678,8 @@ var I18N_DICT_ = {
       "Mappez la colonne Liste noire avant surlignage.",
     "error.blacklist_column_invalid": "Colonne liste noire invalide.",
     "error.invalid_data": "Données invalides.",
+    "error.row_selection_invalid":
+      "Format de lignes invalide. Exemple : 40,42,50-55",
     "error.default_fee_invalid": "Frais par défaut invalide (nombre attendu).",
     "error.fee_rules_too_large": "Règles de frais trop volumineuses.",
     "error.shipping_fee_column_required":
@@ -708,6 +755,14 @@ var I18N_DICT_ = {
       "Colonne Statut non mappée. Mappez-la dans la section Cartographie des colonnes.",
     "stats.note":
       "La classification utilise Statut + N° suivi. Pour filtrer par période, mappez Date commande.",
+    "stats.bucket.delivered": "Livrée",
+    "stats.bucket.in_transit": "En transit",
+    "stats.bucket.returned": "Retour",
+    "stats.bucket.failed": "Échec",
+    "stats.bucket.confirmed": "Confirmée",
+    "stats.bucket.pending": "En attente",
+    "stats.bucket.cancelled": "Annulée",
+    "stats.bucket.unknown": "Inconnue",
     "setup.title": "Configuration des colonnes",
     "setup.step": "Étape {0} sur {1}",
     "setup.next": "Suivant",
@@ -753,6 +808,7 @@ var I18N_DICT_ = {
     "sidebar.lang.ar": "العربية",
     "sidebar.lang.fr": "Français",
     "sidebar.lang.en": "English",
+    "sidebar.btn.apply_lang": "Appliquer la langue",
     "sidebar.brand": "Delivery Tool",
     "sidebar.section.license": "Licence",
     "sidebar.section.collapse": "Réduire",
@@ -807,6 +863,11 @@ var I18N_DICT_ = {
     "sidebar.label.sheet": "Feuille",
     "sidebar.label.carrier_default": "Transporteur",
     "sidebar.label.header_row_optional": "Ligne d’en-tête (optionnel)",
+    "sidebar.section.row_selection": "Sélection des lignes",
+    "sidebar.label.row_selection_optional": "Lignes (optionnel)",
+    "sidebar.hint.row_selection":
+      "Solution fiable quand Google Sheets ne transmet pas la multi-sélection depuis la barre latérale. Saisissez des numéros de lignes ou plages comme 40,42,50-55. Si ce champ est rempli, il sera utilisé pour l’analyse, l’envoi, la synchro et l’application des frais.",
+    "sidebar.ph.row_selection": "Ex. : 40,42,50-55",
     "sidebar.section.fees": "Calcul des frais de livraison",
     "sidebar.hint.fees":
       "Montants en DA par transporteur et wilaya (colonne mappée). « Appliquer à la sélection » écrit dans la colonne « Frais de livraison » mappée — indépendant de la liste noire.",
@@ -835,7 +896,7 @@ var I18N_DICT_ = {
     "sidebar.btn.blacklist_highlight": "Surligner liste noire",
     "sidebar.section.orders": "Envoi & suivi des commandes",
     "sidebar.hint.select_rows":
-      "1) Cartographiez et enregistrez. 2) Sélectionnez les lignes commandes (pas l’en-tête). 3) Analyser. 4) Envoyer la sélection. 5) Sync suivi pour mettre à jour statut / tracking.",
+      "1) Cartographiez et enregistrez. 2) Si la multi-sélection de lignes séparées dans Google Sheets n’analyse que la dernière ligne, saisissez les numéros dans le champ ci-dessous, par ex. 40,42,50-55. 3) Analyser. 4) Envoyer la sélection. 5) Sync suivi pour mettre à jour statut / tracking.",
     "sidebar.btn.analyze_selection": "Analyser la sélection",
     "sidebar.btn.send_selection": "Envoyer la sélection",
     "sidebar.btn.sync_tracking": "Sync suivi",
@@ -855,6 +916,17 @@ var I18N_DICT_ = {
     "sidebar.label.date_from_optional": "Du (optionnel)",
     "sidebar.label.date_to_optional": "Au (optionnel)",
     "sidebar.btn.compute_stats": "Calculer",
+    "sidebar.btn.stats_dashboard": "Tableau stats",
+    "sidebar.stats.modal_title": "Tableau de statistiques",
+    "sidebar.stats.empty": "Aucune statistique à afficher.",
+    "sidebar.stats.analyzed_rows": "Lignes analysées",
+    "sidebar.stats.filter_range": "Période filtrée",
+    "sidebar.stats.total_rows": "Total lignes",
+    "sidebar.stats.distribution": "Répartition des statuts",
+    "sidebar.stats.by_carrier": "Par transporteur",
+    "sidebar.stats.top_products": "Top produits",
+    "sidebar.stats.col_item": "Élément",
+    "sidebar.stats.col_total": "Total",
     "sidebar.map.orderId": "N° commande",
     "sidebar.map.firstName": "Prénom",
     "sidebar.map.lastName": "Nom",
@@ -896,6 +968,9 @@ var I18N_DICT_ = {
     "sidebar.msg.ready": "Prêt.",
     "sidebar.msg.no_sheets": "Aucune feuille.",
     "sidebar.msg.saving": "Enregistrement…",
+    "sidebar.msg.lang_switching": "Application de la langue…",
+    "sidebar.msg.lang_already_selected":
+      "La langue sélectionnée est déjà active.",
     "sidebar.msg.mapping_saved": "Cartographie enregistrée.",
     "sidebar.msg.missing_context": "Contexte manquant.",
     "sidebar.msg.analyzing": "Analyse…",
@@ -1003,6 +1078,18 @@ var I18N_DICT_ = {
     "sidebar.msg.stats_bucket_line":
       "Livrées : {0} · En transit : {1} · Retours : {2} · Échecs : {3}",
     "sidebar.msg.stats_filtered": "Le filtre de date est appliqué.",
+    "sidebar.msg.stats_filter_excluded":
+      "Hors période : avant début {0} · après fin {1} · sans date valide {2}",
+    "sidebar.msg.stats_detected_date_range":
+      "Plage de dates détectée dans la colonne date utilisée : du {0} au {1}",
+    "sidebar.msg.stats_zero_after_filter":
+      "Aucune ligne ne correspond au filtre de date actuel. Vérifiez le mapping « Date commande » ou videz les champs « Du/Au ».",
+    "sidebar.msg.stats_order_date_unusable":
+      "Le filtre de date a été demandé, mais aucune colonne « Date commande » valide n’a été trouvée. Les statistiques ci-dessous sont donc non filtrées ; vérifiez ce mapping.",
+    "sidebar.msg.stats_order_date_auto_detected":
+      "Colonne date détectée automatiquement : {0}",
+    "sidebar.msg.stats_order_date_current_mapping":
+      "Mapping actuel de la date : {0}",
     "sidebar.carrier_configured": " ✓",
   },
   en: {
@@ -1063,6 +1150,8 @@ var I18N_DICT_ = {
       "Map the Label URL column first (Column mapping section).",
     "error.label_column_invalid": "Invalid Label URL column.",
     "error.url_must_be_http": "URL must start with http:// or https://",
+    "error.backend_config_locked":
+      "Backend configuration is locked in this deployment.",
     "error.backend_url_missing": "Backend URL is not configured.",
     "error.api_http": "API error ({0})",
     "error.api_invalid_json": "Invalid API response (expected JSON).",
@@ -1092,6 +1181,8 @@ var I18N_DICT_ = {
       "Map the Blacklist column before highlighting.",
     "error.blacklist_column_invalid": "Invalid Blacklist column.",
     "error.invalid_data": "Invalid data payload.",
+    "error.row_selection_invalid":
+      "Invalid row selector. Example: 40,42,50-55",
     "error.default_fee_invalid": "Invalid default fee (number expected).",
     "error.fee_rules_too_large":
       "Fee rules are too large (reduce wilaya lines).",
@@ -1166,6 +1257,14 @@ var I18N_DICT_ = {
       "Status column not mapped. Map it in Column mapping.",
     "stats.note":
       "Classification uses Status + tracking. To filter by date range, map Order Date.",
+    "stats.bucket.delivered": "Delivered",
+    "stats.bucket.in_transit": "In transit",
+    "stats.bucket.returned": "Returned",
+    "stats.bucket.failed": "Failed",
+    "stats.bucket.confirmed": "Confirmed",
+    "stats.bucket.pending": "Pending",
+    "stats.bucket.cancelled": "Cancelled",
+    "stats.bucket.unknown": "Unknown",
     "setup.title": "Column Setup",
     "setup.step": "Step {0} of {1}",
     "setup.next": "Next",
@@ -1210,6 +1309,7 @@ var I18N_DICT_ = {
     "sidebar.lang.ar": "العربية",
     "sidebar.lang.fr": "Français",
     "sidebar.lang.en": "English",
+    "sidebar.btn.apply_lang": "Apply language",
     "sidebar.brand": "Delivery Tool",
     "sidebar.section.license": "License",
     "sidebar.section.collapse": "Collapse",
@@ -1263,6 +1363,11 @@ var I18N_DICT_ = {
     "sidebar.label.sheet": "Sheet",
     "sidebar.label.carrier_default": "Carrier",
     "sidebar.label.header_row_optional": "Header row (optional)",
+    "sidebar.section.row_selection": "Row selection",
+    "sidebar.label.row_selection_optional": "Rows (optional)",
+    "sidebar.hint.row_selection":
+      "Reliable fallback when Google Sheets does not preserve multi-select from the sidebar. Enter row numbers or ranges like 40,42,50-55. When filled, this is used for analyze, send, sync, and fee apply.",
+    "sidebar.ph.row_selection": "Example: 40,42,50-55",
     "sidebar.section.fees": "Delivery fee calculation",
     "sidebar.hint.fees":
       "DZD amounts per carrier and mapped wilaya. “Apply to selection” writes into the mapped “Shipping fee” column — unrelated to the blacklist.",
@@ -1291,7 +1396,7 @@ var I18N_DICT_ = {
     "sidebar.btn.blacklist_highlight": "Highlight blacklist",
     "sidebar.section.orders": "Send orders & tracking",
     "sidebar.hint.select_rows":
-      "1) Map columns and save. 2) Select order rows (not the header). 3) Analyze selection. 4) Send selection. 5) Sync tracking to refresh status / tracking in the sheet.",
+      "1) Map columns and save. 2) If selecting separate rows in Google Sheets only analyzes the last row, enter the row numbers in the field below, for example 40,42,50-55. 3) Analyze selection. 4) Send selection. 5) Sync tracking to refresh status / tracking in the sheet.",
     "sidebar.btn.analyze_selection": "Analyze selection",
     "sidebar.btn.send_selection": "Send selection",
     "sidebar.btn.sync_tracking": "Sync tracking",
@@ -1311,6 +1416,17 @@ var I18N_DICT_ = {
     "sidebar.label.date_from_optional": "From (optional)",
     "sidebar.label.date_to_optional": "To (optional)",
     "sidebar.btn.compute_stats": "Compute",
+    "sidebar.btn.stats_dashboard": "Stats dashboard",
+    "sidebar.stats.modal_title": "Order statistics dashboard",
+    "sidebar.stats.empty": "No statistics available yet.",
+    "sidebar.stats.analyzed_rows": "Analyzed rows",
+    "sidebar.stats.filter_range": "Filtered range",
+    "sidebar.stats.total_rows": "Total rows",
+    "sidebar.stats.distribution": "Status distribution",
+    "sidebar.stats.by_carrier": "By carrier",
+    "sidebar.stats.top_products": "Top products",
+    "sidebar.stats.col_item": "Item",
+    "sidebar.stats.col_total": "Total",
     "sidebar.map.orderId": "Order ID",
     "sidebar.map.firstName": "First name",
     "sidebar.map.lastName": "Last name",
@@ -1352,6 +1468,9 @@ var I18N_DICT_ = {
     "sidebar.msg.ready": "Ready.",
     "sidebar.msg.no_sheets": "No sheets.",
     "sidebar.msg.saving": "Saving…",
+    "sidebar.msg.lang_switching": "Applying language…",
+    "sidebar.msg.lang_already_selected":
+      "Selected language is already active.",
     "sidebar.msg.mapping_saved": "Mapping saved.",
     "sidebar.msg.missing_context": "Missing context.",
     "sidebar.msg.analyzing": "Analyzing…",
@@ -1453,6 +1572,18 @@ var I18N_DICT_ = {
     "sidebar.msg.stats_bucket_line":
       "Delivered: {0} · In transit: {1} · Returned: {2} · Failed: {3}",
     "sidebar.msg.stats_filtered": "Date filter is applied.",
+    "sidebar.msg.stats_filter_excluded":
+      "Excluded by date filter: before start {0} · after end {1} · no valid order date {2}",
+    "sidebar.msg.stats_detected_date_range":
+      "Detected date range in the date column being used: {0} to {1}",
+    "sidebar.msg.stats_zero_after_filter":
+      "No rows matched the current date filter. Check the mapped Order date column or clear the From/To fields.",
+    "sidebar.msg.stats_order_date_unusable":
+      "A date filter was requested, but no valid Order date column could be found. The stats below are unfiltered; review that mapping.",
+    "sidebar.msg.stats_order_date_auto_detected":
+      "Using auto-detected date column: {0}",
+    "sidebar.msg.stats_order_date_current_mapping":
+      "Current date mapping: {0}",
     "sidebar.carrier_configured": " ✓",
   },
 };

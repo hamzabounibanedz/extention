@@ -31,10 +31,27 @@ function installDeliveryToolMenu_() {
  * Opens the main sidebar (HTML template + client script include).
  */
 function showDeliveryToolSidebar_() {
+  try {
+    if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
+      mobile_ensureOnEditTriggerForSpreadsheet_(SpreadsheetApp.getActiveSpreadsheet());
+    }
+  } catch (e0) {
+    // Best-effort: mobile automation should never block opening the sidebar.
+  }
+  try {
+    // Best-effort eager refresh so finance/stats sheets appear without waiting
+    // for an edit event.
+    if (typeof mobile_refreshCompanionArtifactsForActiveSheet === 'function') {
+      mobile_refreshCompanionArtifactsForActiveSheet();
+    }
+  } catch (e1) {
+    // Ignore if mapping is not ready yet.
+  }
   var template = createTemplateFromFileSafe_('src/ui/views/welcome/Sidebar');
   var langPack = i18n_getClientStrings();
   template.lang = langPack.lang;
   template.stringsJson = JSON.stringify(langPack.dict || {});
+  template.bootstrapJson = JSON.stringify(config_getUiSettings_());
   var html = template
     .evaluate()
     .setTitle(i18n_t('trial.welcome_title'))
@@ -43,9 +60,25 @@ function showDeliveryToolSidebar_() {
 }
 
 /**
+ * Re-open sidebar (public RPC wrapper used by client language switch).
+ * @return {{ ok: boolean }}
+ */
+function menu_reopenSidebar() {
+  showDeliveryToolSidebar_();
+  return { ok: true };
+}
+
+/**
  * Opens the setup wizard as a modal dialog (700x500).
  */
 function showSetupDialog_() {
+  try {
+    if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
+      mobile_ensureOnEditTriggerForSpreadsheet_(SpreadsheetApp.getActiveSpreadsheet());
+    }
+  } catch (e0) {
+    // Best-effort only.
+  }
   var template = createTemplateFromFileSafe_('src/ui/views/setup/SetupDialog');
   var langPack = i18n_getClientStrings();
   template.lang = langPack.lang;
