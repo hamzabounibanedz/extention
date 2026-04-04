@@ -23,7 +23,10 @@
         --dt-warning-muted: rgba(234, 134, 0, 0.12);
         --dt-radius: 8px;
         --dt-radius-sm: 6px;
+        --dt-radius-lg: 12px;
         --dt-space: 12px;
+        --dt-shadow-sm: 0 1px 2px rgba(60, 64, 67, 0.08);
+        --dt-shadow-md: 0 6px 16px rgba(60, 64, 67, 0.14);
         --dt-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
       *,
@@ -35,26 +38,54 @@
         font-family: var(--dt-font);
         padding: var(--dt-space);
         margin: 0;
-        background: var(--dt-base);
+        background:
+          radial-gradient(circle at top right, rgba(26, 115, 232, 0.08), transparent 42%),
+          var(--dt-base);
         color: var(--dt-text);
         font-size: 13px;
         line-height: 1.45;
         -webkit-font-smoothing: antialiased;
       }
       h1.dt-title {
-        margin: 0 0 14px;
-        font-size: 1.125rem;
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        font-size: 1.06rem;
         font-weight: 600;
         letter-spacing: -0.01em;
         color: var(--dt-text);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-lg);
+        background: linear-gradient(180deg, #fff, #f8fbff);
+        box-shadow: var(--dt-shadow-sm);
       }
       .dt-card {
         background: var(--dt-surface);
         border: 1px solid var(--dt-border);
-        border-radius: var(--dt-radius);
-        padding: var(--dt-space);
-        margin-bottom: var(--dt-space);
-        box-shadow: 0 1px 2px rgba(60, 64, 67, 0.06);
+        border-radius: var(--dt-radius-lg);
+        padding: 13px;
+        margin-bottom: 13px;
+        box-shadow: var(--dt-shadow-sm);
+        transition:
+          box-shadow 0.14s ease,
+          border-color 0.14s ease;
+      }
+      .dt-card:hover {
+        box-shadow: var(--dt-shadow-md);
+      }
+      #dt-license {
+        border-top: 3px solid #1a73e8;
+      }
+      #dt-setup {
+        border-top: 3px solid #5e35b1;
+      }
+      #dt-orders {
+        border-top: 3px solid #137333;
+      }
+      #dt-stats {
+        border-top: 3px solid #ea8600;
+      }
+      #dt-journal {
+        border-top: 3px solid #5f6368;
       }
       .dt-card[data-core-step] {
         position: relative;
@@ -75,8 +106,8 @@
         background: var(--dt-success);
       }
       .dt-card h2 {
-        margin: 0 0 10px;
-        font-size: 0.9375rem;
+        margin: 0 0 11px;
+        font-size: 0.98rem;
         font-weight: 600;
         color: var(--dt-text);
         display: flex;
@@ -132,10 +163,10 @@
       label {
         display: block;
         margin-top: 10px;
-        margin-bottom: 4px;
+        margin-bottom: 5px;
         color: var(--dt-text-secondary);
-        font-size: 12px;
-        font-weight: 500;
+        font-size: 11.5px;
+        font-weight: 600;
       }
       label:first-of-type {
         margin-top: 0;
@@ -162,9 +193,21 @@
         padding: 8px 10px;
         border: 1px solid var(--dt-border);
         border-radius: var(--dt-radius-sm);
-        background: var(--dt-surface);
+        background: linear-gradient(180deg, #fff, #fcfdff);
         font-size: 13px;
         color: var(--dt-text);
+        transition:
+          border-color 0.12s ease,
+          box-shadow 0.12s ease,
+          background 0.12s ease;
+      }
+      select:hover,
+      input[type="text"]:hover,
+      input[type="url"]:hover,
+      input[type="password"]:hover,
+      input[type="date"]:hover,
+      textarea:hover {
+        border-color: #b7bcc2;
       }
       select:focus,
       input:focus,
@@ -223,6 +266,7 @@
         justify-content: center;
       }
       button {
+        min-height: 34px;
         padding: 8px 14px;
         border-radius: var(--dt-radius-sm);
         border: 1px solid var(--dt-border);
@@ -237,6 +281,7 @@
       }
       button:hover:not(:disabled) {
         background: var(--dt-surface-secondary);
+        transform: translateY(-1px);
       }
       button.dt-primary {
         background: var(--dt-accent);
@@ -265,16 +310,118 @@
       }
       .dt-hint {
         margin: 0 0 10px;
+        padding: 7px 9px;
         font-size: 12px;
         color: var(--dt-text-secondary);
         line-height: 1.4;
+        border: 1px dashed rgba(26, 115, 232, 0.2);
+        border-radius: var(--dt-radius-sm);
+        background: rgba(26, 115, 232, 0.05);
       }
-      .dt-pre {
+      .dt-output {
         margin: 10px 0 0;
         padding: 10px;
-        max-height: 220px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        min-height: 38px;
+      }
+      .dt-output:empty::before {
+        content: "—";
+        color: var(--dt-text-secondary);
+      }
+      .dt-output-kv-grid {
+        display: grid;
+        gap: 6px;
+      }
+      .dt-output-kv {
+        display: grid;
+        grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--dt-border);
+        background: var(--dt-surface);
+        border-radius: var(--dt-radius-sm);
+        padding: 6px 8px;
+      }
+      .dt-output-k {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--dt-text-secondary);
+      }
+      .dt-output-v {
+        font-size: 12px;
+        color: var(--dt-text);
+        word-break: break-word;
+      }
+      .dt-output-lines {
+        margin-top: 8px;
+        display: grid;
+        gap: 6px;
+      }
+      .dt-output-lines:first-child {
+        margin-top: 0;
+      }
+      .dt-output-line {
+        font-size: 12px;
+        color: var(--dt-text);
+        line-height: 1.4;
+        border-inline-start: 3px solid var(--dt-border);
+        background: var(--dt-surface);
+        border-radius: var(--dt-radius-sm);
+        padding: 6px 8px;
+      }
+      .dt-output-line--ok {
+        border-inline-start-color: var(--dt-success);
+      }
+      .dt-output-line--warn {
+        border-inline-start-color: var(--dt-warning);
+      }
+      .dt-output-line--err {
+        border-inline-start-color: var(--dt-danger);
+      }
+      .dt-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 22px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .dt-pill--active,
+      .dt-pill--ok {
+        background: rgba(19, 115, 51, 0.08);
+        border-color: rgba(19, 115, 51, 0.35);
+        color: var(--dt-success);
+      }
+      .dt-pill--trial,
+      .dt-pill--warn {
+        background: var(--dt-warning-muted);
+        border-color: rgba(234, 134, 0, 0.45);
+        color: var(--dt-warning);
+      }
+      .dt-pill--expired,
+      .dt-pill--revoked,
+      .dt-pill--err {
+        background: rgba(197, 34, 31, 0.06);
+        border-color: rgba(197, 34, 31, 0.35);
+        color: var(--dt-danger);
+      }
+      .dt-pill--unknown {
+        background: rgba(0, 0, 0, 0.03);
+        border-color: rgba(0, 0, 0, 0.1);
+        color: var(--dt-text-secondary);
+      }
+      .dt-pre {
+        margin: 8px 0 0;
+        padding: 10px;
+        max-height: 240px;
         overflow: auto;
-        background: var(--dt-base);
+        background: var(--dt-surface);
         border: 1px solid var(--dt-border);
         border-radius: var(--dt-radius-sm);
         font-size: 11px;
@@ -305,7 +452,7 @@
         min-height: 1.2em;
         border: 1px solid var(--dt-border);
         border-radius: var(--dt-radius-sm);
-        background: var(--dt-base);
+        background: rgba(255, 255, 255, 0.84);
         padding: 6px 8px;
       }
       .dt-substatus:empty {
@@ -323,6 +470,7 @@
       }
       #dt-status,
       .dt-substatus,
+      .dt-output,
       .dt-pre,
       .dt-license-summary {
         unicode-bidi: plaintext;
@@ -367,14 +515,41 @@
         background: var(--dt-base);
         border: 1px solid var(--dt-border);
         border-radius: var(--dt-radius-sm);
+      }
+      .dt-license-summary-title {
+        margin: 0 0 8px;
         font-size: 12px;
-        line-height: 1.45;
+        font-weight: 600;
         color: var(--dt-text);
       }
-      .dt-license-summary strong {
-        display: block;
-        margin-bottom: 6px;
+      .dt-license-summary-empty {
+        margin: 0;
+        font-size: 12px;
+        color: var(--dt-text-secondary);
+      }
+      .dt-license-grid {
+        display: grid;
+        gap: 6px;
+      }
+      .dt-license-item {
+        display: grid;
+        grid-template-columns: minmax(110px, 0.85fr) minmax(0, 1.15fr);
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-surface);
+        padding: 6px 8px;
+      }
+      .dt-license-item .dt-k {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--dt-text-secondary);
+      }
+      .dt-license-item .dt-v {
+        font-size: 12px;
         color: var(--dt-text);
+        word-break: break-word;
       }
       .dt-license-banner {
         display: flex;
@@ -450,6 +625,241 @@
       .dt-license-ctas a:hover {
         border-color: var(--dt-accent);
       }
+      .dt-modal[hidden] {
+        display: none !important;
+      }
+      .dt-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+      }
+      .dt-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(32, 33, 36, 0.55);
+      }
+      .dt-modal-dialog {
+        position: relative;
+        margin: 16px;
+        max-height: calc(100vh - 32px);
+        overflow: auto;
+        background: var(--dt-surface);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        box-shadow: 0 8px 20px rgba(60, 64, 67, 0.3);
+      }
+      .dt-modal-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--dt-border);
+        background: var(--dt-surface);
+      }
+      .dt-modal-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      .dt-modal-close {
+        min-width: 30px;
+        min-height: 30px;
+        padding: 0;
+        border-radius: 999px;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .dt-modal-body {
+        padding: 12px;
+      }
+      .dt-stats-headline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .dt-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--dt-border);
+        background: var(--dt-base);
+        font-size: 11px;
+        color: var(--dt-text-secondary);
+      }
+      .dt-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .dt-stats-card {
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-base);
+        padding: 8px;
+      }
+      .dt-stats-card-k {
+        font-size: 11px;
+        color: var(--dt-text-secondary);
+      }
+      .dt-stats-card-v {
+        margin-top: 2px;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--dt-text);
+      }
+      .dt-stats-chart-wrap {
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-base);
+        padding: 10px;
+        margin-bottom: 10px;
+      }
+      .dt-stats-chart-layout {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+      .dt-stats-donut {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        position: relative;
+      }
+      .dt-stats-donut::after {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        background: var(--dt-surface);
+        border-radius: 50%;
+      }
+      .dt-stats-donut-center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--dt-text);
+        z-index: 1;
+      }
+      .dt-stats-legend {
+        display: grid;
+        gap: 6px;
+      }
+      .dt-stats-legend-item {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+      }
+      .dt-stats-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+      .dt-stats-bars {
+        display: grid;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .dt-stats-bar-row {
+        display: grid;
+        grid-template-columns: minmax(84px, 0.9fr) 1fr auto;
+        align-items: center;
+        gap: 8px;
+      }
+      .dt-stats-bar-track {
+        position: relative;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(95, 99, 104, 0.18);
+        overflow: hidden;
+      }
+      .dt-stats-bar-fill {
+        position: absolute;
+        inset-inline-start: 0;
+        top: 0;
+        bottom: 0;
+        border-radius: 999px;
+      }
+      .dt-stats-table-wrap {
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-sm);
+        background: var(--dt-base);
+        overflow: auto;
+        margin-top: 10px;
+      }
+      .dt-stats-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .dt-stats-table th,
+      .dt-stats-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid rgba(218, 220, 224, 0.8);
+        text-align: start;
+        white-space: nowrap;
+      }
+      .dt-stats-table th {
+        color: var(--dt-text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.7);
+      }
+      .dt-stats-table tr:last-child td {
+        border-bottom: 0;
+      }
+      .dt-stats-section-title {
+        margin: 0 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      @media (max-width: 560px) {
+        .dt-actions > button,
+        .dt-actions > a {
+          flex: 1 1 100%;
+        }
+        .dt-output-kv {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .dt-license-item {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .dt-stats-grid {
+          grid-template-columns: 1fr;
+        }
+        .dt-stats-chart-layout {
+          grid-template-columns: 1fr;
+          justify-items: center;
+        }
+        .dt-stats-legend {
+          width: 100%;
+        }
+        .dt-stats-bar-row {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .dt-modal-dialog {
+          margin: 8px;
+          max-height: calc(100vh - 16px);
+        }
+      }
       code {
         font-size: 11px;
         background: var(--dt-accent-muted);
@@ -490,48 +900,48 @@
           </div>
         </div>
       </div>
-      <label for="dt-api-url" data-i18n="sidebar.label.backend_url"
-        >Backend URL</label
-      >
-      <input
-        type="url"
-        id="dt-api-url"
-        class="dt-ltr"
-        data-i18n-placeholder="sidebar.ph.backend_url"
-        placeholder="https://"
-        autocomplete="off"
-      />
-      <div class="dt-actions">
-        <button
-          type="button"
-          id="dt-api-url-save"
-          data-i18n="sidebar.btn.save_url"
+      <div id="dt-backend-config">
+        <label for="dt-api-url" data-i18n="sidebar.label.backend_url"
+          >Backend URL</label
         >
-          Save URL
-        </button>
-      </div>
-      <p class="dt-hint" data-i18n="sidebar.hint.backend_url"></p>
-      <label for="dt-api-key" data-i18n="sidebar.label.api_key_optional"
-        >API key</label
-      >
-      <input
-        type="password"
-        id="dt-api-key"
-        class="dt-ltr"
-        data-i18n-placeholder="sidebar.ph.api_key"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <div class="dt-actions">
-        <button
-          type="button"
-          id="dt-api-key-save"
-          data-i18n="sidebar.btn.save_key"
+        <input
+          type="url"
+          id="dt-api-url"
+          class="dt-ltr"
+          data-i18n-placeholder="sidebar.ph.backend_url"
+          placeholder="https://"
+          autocomplete="off"
+        />
+        <div class="dt-actions">
+          <button
+            type="button"
+            id="dt-api-url-save"
+            data-i18n="sidebar.btn.save_url"
+          >
+            Save URL
+          </button>
+        </div>
+        <label for="dt-api-key" data-i18n="sidebar.label.api_key_optional"
+          >API key</label
         >
-          Save key
-        </button>
+        <input
+          type="password"
+          id="dt-api-key"
+          class="dt-ltr"
+          data-i18n-placeholder="sidebar.ph.api_key"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div class="dt-actions">
+          <button
+            type="button"
+            id="dt-api-key-save"
+            data-i18n="sidebar.btn.save_key"
+          >
+            Save key
+          </button>
+        </div>
       </div>
-      <p class="dt-hint" data-i18n="sidebar.hint.api_key"></p>
       <label
         for="dt-license-code"
         data-i18n="sidebar.label.activation_code_optional"
@@ -563,8 +973,7 @@
         </button>
       </div>
       <p id="dt-license-status-inline" class="dt-substatus" role="status"></p>
-      <p class="dt-hint" data-i18n="sidebar.hint.license_send"></p>
-      <details class="dt-hint">
+      <details id="dt-license-advanced">
         <summary data-i18n="sidebar.hint.advanced_title">
           Advanced diagnostics
         </summary>
@@ -578,6 +987,15 @@
         <option value="fr" data-i18n="sidebar.lang.fr">Français</option>
         <option value="en" data-i18n="sidebar.lang.en">English</option>
       </select>
+      <div class="dt-actions">
+        <button
+          type="button"
+          id="dt-lang-apply"
+          data-i18n="sidebar.btn.apply_lang"
+        >
+          Apply language
+        </button>
+      </div>
     </section>
 
     <section
@@ -591,7 +1009,6 @@
       >
         Carrier keys
       </h2>
-      <p class="dt-hint" data-i18n="sidebar.hint.carrier_keys"></p>
       <label for="dt-carrier-cred-carrier" data-i18n="sidebar.label.carrier"
         >Carrier</label
       >
@@ -891,6 +1308,20 @@
       <p id="dt-sync-meta" class="dt-hint" role="status"></p>
       <p id="dt-auto-sync-status" class="dt-hint" role="status"></p>
       <p class="dt-hint" data-i18n="sidebar.hint.select_rows"></p>
+      <label
+        for="dt-row-selection"
+        data-i18n="sidebar.label.row_selection_optional"
+      >
+        Rows (optional)
+      </label>
+      <input
+        type="text"
+        id="dt-row-selection"
+        class="dt-ltr"
+        data-i18n-placeholder="sidebar.ph.row_selection"
+        autocomplete="off"
+        spellcheck="false"
+      />
       <div class="dt-actions">
         <button
           type="button"
@@ -938,7 +1369,7 @@
           Print all labels
         </button>
       </div>
-      <pre id="dt-orders-out" class="dt-pre" aria-live="polite"></pre>
+      <div id="dt-orders-out" class="dt-output" aria-live="polite"></div>
       <p id="dt-orders-status" class="dt-substatus" role="status"></p>
     </section>
 
@@ -983,7 +1414,7 @@
           Retry sync
         </button>
       </div>
-      <pre id="dt-journal-out" class="dt-pre" aria-live="polite"></pre>
+      <div id="dt-journal-out" class="dt-output" aria-live="polite"></div>
       <p id="dt-journal-status" class="dt-substatus" role="status"></p>
     </section>
 
@@ -995,11 +1426,11 @@
       <label for="dt-stats-from" data-i18n="sidebar.label.date_from_optional"
         >From</label
       >
-      <input type="date" id="dt-stats-from" class="dt-ltr" />
+      <input type="date" id="dt-stats-from" class="dt-ltr" autocomplete="off" />
       <label for="dt-stats-to" data-i18n="sidebar.label.date_to_optional"
         >To</label
       >
-      <input type="date" id="dt-stats-to" class="dt-ltr" />
+      <input type="date" id="dt-stats-to" class="dt-ltr" autocomplete="off" />
       <div class="dt-actions">
         <button
           type="button"
@@ -1009,14 +1440,47 @@
         >
           Compute
         </button>
+        <button
+          type="button"
+          id="dt-stats-open-dashboard"
+          data-i18n="sidebar.btn.stats_dashboard"
+          disabled
+        >
+          Dashboard
+        </button>
       </div>
-      <pre id="dt-stats-out" class="dt-pre" aria-live="polite"></pre>
+      <div id="dt-stats-out" class="dt-output" aria-live="polite"></div>
       <p id="dt-stats-status" class="dt-substatus" role="status"></p>
     </section>
+
+    <div id="dt-stats-modal" class="dt-modal" hidden aria-hidden="true">
+      <div
+        id="dt-stats-modal-backdrop"
+        class="dt-modal-backdrop"
+        role="presentation"
+      ></div>
+      <div class="dt-modal-dialog" role="dialog" aria-modal="true">
+        <div class="dt-modal-header">
+          <h3 class="dt-modal-title" data-i18n="sidebar.stats.modal_title">
+            لوحة الإحصائيات
+          </h3>
+          <button
+            type="button"
+            id="dt-stats-modal-close"
+            class="dt-modal-close"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div id="dt-stats-modal-body" class="dt-modal-body"></div>
+      </div>
+    </div>
 
     <script>
       window.__DT_I18N__ = <?!= stringsJson ?>;
       window.__DT_LANG__ = '<?= lang ?>';
+      window.__DT_BOOTSTRAP__ = <?!= bootstrapJson ?>;
     </script>
     <?!= include('src/ui/views/welcome/client.js'); ?>
   </body>

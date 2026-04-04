@@ -14,7 +14,12 @@
         --dt-text-secondary: #5f6368;
         --dt-accent: #1a73e8;
         --dt-accent-hover: #1558b0;
+        --dt-success: #137333;
+        --dt-warning: #ea8600;
         --dt-radius: 8px;
+        --dt-radius-lg: 12px;
+        --dt-shadow-sm: 0 1px 2px rgba(60, 64, 67, 0.08);
+        --dt-shadow-md: 0 4px 10px rgba(60, 64, 67, 0.12);
         --dt-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
       *,
@@ -26,16 +31,34 @@
         font-family: var(--dt-font);
         margin: 0;
         padding: 0;
-        background: var(--dt-base);
+        background:
+          radial-gradient(circle at top right, rgba(26, 115, 232, 0.08), transparent 40%),
+          var(--dt-base);
         color: var(--dt-text);
         font-size: 14px;
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
       }
       .dt-setup-root {
-        padding: 20px 22px 24px;
-        max-width: 640px;
+        padding: 18px 18px 22px;
+        max-width: 700px;
         margin: 0 auto;
+      }
+      .dt-hero {
+        margin-bottom: 14px;
+        padding: 14px 16px;
+        background: var(--dt-surface);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius-lg);
+        box-shadow: var(--dt-shadow-sm);
+      }
+      .dt-hero-eyebrow {
+        margin: 0 0 8px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--dt-text-secondary);
       }
       h1 {
         font-size: 1.125rem;
@@ -45,18 +68,66 @@
         color: var(--dt-text);
       }
       .dt-lead {
-        margin: 0 0 16px;
+        margin: 0;
         font-size: 13px;
         color: var(--dt-text-secondary);
         line-height: 1.45;
       }
+      .dt-progress {
+        margin-top: 12px;
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        background: rgba(26, 115, 232, 0.06);
+        padding: 8px 10px;
+      }
+      .dt-progress-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .dt-progress-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--dt-text);
+      }
+      .dt-progress-text {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--dt-accent);
+      }
+      .dt-progress-track {
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(95, 99, 104, 0.2);
+        overflow: hidden;
+      }
+      .dt-progress-fill {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--dt-accent), #4f8df3);
+        transition: width 0.2s ease;
+      }
       .dt-section {
         background: var(--dt-surface);
         border: 1px solid var(--dt-border);
-        border-radius: var(--dt-radius);
+        border-radius: var(--dt-radius-lg);
         padding: 14px 16px;
         margin-bottom: 12px;
-        box-shadow: 0 1px 2px rgba(60, 64, 67, 0.06);
+        box-shadow: var(--dt-shadow-sm);
+        position: relative;
+      }
+      .dt-section::before {
+        content: "";
+        position: absolute;
+        inset-block: 12px;
+        inset-inline-start: 0;
+        width: 3px;
+        border-radius: 999px;
+        background: var(--dt-accent);
       }
       .dt-section-title {
         font-weight: 600;
@@ -75,12 +146,20 @@
         font-size: 12px;
         color: var(--dt-text-secondary);
         line-height: 1.4;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px dashed var(--dt-border);
+        border-radius: var(--dt-radius);
+        padding: 8px 10px;
       }
       .dt-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
         margin-top: 14px;
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(to top, rgba(241, 243, 244, 0.96), rgba(241, 243, 244, 0));
+        padding-top: 8px;
       }
       .dt-actions > button {
         flex: 1 1 150px;
@@ -96,10 +175,14 @@
         cursor: pointer;
         transition:
           background 0.12s ease,
-          border-color 0.12s ease;
+          border-color 0.12s ease,
+          box-shadow 0.12s ease,
+          transform 0.12s ease;
       }
       button:hover:not(:disabled) {
         background: var(--dt-surface-secondary);
+        transform: translateY(-1px);
+        box-shadow: var(--dt-shadow-sm);
       }
       button.dt-primary {
         background: var(--dt-accent);
@@ -121,9 +204,10 @@
       .dt-checklist {
         margin-top: 16px;
         padding: 12px 14px;
-        border-radius: var(--dt-radius);
-        border: 1px dashed var(--dt-border);
+        border-radius: var(--dt-radius-lg);
+        border: 1px solid var(--dt-border);
         background: #f8fafc;
+        box-shadow: var(--dt-shadow-sm);
       }
       .dt-checklist-title {
         font-size: 0.9rem;
@@ -141,8 +225,12 @@
         align-items: flex-start;
         gap: 6px;
         font-size: 13px;
-        color: var(--dt-text-secondary);
-        margin-bottom: 4px;
+        color: var(--dt-text);
+        margin-bottom: 6px;
+        background: var(--dt-surface);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        padding: 6px 8px;
       }
       .dt-checklist-item:last-child {
         margin-bottom: 0;
@@ -166,14 +254,24 @@
         border-color: #34a853;
         color: #137333;
       }
+      .dt-checklist-item.dt-done {
+        border-color: rgba(19, 115, 51, 0.35);
+        background: rgba(19, 115, 51, 0.06);
+      }
       .dt-status {
         margin-top: 10px;
         min-height: 1.2em;
         font-size: 12px;
         color: var(--dt-text-secondary);
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--dt-border);
+        border-radius: var(--dt-radius);
+        padding: 6px 8px;
       }
       .dt-status.dt-err {
         color: #c5221f;
+        border-color: rgba(197, 34, 31, 0.35);
+        background: rgba(197, 34, 31, 0.06);
       }
       .dt-status {
         unicode-bidi: plaintext;
@@ -182,12 +280,26 @@
   </head>
   <body>
     <div class="dt-setup-root">
-      <h1>
-        <?= HtmlService.createHtmlOutput(i18n_t('setup.title')).getContent(); ?>
-      </h1>
-      <p class="dt-lead">
-        <?= HtmlService.createHtmlOutput(i18n_t('setup.intro_short')).getContent(); ?>
-      </p>
+      <div class="dt-hero">
+        <p class="dt-hero-eyebrow">Delivery Tool</p>
+        <h1>
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.title')).getContent(); ?>
+        </h1>
+        <p class="dt-lead">
+          <?= HtmlService.createHtmlOutput(i18n_t('setup.intro_short')).getContent(); ?>
+        </p>
+        <div class="dt-progress" aria-live="polite">
+          <div class="dt-progress-head">
+            <span class="dt-progress-label"
+              ><?= HtmlService.createHtmlOutput(i18n_t('setup.checklist_title')).getContent(); ?></span
+            >
+            <span id="dt-progress-text" class="dt-progress-text">0/3</span>
+          </div>
+          <div class="dt-progress-track">
+            <span id="dt-progress-fill" class="dt-progress-fill"></span>
+          </div>
+        </div>
+      </div>
 
       <div class="dt-section">
         <div class="dt-section-title">
@@ -277,12 +389,32 @@
         function setChecklistBadge(id, done) {
           var badge = document.getElementById(id);
           if (!badge) return;
+          var item = badge.closest('.dt-checklist-item');
           if (done) {
             badge.classList.add('dt-done');
             badge.textContent = '✓';
+            if (item) item.classList.add('dt-done');
           } else {
             badge.classList.remove('dt-done');
             badge.textContent = badge.getAttribute('data-step') || '?';
+            if (item) item.classList.remove('dt-done');
+          }
+        }
+
+        function setChecklistProgress(state) {
+          var done = 0;
+          var total = 3;
+          if (state && state.backendConfigured) done++;
+          if (state && state.mappingReady) done++;
+          if (state && state.testSent) done++;
+          var pct = Math.round((done / total) * 100);
+          var text = document.getElementById('dt-progress-text');
+          var fill = document.getElementById('dt-progress-fill');
+          if (text) {
+            text.textContent = done + '/' + total;
+          }
+          if (fill) {
+            fill.style.width = pct + '%';
           }
         }
 
@@ -294,19 +426,23 @@
                 setChecklistBadge('dt-check-backend', !!(state && state.backendConfigured));
                 setChecklistBadge('dt-check-mapping', !!(state && state.mappingReady));
                 setChecklistBadge('dt-check-test', !!(state && state.testSent));
+                setChecklistProgress(state || {});
               })
               .withFailureHandler(function () {
                 // Leave badges as-is on error.
+                setChecklistProgress(null);
               })
               .setup_getChecklistState();
           } catch (e) {
             // Ignore in older deployments that do not implement setup_getChecklistState.
+            setChecklistProgress(null);
           }
         }
 
         document.addEventListener('DOMContentLoaded', function () {
           var openBtn = document.getElementById('dt-open-sidebar');
           var closeBtn = document.getElementById('dt-close');
+          setChecklistProgress(null);
           if (closeBtn) {
             closeBtn.addEventListener('click', function () {
               google.script.host.close();

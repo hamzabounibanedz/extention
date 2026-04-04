@@ -140,6 +140,13 @@
       },
     ];
 
+    var BOOTSTRAP =
+      typeof window.__DT_BOOTSTRAP__ === "object" &&
+      window.__DT_BOOTSTRAP__ &&
+      !Array.isArray(window.__DT_BOOTSTRAP__)
+        ? window.__DT_BOOTSTRAP__
+        : {};
+
     var state = {
       spreadsheetId: null,
       sheets: [],
@@ -159,6 +166,10 @@
       mappingReady: false,
       opsReady: false,
       carriersWarning: "",
+      uiMode: BOOTSTRAP.uiMode === "prod" ? "prod" : "local",
+      allowBackendConfig: BOOTSTRAP.allowBackendConfig !== false,
+      showTechnicalDetails: BOOTSTRAP.showTechnicalDetails !== false,
+      lastStatsResult: null,
     };
 
     var el = {
@@ -176,6 +187,9 @@
       ordersStatus: null,
       ordersPrintLabels: null,
       ordersPrintAll: null,
+      rowSelection: null,
+      backendConfig: null,
+      licenseAdvanced: null,
       apiUrl: null,
       apiUrlSave: null,
       apiKey: null,
@@ -211,6 +225,11 @@
       listsStatus: null,
       statsFrom: null,
       statsTo: null,
+      statsOpenDashboard: null,
+      statsModal: null,
+      statsModalBackdrop: null,
+      statsModalClose: null,
+      statsModalBody: null,
       journalOut: null,
       journalStatus: null,
       journalRefresh: null,
@@ -240,6 +259,7 @@
       autoSyncStatus: null,
       autoSyncToggle: null,
       langSelect: null,
+      langApply: null,
     };
 
     function $(id) {
@@ -441,36 +461,205 @@
       setCoreStepState_("dt-orders", !!state.opsReady);
     }
 
-    function detailsNodeIdForPre_(preEl) {
-      return preEl && preEl.id ? preEl.id + "-details" : "";
+    function detailsNodeIdForPre_(outputEl) {
+      return outputEl && outputEl.id ? outputEl.id + "-details" : "";
     }
 
-    function clearStructuredOutput(preEl) {
-      if (!preEl) return;
-      preEl.textContent = "";
-      var detailsId = detailsNodeIdForPre_(preEl);
+    function clearStructuredOutput(outputEl) {
+      if (!outputEl) return;
+      outputEl.textContent = "";
+      var detailsId = detailsNodeIdForPre_(outputEl);
       var detailsNode = detailsId ? $(detailsId) : null;
       if (detailsNode && detailsNode.parentNode) {
         detailsNode.parentNode.removeChild(detailsNode);
       }
     }
 
-    function renderStructuredOutput(preEl, summaryLines, detailsObj) {
-      if (!preEl) return;
+    function setHidden_(node, hidden) {
+      if (!node) return;
+      node.hidden = !!hidden;
+    }
+
+    function applyUiMode_() {
+      setHidden_(el.backendConfig, !state.allowBackendConfig);
+      setHidden_(el.licenseAdvanced, !state.showTechnicalDetails);
+
+      if (state.showTechnicalDetails) {
+        return;
+      }
+
+      [el.ordersOut, el.statsOut, el.journalOut].forEach(function (outputEl) {
+        var detailsId = detailsNodeIdForPre_(outputEl);
+        var detailsNode = detailsId ? $(detailsId) : null;
+        if (detailsNode && detailsNode.parentNode) {
+          detailsNode.parentNode.removeChild(detailsNode);
+        }
+      });
+    }
+
+    function normalizeSummaryLines_(summaryLines) {
       var lines = Array.isArray(summaryLines) ? summaryLines : [summaryLines];
-      preEl.textContent = lines
+      return lines
         .filter(function (line) {
           return line != null && String(line).trim() !== "";
         })
         .map(function (line) {
-          return String(line);
-        })
-        .join("\n");
+          return String(line).trim();
+        });
+    }
 
-      var detailsId = detailsNodeIdForPre_(preEl);
+    function tryParseSummaryPair_(line) {
+      if (!line) return null;
+      if (/^\s*https?:\/\//i.test(line)) return null;
+      var m = String(line).match(/^\s*([^:\n]{1,80})\s*[:：]\s*(.+)\s*$/);
+      if (!m) return null;
+      var key = m[1] ? String(m[1]).trim() : "";
+      var value = m[2] ? String(m[2]).trim() : "";
+      if (!key || !value) return null;
+      if (key.indexOf("://") !== -1) return null;
+      return { key: key, value: value };
+    }
+
+    function formatMaybeDateForUi_(value) {
+      if (value == null) return "";
+      var raw = String(value).trim();
+      if (!raw) return "";
+      var maybeIso = /^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2})/.test(raw);
+      if (!maybeIso) return raw;
+      var dt = new Date(raw);
+      if (isNaN(dt.getTime())) return raw;
+      return dt.toLocaleString();
+    }
+
+    function statusTokenForUi_(value) {
+      var token = String(value || "")
+        .trim()
+        .toLowerCase();
+      if (!token) return "unknown";
+      if (
+        token === "active" ||
+        token === "trial" ||
+        token === "expired" ||
+        token === "revoked" ||
+        token === "unknown"
+      ) {
+        return token;
+      }
+      if (
+        token === "ok" ||
+        token === "success" ||
+        token === "enabled" ||
+        token === "succeeded"
+      ) {
+        return "ok";
+      }
+      if (token === "warning" || token === "warn" || token === "pending") {
+        return "warn";
+      }
+      if (
+        token === "error" ||
+        token === "err" ||
+        token === "failed" ||
+        token === "ko" ||
+        token === "disabled"
+      ) {
+        return "err";
+      }
+      return "";
+    }
+
+    function inferLineToneClass_(line) {
+      var l = String(line || "").toLowerCase();
+      if (
+        /(error|failed|invalid|revoked|expired|ko|missing|unavailable|cannot|could not)/.test(
+          l,
+        )
+      ) {
+        return "dt-output-line--err";
+      }
+      if (/(warn|warning|pending|trial|skipped|partial)/.test(l)) {
+        return "dt-output-line--warn";
+      }
+      if (/(success|ok|saved|active|enabled|done|ready)/.test(l)) {
+        return "dt-output-line--ok";
+      }
+      return "";
+    }
+
+    function looksLikeStatusLabel_(label) {
+      var l = String(label || "").toLowerCase();
+      return (
+        l.indexOf("status") !== -1 ||
+        l.indexOf("statut") !== -1 ||
+        l.indexOf("الحالة") !== -1
+      );
+    }
+
+    function renderStructuredOutput(outputEl, summaryLines, detailsObj) {
+      if (!outputEl) return;
+      outputEl.textContent = "";
+      var lines = normalizeSummaryLines_(summaryLines);
+      var kvGrid = document.createElement("div");
+      kvGrid.className = "dt-output-kv-grid";
+      var linesList = document.createElement("div");
+      linesList.className = "dt-output-lines";
+      var hasKv = false;
+      var hasLines = false;
+
+      lines.forEach(function (line) {
+        var pair = tryParseSummaryPair_(line);
+        if (pair) {
+          var row = document.createElement("div");
+          row.className = "dt-output-kv";
+          var k = document.createElement("div");
+          k.className = "dt-output-k";
+          k.textContent = pair.key;
+          var v = document.createElement("div");
+          var statusToken = statusTokenForUi_(pair.value);
+          var statusLike = looksLikeStatusLabel_(pair.key) || statusToken !== "";
+          if (statusLike) {
+            var pillToken = statusToken || "unknown";
+            v.className = "dt-output-v dt-pill dt-pill--" + pillToken;
+            v.textContent = pair.value;
+          } else {
+            var formatted = formatMaybeDateForUi_(pair.value);
+            v.className = "dt-output-v";
+            v.textContent = formatted;
+            if (formatted !== pair.value) {
+              v.title = pair.value;
+            }
+          }
+          row.appendChild(k);
+          row.appendChild(v);
+          kvGrid.appendChild(row);
+          hasKv = true;
+          return;
+        }
+
+        var item = document.createElement("div");
+        var toneClass = inferLineToneClass_(line);
+        item.className = toneClass
+          ? "dt-output-line " + toneClass
+          : "dt-output-line";
+        item.textContent = line;
+        linesList.appendChild(item);
+        hasLines = true;
+      });
+
+      if (!hasKv && !hasLines) {
+        var empty = document.createElement("div");
+        empty.className = "dt-output-line";
+        empty.textContent = "—";
+        outputEl.appendChild(empty);
+      } else {
+        if (hasKv) outputEl.appendChild(kvGrid);
+        if (hasLines) outputEl.appendChild(linesList);
+      }
+
+      var detailsId = detailsNodeIdForPre_(outputEl);
       if (!detailsId) return;
       var detailsNode = $(detailsId);
-      if (!detailsObj) {
+      if (!detailsObj || !state.showTechnicalDetails) {
         if (detailsNode && detailsNode.parentNode) {
           detailsNode.parentNode.removeChild(detailsNode);
         }
@@ -487,8 +676,12 @@
         jsonPre.className = "dt-pre dt-ltr";
         jsonPre.id = detailsId + "-json";
         detailsNode.appendChild(jsonPre);
-        if (preEl.parentNode) {
-          safeInsertBefore_(preEl.parentNode, detailsNode, preEl.nextSibling);
+        if (outputEl.parentNode) {
+          safeInsertBefore_(
+            outputEl.parentNode,
+            detailsNode,
+            outputEl.nextSibling,
+          );
         }
       }
       var jsonNode = $(detailsId + "-json");
@@ -509,6 +702,7 @@
       // Keep global busy for core context switches, but avoid blocking unrelated sections.
       if (el.sheet) el.sheet.disabled = !!busy;
       if (el.langSelect) el.langSelect.disabled = !!busy;
+      if (el.langApply) el.langApply.disabled = !!busy;
     }
 
     function setOrdersBusy(busy) {
@@ -680,6 +874,360 @@
         });
     }
 
+    function statsBucketOrder_() {
+      return [
+        "delivered",
+        "in_transit",
+        "returned",
+        "failed",
+        "confirmed",
+        "pending",
+        "cancelled",
+        "unknown",
+      ];
+    }
+
+    function statsBucketMeta_(key) {
+      var colors = {
+        delivered: "#137333",
+        in_transit: "#1a73e8",
+        returned: "#ea8600",
+        failed: "#c5221f",
+        confirmed: "#188038",
+        pending: "#5f6368",
+        cancelled: "#9aa0a6",
+        unknown: "#80868b",
+      };
+      return {
+        key: key,
+        label: t("stats.bucket." + key),
+        color: colors[key] || "#5f6368",
+      };
+    }
+
+    function statsSafeNumber_(raw) {
+      var n = Number(raw);
+      return isFinite(n) ? n : 0;
+    }
+
+    function statsFormatNumber_(raw) {
+      return statsSafeNumber_(raw).toLocaleString();
+    }
+
+    function statsPercentValue_(part, total) {
+      var p = statsSafeNumber_(part);
+      var t0 = statsSafeNumber_(total);
+      if (t0 <= 0) return 0;
+      return Math.max(0, Math.min(100, Math.round((p / t0) * 1000) / 10));
+    }
+
+    function statsFormatPercent_(part, total) {
+      return statsPercentValue_(part, total).toLocaleString() + "%";
+    }
+
+    function statsBuildDonutGradient_(items, total) {
+      if (!total) {
+        return "conic-gradient(#dadce0 0deg 360deg)";
+      }
+      var start = 0;
+      var parts = [];
+      items.forEach(function (it) {
+        var slice = (360 * it.value) / total;
+        if (slice <= 0) return;
+        var end = start + slice;
+        parts.push(it.color + " " + start.toFixed(2) + "deg " + end.toFixed(2) + "deg");
+        start = end;
+      });
+      if (!parts.length) {
+        return "conic-gradient(#dadce0 0deg 360deg)";
+      }
+      if (start < 360) {
+        parts.push("#dadce0 " + start.toFixed(2) + "deg 360deg");
+      }
+      return "conic-gradient(" + parts.join(", ") + ")";
+    }
+
+    function setStatsDashboardEnabled_(enabled) {
+      if (el.statsOpenDashboard) {
+        el.statsOpenDashboard.disabled = !enabled;
+      }
+    }
+
+    function closeStatsDashboard_() {
+      if (!el.statsModal) return;
+      el.statsModal.hidden = true;
+      el.statsModal.setAttribute("aria-hidden", "true");
+    }
+
+    function renderStatsDashboard_(res) {
+      if (!el.statsModalBody) return;
+      var body = el.statsModalBody;
+      body.textContent = "";
+      if (!res || typeof res !== "object") {
+        var empty = document.createElement("div");
+        empty.className = "dt-substatus";
+        empty.textContent = t("sidebar.stats.empty");
+        body.appendChild(empty);
+        return;
+      }
+
+      var df = res.dateFilter || {};
+      var bucketsRaw = res.buckets || {};
+      var bucketItems = statsBucketOrder_().map(function (key) {
+        var meta = statsBucketMeta_(key);
+        return {
+          key: key,
+          label: meta.label,
+          color: meta.color,
+          value: statsSafeNumber_(bucketsRaw[key]),
+        };
+      });
+      var totalBuckets = bucketItems.reduce(function (sum, it) {
+        return sum + it.value;
+      }, 0);
+
+      var headline = document.createElement("div");
+      headline.className = "dt-stats-headline";
+      var sheetBadge = document.createElement("span");
+      sheetBadge.className = "dt-badge";
+      sheetBadge.textContent =
+        t("sidebar.label.sheet") + ": " + String(res.sheetName || "—");
+      headline.appendChild(sheetBadge);
+      var rowsBadge = document.createElement("span");
+      rowsBadge.className = "dt-badge";
+      rowsBadge.textContent =
+        t("sidebar.stats.analyzed_rows") + ": " + statsFormatNumber_(res.totalRowsAnalyzed);
+      headline.appendChild(rowsBadge);
+      if (df && df.active && df.fromIso && df.toIso) {
+        var filterBadge = document.createElement("span");
+        filterBadge.className = "dt-badge";
+        filterBadge.textContent =
+          t("sidebar.stats.filter_range") + ": " + df.fromIso + " → " + df.toIso;
+        headline.appendChild(filterBadge);
+      }
+      if (df && df.orderDateColumnEffectiveLabel) {
+        var dateColBadge = document.createElement("span");
+        dateColBadge.className = "dt-badge";
+        dateColBadge.textContent =
+          t("sidebar.map.orderDate") + ": " + df.orderDateColumnEffectiveLabel;
+        headline.appendChild(dateColBadge);
+      }
+      body.appendChild(headline);
+
+      var cards = document.createElement("div");
+      cards.className = "dt-stats-grid";
+      [
+        { label: t("sidebar.stats.total_rows"), value: res.totalRowsAnalyzed },
+        { label: t("stats.bucket.delivered"), value: bucketsRaw.delivered },
+        { label: t("stats.bucket.in_transit"), value: bucketsRaw.in_transit },
+        { label: t("stats.bucket.failed"), value: bucketsRaw.failed },
+        { label: t("stats.bucket.returned"), value: bucketsRaw.returned },
+        { label: t("stats.bucket.unknown"), value: bucketsRaw.unknown },
+      ].forEach(function (entry) {
+        var card = document.createElement("div");
+        card.className = "dt-stats-card";
+        var k = document.createElement("div");
+        k.className = "dt-stats-card-k";
+        k.textContent = entry.label;
+        var v = document.createElement("div");
+        v.className = "dt-stats-card-v";
+        v.textContent = statsFormatNumber_(entry.value);
+        card.appendChild(k);
+        card.appendChild(v);
+        cards.appendChild(card);
+      });
+      body.appendChild(cards);
+
+      var chartWrap = document.createElement("section");
+      chartWrap.className = "dt-stats-chart-wrap";
+      var chartTitle = document.createElement("h4");
+      chartTitle.className = "dt-stats-section-title";
+      chartTitle.textContent = t("sidebar.stats.distribution");
+      chartWrap.appendChild(chartTitle);
+
+      var chartLayout = document.createElement("div");
+      chartLayout.className = "dt-stats-chart-layout";
+      var donut = document.createElement("div");
+      donut.className = "dt-stats-donut";
+      donut.style.background = statsBuildDonutGradient_(bucketItems, totalBuckets);
+      var donutCenter = document.createElement("div");
+      donutCenter.className = "dt-stats-donut-center";
+      donutCenter.textContent = statsFormatNumber_(totalBuckets);
+      donut.appendChild(donutCenter);
+      chartLayout.appendChild(donut);
+
+      var legend = document.createElement("div");
+      legend.className = "dt-stats-legend";
+      bucketItems.forEach(function (it) {
+        if (it.value <= 0) return;
+        var item = document.createElement("div");
+        item.className = "dt-stats-legend-item";
+        var dot = document.createElement("span");
+        dot.className = "dt-stats-dot";
+        dot.style.background = it.color;
+        var label = document.createElement("span");
+        label.textContent = it.label;
+        var val = document.createElement("span");
+        val.textContent =
+          statsFormatNumber_(it.value) + " (" + statsFormatPercent_(it.value, totalBuckets) + ")";
+        item.appendChild(dot);
+        item.appendChild(label);
+        item.appendChild(val);
+        legend.appendChild(item);
+      });
+      chartLayout.appendChild(legend);
+      chartWrap.appendChild(chartLayout);
+
+      var bars = document.createElement("div");
+      bars.className = "dt-stats-bars";
+      bucketItems.forEach(function (it) {
+        if (it.value <= 0) return;
+        var row = document.createElement("div");
+        row.className = "dt-stats-bar-row";
+        var label = document.createElement("div");
+        label.textContent = it.label;
+        var track = document.createElement("div");
+        track.className = "dt-stats-bar-track";
+        var fill = document.createElement("div");
+        fill.className = "dt-stats-bar-fill";
+        fill.style.background = it.color;
+        fill.style.width = statsPercentValue_(it.value, totalBuckets) + "%";
+        track.appendChild(fill);
+        var val = document.createElement("div");
+        val.textContent = statsFormatNumber_(it.value);
+        row.appendChild(label);
+        row.appendChild(track);
+        row.appendChild(val);
+        bars.appendChild(row);
+      });
+      chartWrap.appendChild(bars);
+      body.appendChild(chartWrap);
+
+      var byCarrier = res.byCarrier && typeof res.byCarrier === "object" ? res.byCarrier : {};
+      var carrierRows = Object.keys(byCarrier).map(function (carrierId) {
+        var rowData = byCarrier[carrierId] || {};
+        var total = statsBucketOrder_().reduce(function (sum, key) {
+          return sum + statsSafeNumber_(rowData[key]);
+        }, 0);
+        return {
+          carrierId: carrierId,
+          total: total,
+          delivered: statsSafeNumber_(rowData.delivered),
+          in_transit: statsSafeNumber_(rowData.in_transit),
+          failed: statsSafeNumber_(rowData.failed),
+          returned: statsSafeNumber_(rowData.returned),
+          unknown: statsSafeNumber_(rowData.unknown),
+        };
+      });
+      carrierRows.sort(function (a, b) {
+        return b.total - a.total;
+      });
+
+      if (carrierRows.length) {
+        var carrierSection = document.createElement("section");
+        var carrierTitle = document.createElement("h4");
+        carrierTitle.className = "dt-stats-section-title";
+        carrierTitle.textContent = t("sidebar.stats.by_carrier");
+        carrierSection.appendChild(carrierTitle);
+        var carrierWrap = document.createElement("div");
+        carrierWrap.className = "dt-stats-table-wrap";
+        var carrierTable = document.createElement("table");
+        carrierTable.className = "dt-stats-table";
+        var carrierHead = document.createElement("thead");
+        carrierHead.innerHTML =
+          "<tr>" +
+          "<th>" + t("sidebar.label.carrier") + "</th>" +
+          "<th>" + t("sidebar.stats.col_total") + "</th>" +
+          "<th>" + t("stats.bucket.delivered") + "</th>" +
+          "<th>" + t("stats.bucket.in_transit") + "</th>" +
+          "<th>" + t("stats.bucket.failed") + "</th>" +
+          "<th>" + t("stats.bucket.returned") + "</th>" +
+          "<th>" + t("stats.bucket.unknown") + "</th>" +
+          "</tr>";
+        carrierTable.appendChild(carrierHead);
+        var carrierBody = document.createElement("tbody");
+        carrierRows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          [
+            String(row.carrierId || "—"),
+            statsFormatNumber_(row.total),
+            statsFormatNumber_(row.delivered),
+            statsFormatNumber_(row.in_transit),
+            statsFormatNumber_(row.failed),
+            statsFormatNumber_(row.returned),
+            statsFormatNumber_(row.unknown),
+          ].forEach(function (value) {
+            var td = document.createElement("td");
+            td.textContent = value;
+            tr.appendChild(td);
+          });
+          carrierBody.appendChild(tr);
+        });
+        carrierTable.appendChild(carrierBody);
+        carrierWrap.appendChild(carrierTable);
+        carrierSection.appendChild(carrierWrap);
+        body.appendChild(carrierSection);
+      }
+
+      var byProduct = res.byProduct && typeof res.byProduct === "object" ? res.byProduct : {};
+      var productRows = Object.keys(byProduct)
+        .map(function (name) {
+          var rowData = byProduct[name] || {};
+          var total = statsBucketOrder_().reduce(function (sum, key) {
+            return sum + statsSafeNumber_(rowData[key]);
+          }, 0);
+          return { name: name, total: total };
+        })
+        .filter(function (it) {
+          return it.total > 0;
+        })
+        .sort(function (a, b) {
+          return b.total - a.total;
+        })
+        .slice(0, 10);
+
+      if (productRows.length) {
+        var productSection = document.createElement("section");
+        var productTitle = document.createElement("h4");
+        productTitle.className = "dt-stats-section-title";
+        productTitle.textContent = t("sidebar.stats.top_products");
+        productSection.appendChild(productTitle);
+        var productWrap = document.createElement("div");
+        productWrap.className = "dt-stats-table-wrap";
+        var productTable = document.createElement("table");
+        productTable.className = "dt-stats-table";
+        var productHead = document.createElement("thead");
+        productHead.innerHTML =
+          "<tr>" +
+          "<th>" + t("sidebar.stats.col_item") + "</th>" +
+          "<th>" + t("sidebar.stats.col_total") + "</th>" +
+          "</tr>";
+        productTable.appendChild(productHead);
+        var productBody = document.createElement("tbody");
+        productRows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          var nameTd = document.createElement("td");
+          nameTd.textContent = String(row.name || "—");
+          var totalTd = document.createElement("td");
+          totalTd.textContent = statsFormatNumber_(row.total);
+          tr.appendChild(nameTd);
+          tr.appendChild(totalTd);
+          productBody.appendChild(tr);
+        });
+        productTable.appendChild(productBody);
+        productWrap.appendChild(productTable);
+        productSection.appendChild(productWrap);
+        body.appendChild(productSection);
+      }
+    }
+
+    function openStatsDashboard_() {
+      if (!el.statsModal || !state.lastStatsResult) return;
+      renderStatsDashboard_(state.lastStatsResult);
+      el.statsModal.hidden = false;
+      el.statsModal.setAttribute("aria-hidden", "false");
+    }
+
     function computeSheetStats() {
       setBusy(true);
       setSectionBusy("dt-stats", true);
@@ -687,11 +1235,49 @@
       clearStructuredOutput(el.statsOut);
       var fromV = el.statsFrom && el.statsFrom.value ? el.statsFrom.value : "";
       var toV = el.statsTo && el.statsTo.value ? el.statsTo.value : "";
-      runServer("stats_computeSheet", fromV, toV)
+      runServer("stats_computeSheet", fromV, toV, state.currentSheetId)
         .then(function (res) {
           var n = res.totalRowsAnalyzed != null ? res.totalRowsAnalyzed : 0;
           var buckets = res && res.buckets ? res.buckets : {};
-          var lines = [
+          var dateFilter = res && res.dateFilter ? res.dateFilter : {};
+          var infoLines = [];
+          if (dateFilter.requested && !dateFilter.active) {
+            infoLines.push(t("sidebar.msg.stats_order_date_unusable"));
+            if (dateFilter.orderDateColumnMappedLabel) {
+              infoLines.push(
+                tf(
+                  "sidebar.msg.stats_order_date_current_mapping",
+                  dateFilter.orderDateColumnMappedLabel,
+                ),
+              );
+            }
+          } else if (
+            dateFilter.active &&
+            dateFilter.orderDateColumnSource &&
+            dateFilter.orderDateColumnSource !== "mapped"
+          ) {
+            if (
+              dateFilter.orderDateColumnMappedLabel &&
+              dateFilter.orderDateColumnMappedLabel !==
+                dateFilter.orderDateColumnEffectiveLabel
+            ) {
+              infoLines.push(
+                tf(
+                  "sidebar.msg.stats_order_date_current_mapping",
+                  dateFilter.orderDateColumnMappedLabel,
+                ),
+              );
+            }
+            if (dateFilter.orderDateColumnEffectiveLabel) {
+              infoLines.push(
+                tf(
+                  "sidebar.msg.stats_order_date_auto_detected",
+                  dateFilter.orderDateColumnEffectiveLabel,
+                ),
+              );
+            }
+          }
+          var lines = infoLines.concat([
             tf("sidebar.msg.rows_analyzed", n, res.sheetName || ""),
             tf(
               "sidebar.msg.stats_bucket_line",
@@ -700,15 +1286,55 @@
               buckets.returned || 0,
               buckets.failed || 0,
             ),
-          ];
-          if (res && res.dateFilter && res.dateFilter.active) {
+          ]);
+          if (dateFilter.active) {
             lines.push(t("sidebar.msg.stats_filtered"));
+            if (dateFilter.detectedMinIso && dateFilter.detectedMaxIso) {
+              lines.push(
+                tf(
+                  "sidebar.msg.stats_detected_date_range",
+                  dateFilter.detectedMinIso,
+                  dateFilter.detectedMaxIso,
+                ),
+              );
+            }
+            lines.push(
+              tf(
+                "sidebar.msg.stats_filter_excluded",
+                res.rowsFilteredBeforeDateRange || 0,
+                res.rowsFilteredAfterDateRange || 0,
+                res.rowsSkippedNoDateFilter || 0,
+              ),
+            );
+            if ((res.totalRowsAnalyzed || 0) === 0) {
+              lines.push(t("sidebar.msg.stats_zero_after_filter"));
+            }
           }
+          state.lastStatsResult = res;
+          setStatsDashboardEnabled_(true);
           renderStructuredOutput(el.statsOut, lines, res);
-          setStatsStatus(
-            tf("sidebar.msg.rows_analyzed", n, res.sheetName || ""),
-            null,
-          );
+          openStatsDashboard_();
+          if (dateFilter.requested && !dateFilter.active) {
+            setStatsStatus(t("sidebar.msg.stats_order_date_unusable"), "err");
+          } else if (
+            dateFilter.active &&
+            dateFilter.orderDateColumnSource &&
+            dateFilter.orderDateColumnSource !== "mapped" &&
+            dateFilter.orderDateColumnEffectiveLabel
+          ) {
+            setStatsStatus(
+              tf(
+                "sidebar.msg.stats_order_date_auto_detected",
+                dateFilter.orderDateColumnEffectiveLabel,
+              ),
+              null,
+            );
+          } else {
+            setStatsStatus(
+              tf("sidebar.msg.rows_analyzed", n, res.sheetName || ""),
+              null,
+            );
+          }
         })
         .catch(function (err) {
           setStatsStatus(err.message || String(err), "err");
@@ -735,6 +1361,26 @@
       if (!url) return "";
       // Copy/paste from chats or screenshots can inject spaces/newlines.
       url = url.replace(/\s+/g, "");
+      // Heal accidental duplicated pastes such as
+      // https://foo.ngrok-free.apphttps://foo.ngrok-free.app
+      while (true) {
+        var iHttp = url.indexOf("http://", 7);
+        var iHttps = url.indexOf("https://", 8);
+        var secondIdx = -1;
+        if (iHttp >= 0 && iHttps >= 0) {
+          secondIdx = Math.min(iHttp, iHttps);
+        } else {
+          secondIdx = Math.max(iHttp, iHttps);
+        }
+        if (secondIdx <= 0) break;
+        var first = url.slice(0, secondIdx);
+        var tail = url.slice(secondIdx);
+        if (first === tail) {
+          url = first;
+          continue;
+        }
+        break;
+      }
       // Common ngrok typo: missing ".app" on free domains.
       if (/^https?:\/\/[^/]*ngrok-free$/i.test(url)) {
         url += ".app";
@@ -841,43 +1487,91 @@
       }
     }
 
+    function humanizeLicenseStatus_(raw) {
+      var token = String(raw || "")
+        .trim()
+        .toLowerCase();
+      if (!token) return t("license.badge_unknown");
+      if (token === "active") return t("license.badge_active");
+      if (token === "trial") return t("trial.badge_label");
+      if (token === "expired") return t("license.badge_expired");
+      if (token === "unknown") return t("license.badge_unknown");
+      return String(raw);
+    }
+
     function renderLicenseSummary(record) {
       var box = el.licenseSummary;
       if (!box) return;
       while (box.firstChild) box.removeChild(box.firstChild);
 
-      var title = document.createElement("strong");
+      var title = document.createElement("p");
+      title.className = "dt-license-summary-title";
       title.textContent = record
         ? t("sidebar.license.summary_license")
         : t("sidebar.license.summary_state");
       box.appendChild(title);
 
-      var line = function (label, value) {
-        var div = document.createElement("div");
-        div.textContent = label + value;
-        box.appendChild(div);
-      };
-
       if (!record) {
-        line("", t("sidebar.license.no_cache"));
+        var empty = document.createElement("p");
+        empty.className = "dt-license-summary-empty";
+        empty.textContent = t("sidebar.license.no_cache");
+        box.appendChild(empty);
         return;
       }
 
-      line(
+      var grid = document.createElement("div");
+      grid.className = "dt-license-grid";
+      box.appendChild(grid);
+
+      var addMetric = function (label, value, options) {
+        if (value == null) return;
+        var raw = String(value).trim();
+        if (!raw) return;
+
+        var item = document.createElement("div");
+        item.className = "dt-license-item";
+
+        var k = document.createElement("div");
+        k.className = "dt-k";
+        k.textContent = label;
+
+        var v = document.createElement("div");
+        if (options && options.status) {
+          var token = statusTokenForUi_(raw) || "unknown";
+          v.className = "dt-v dt-pill dt-pill--" + token;
+          v.textContent = humanizeLicenseStatus_(raw);
+        } else {
+          var display = options && options.date ? formatMaybeDateForUi_(raw) : raw;
+          v.className = "dt-v";
+          v.textContent = display;
+          if (display !== raw) {
+            v.title = raw;
+          }
+        }
+
+        item.appendChild(k);
+        item.appendChild(v);
+        grid.appendChild(item);
+      };
+
+      addMetric(
         t("sidebar.license.lbl_status"),
-        String(record.licenseStatus || t("sidebar.msg.sync_meta_na")),
+        record.licenseStatus || t("sidebar.msg.sync_meta_na"),
+        { status: true },
       );
-      if (record.planName)
-        line(t("sidebar.license.lbl_plan"), String(record.planName));
-      if (record.trialEnd)
-        line(t("sidebar.license.lbl_trial_end"), String(record.trialEnd));
-      if (record.subscriptionEnd)
-        line(t("sidebar.license.lbl_sub_end"), String(record.subscriptionEnd));
-      if (record.licenseKey)
-        line(
+      addMetric(t("sidebar.license.lbl_plan"), record.planName);
+      addMetric(t("sidebar.license.lbl_trial_end"), record.trialEnd, {
+        date: true,
+      });
+      addMetric(t("sidebar.license.lbl_sub_end"), record.subscriptionEnd, {
+        date: true,
+      });
+      if (record.licenseKey) {
+        addMetric(
           t("sidebar.license.lbl_key"),
           String(record.licenseKey).slice(0, 8) + "…",
         );
+      }
     }
 
     // escapeHtml_ removed: license summary renders with textContent only.
@@ -907,7 +1601,18 @@
           state.licenseStatus = st && st.status ? String(st.status) : "unknown";
           state.apiBaseUrl = st && st.apiBaseUrl ? String(st.apiBaseUrl) : "";
           state.apiConfigured = !!(st && st.apiConfigured);
+          state.uiMode =
+            st && st.uiMode === "prod" ? "prod" : state.uiMode || "local";
+          state.allowBackendConfig =
+            st && typeof st.allowBackendConfig === "boolean"
+              ? st.allowBackendConfig
+              : state.allowBackendConfig;
+          state.showTechnicalDetails =
+            st && typeof st.showTechnicalDetails === "boolean"
+              ? st.showTechnicalDetails
+              : state.showTechnicalDetails;
           state.licenseUiHydrated = true;
+          applyUiMode_();
           refreshFlowReadiness_();
           var stCode = st && st.status ? String(st.status) : "";
           if (stCode === "error" || stCode === "no_email") {
@@ -928,6 +1633,7 @@
           state.apiBaseUrl = "";
           state.apiConfigured = false;
           state.licenseUiHydrated = true;
+          applyUiMode_();
           refreshFlowReadiness_();
           setLicenseStatus(normalized.message || String(normalized), "err");
           throw normalized;
@@ -1114,7 +1820,11 @@
       return runServer("ops_getLog")
         .then(function (data) {
           if (el.journalOut) {
-            el.journalOut.textContent = formatJournalText_(data);
+            renderStructuredOutput(
+              el.journalOut,
+              formatJournalText_(data).split("\n"),
+              data,
+            );
           }
           var n = data.entries ? data.entries.length : 0;
           state.opsReady = state.opsReady || n > 0;
@@ -1292,6 +2002,40 @@
         });
     }
 
+    function applySelectedLanguage_() {
+      if (!el.langSelect) {
+        return;
+      }
+      var newLang = String(el.langSelect.value || "").trim();
+      if (!newLang) {
+        return;
+      }
+      var currentLang =
+        typeof window.__DT_LANG__ === "string"
+          ? String(window.__DT_LANG__)
+          : "ar";
+      if (newLang === currentLang) {
+        setLicenseStatus(t("sidebar.msg.lang_already_selected"), "ok");
+        return;
+      }
+      setBusy(true);
+      setSectionBusy("dt-license", true);
+      setLicenseStatus(t("sidebar.msg.lang_switching"), null);
+      runServer("i18n_setLang", newLang)
+        .then(function () {
+          window.__DT_LANG__ = newLang;
+          // Re-open sidebar from server in the new language; avoids iframe reload glitches.
+          return runServer("menu_reopenSidebar");
+        })
+        .catch(function (err) {
+          setLicenseStatus(err.message || String(err), "err");
+        })
+        .then(function () {
+          setSectionBusy("dt-license", false);
+          setBusy(false);
+        });
+    }
+
     function runServer(fnName) {
       var args = Array.prototype.slice.call(arguments, 1);
       if (!sidebarBridgeReady_()) {
@@ -1309,6 +2053,35 @@
           });
         runner[fnName].apply(runner, args);
       });
+    }
+
+    function runServerAfterEditorFocus_(fnName) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      try {
+        if (
+          window.google &&
+          google.script &&
+          google.script.host &&
+          google.script.host.editor &&
+          google.script.host.editor.focus
+        ) {
+          google.script.host.editor.focus();
+        }
+      } catch (e) {}
+      return new Promise(function (resolve, reject) {
+        setTimeout(function () {
+          runServer.apply(null, [fnName].concat(args)).then(resolve, reject);
+        }, 120);
+      });
+    }
+
+    function getRowSelectionSpec_() {
+      if (!el.rowSelection) {
+        return "";
+      }
+      return el.rowSelection.value != null
+        ? String(el.rowSelection.value).trim()
+        : "";
     }
 
     function populateSheetSelect() {
@@ -1391,11 +2164,12 @@
 
     function applyFeeSelection() {
       var overwrite = el.feeOverwrite ? el.feeOverwrite.checked : true;
+      var rowSelectionSpec = getRowSelectionSpec_();
       setBusy(true);
       setSectionBusy("dt-fees", true);
       setFeeStatus(t("sidebar.msg.applying_fees"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer("fee_applySelection", overwrite)
+      runServerAfterEditorFocus_("fee_applySelection", overwrite, rowSelectionSpec)
         .then(function (res) {
           renderStructuredOutput(
             el.ordersOut,
@@ -2037,25 +2811,30 @@
         .then(function (mapping) {
           state.mapping = mapping;
           var persistedMappingReady = mappingHasRequiredColumns_(mapping);
+          function finalizeMappingLoad_() {
+            state.mappingReady = persistedMappingReady;
+            refreshFlowReadiness_();
+            setStatus(
+              state.carriersWarning || t("sidebar.msg.ready"),
+              state.carriersWarning ? "err" : "ok",
+            );
+            runServer(
+              "mobile_refreshCompanionArtifactsForSheetId",
+              sheetId,
+            ).catch(function () {
+              return null;
+            });
+            return null;
+          }
           return runServer("setup_getSuggestedMapping", sheetId, headerRow)
             .then(function (suggested) {
               state.mapping = mergeSuggestedMapping_(state.mapping, suggested);
               applyMappingToFields();
-              state.mappingReady = persistedMappingReady;
-              refreshFlowReadiness_();
-              setStatus(
-                state.carriersWarning || t("sidebar.msg.ready"),
-                state.carriersWarning ? "err" : "ok",
-              );
+              return finalizeMappingLoad_();
             })
             .catch(function () {
               applyMappingToFields();
-              state.mappingReady = persistedMappingReady;
-              refreshFlowReadiness_();
-              setStatus(
-                state.carriersWarning || t("sidebar.msg.ready"),
-                state.carriersWarning ? "err" : "ok",
-              );
+              return finalizeMappingLoad_();
             });
         })
         .catch(function (err) {
@@ -2070,11 +2849,12 @@
     }
 
     function previewOrders() {
+      var rowSelectionSpec = getRowSelectionSpec_();
       clearStructuredOutput(el.ordersOut);
       setOrdersStatus(t("sidebar.msg.analyzing"), null);
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
-      runServer("order_previewSelection")
+      runServerAfterEditorFocus_("order_previewSelection", rowSelectionSpec)
         .then(function (result) {
           var n = result.rows ? result.rows.length : 0;
           var ok = 0;
@@ -2138,11 +2918,12 @@
     }
 
     function sendSelection() {
+      var rowSelectionSpec = getRowSelectionSpec_();
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.sending"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer("send_sendSelection")
+      runServerAfterEditorFocus_("send_sendSelection", rowSelectionSpec)
         .then(function (result) {
           // Cache label URLs for printing buttons.
           state.lastLabelUrls =
@@ -2176,11 +2957,12 @@
     }
 
     function syncSelection() {
+      var rowSelectionSpec = getRowSelectionSpec_();
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.syncing"), null);
       clearStructuredOutput(el.ordersOut);
-      runServer("sync_syncSelection")
+      runServerAfterEditorFocus_("sync_syncSelection", rowSelectionSpec)
         .then(function (result) {
           var a = result.attempted || 0;
           var s = result.succeeded || 0;
@@ -2339,6 +3121,9 @@
         el.ordersStatus = $("dt-orders-status");
         el.ordersPrintLabels = $("dt-orders-print-labels");
         el.ordersPrintAll = $("dt-orders-print-all");
+        el.rowSelection = $("dt-row-selection");
+        el.backendConfig = $("dt-backend-config");
+        el.licenseAdvanced = $("dt-license-advanced");
         el.autoSyncStatus = $("dt-auto-sync-status");
         el.autoSyncToggle = $("dt-auto-sync-toggle");
         el.apiUrl = $("dt-api-url");
@@ -2368,6 +3153,11 @@
         el.statsCompute = $("dt-stats-compute");
         el.statsOut = $("dt-stats-out");
         el.statsStatus = $("dt-stats-status");
+        el.statsOpenDashboard = $("dt-stats-open-dashboard");
+        el.statsModal = $("dt-stats-modal");
+        el.statsModalBackdrop = $("dt-stats-modal-backdrop");
+        el.statsModalClose = $("dt-stats-modal-close");
+        el.statsModalBody = $("dt-stats-modal-body");
         el.wilayaValidate = $("dt-wilaya-validate");
         el.wilayaAllowInvalid = $("dt-wilaya-allow-invalid");
         el.communeWilaya = $("dt-commune-wilaya");
@@ -2403,6 +3193,7 @@
         el.bizReload = $("dt-biz-reload");
         el.bizStatus = $("dt-biz-status");
         el.langSelect = $("dt-lang");
+        el.langApply = $("dt-lang-apply");
 
         if (!sidebarBridgeReady_()) {
           notifyLicenseError_(
@@ -2411,6 +3202,9 @@
             ),
           );
         }
+
+        applyUiMode_();
+        setStatsDashboardEnabled_(false);
 
         loadLicenseSidebar().catch(function () {
           // Status line already updated inside loadLicenseSidebar().
@@ -2528,6 +3322,20 @@
         if (el.statsCompute) {
           el.statsCompute.addEventListener("click", computeSheetStats);
         }
+        if (el.statsOpenDashboard) {
+          el.statsOpenDashboard.addEventListener("click", openStatsDashboard_);
+        }
+        if (el.statsModalClose) {
+          el.statsModalClose.addEventListener("click", closeStatsDashboard_);
+        }
+        if (el.statsModalBackdrop) {
+          el.statsModalBackdrop.addEventListener("click", closeStatsDashboard_);
+        }
+        document.addEventListener("keydown", function (evt) {
+          if (evt && evt.key === "Escape") {
+            closeStatsDashboard_();
+          }
+        });
         if (el.wilayaValidate) {
           el.wilayaValidate.addEventListener("click", applyWilayaValidation);
         }
@@ -2598,24 +3406,11 @@
           el.langSelect.value =
             typeof window.__DT_LANG__ === "string" ? window.__DT_LANG__ : "ar";
           el.langSelect.addEventListener("change", function () {
-            var newLang = el.langSelect.value;
-            if (!newLang) {
-              return;
-            }
-            setBusy(true);
-            setLicenseStatus(t("sidebar.msg.saving"), null);
-            runServer("i18n_setLang", newLang)
-              .then(function () {
-                // Reload the sidebar so the server can send the new language pack.
-                window.location.reload();
-              })
-              .catch(function (err) {
-                setLicenseStatus(err.message || String(err), "err");
-              })
-              .then(function () {
-                setBusy(false);
-              });
+            setLicenseStatus("", null);
           });
+        }
+        if (el.langApply) {
+          el.langApply.addEventListener("click", applySelectedLanguage_);
         }
       } catch (e) {
         notifyLicenseError_(e);
