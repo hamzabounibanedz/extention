@@ -232,6 +232,7 @@ type LicenseItem = {
 
 type ClientRow = {
   user_email_hmac: string;
+  google_email: string | null;
   revoked: boolean;
   activated_at: string | null;
   expires_at: string | null;
@@ -549,7 +550,7 @@ const App: React.FC = () => {
     }
   }, [canQuery, codesSearch]);
 
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     setClientsError(null);
     setClientsMessage(null);
     if (!canQuery) {
@@ -569,7 +570,7 @@ const App: React.FC = () => {
     } finally {
       setClientsLoading(false);
     }
-  };
+  }, [canQuery, clientsSearch]);
 
   const loadStats = async () => {
     setStatsError(null);
@@ -592,13 +593,23 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!canQuery) {
-      setClients(null);
       setStats(null);
       return;
     }
-    void loadClients();
     void loadStats();
   }, [canQuery]);
+
+  useEffect(() => {
+    if (!canQuery) {
+      setClients(null);
+      return;
+    }
+    const delay = clientsSearch === '' ? 0 : 250;
+    const id = window.setTimeout(() => {
+      void loadClients();
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [canQuery, clientsSearch, loadClients]);
 
   useEffect(() => {
     if (!canQuery) {
@@ -1076,6 +1087,9 @@ const App: React.FC = () => {
                 <thead className="bg-dt-surface-elevated">
                   <tr className="text-left text-xs uppercase tracking-[0.14em] text-dt-text-secondary">
                     <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_email')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
                       {t(lang, 'th_client_hash')}
                     </th>
                     <th className="border-b border-dt-border px-3 py-2">
@@ -1104,7 +1118,10 @@ const App: React.FC = () => {
                         key={it.user_email_hmac}
                         className="border-b border-dt-border/80 last:border-b-0 hover:bg-black/5"
                       >
-                        <td className="px-3 py-2 align-top font-mono text-xs">
+                        <td className="px-3 py-2 align-top break-all">
+                          {it.google_email?.trim() ? it.google_email : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top font-mono text-xs text-dt-text-secondary">
                           {`${it.user_email_hmac.slice(0, 12)}…`}
                         </td>
                         <td className="px-3 py-2 align-top">
