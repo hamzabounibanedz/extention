@@ -18,7 +18,7 @@ var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
  *   labelUrls?: Array<{ rowNumber: number, url: string }>
  * }}
  */
-function send_sendSelection() {
+function send_sendSelection(rowSelectionSpec) {
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(15000)) {
     throw new Error(i18n_t('error.send_in_progress'));
@@ -44,7 +44,7 @@ function send_sendSelection() {
     throw new Error(i18n_t('error.sheet_not_found'));
   }
 
-  var preview = order_previewSelection();
+  var preview = order_previewSelection(rowSelectionSpec);
 
   // If there are no valid rows at all but we did analyze some, surface a clear
   // error instead of silently returning a zero-send result. This usually means
@@ -77,12 +77,17 @@ function send_sendSelection() {
   if (checkpointRaw) {
     try {
       var cp = JSON.parse(checkpointRaw);
-      if (
+      var rowSig =
+        preview.selectedRowNumbers && preview.selectedRowNumbers.length
+          ? preview.selectedRowNumbers.join(',')
+          : preview.startRow + ':' + preview.endRow;
+      var checkpointMatches =
         cp.spreadsheetId === spreadsheetId &&
         cp.sheetId === sheetId &&
-        cp.startRow === preview.startRow &&
-        cp.endRow === preview.endRow
-      ) {
+        (cp.rowSig != null && cp.rowSig !== ''
+          ? cp.rowSig === rowSig
+          : cp.startRow === preview.startRow && cp.endRow === preview.endRow);
+      if (checkpointMatches) {
         startIndex = cp.nextIndex || 0;
       }
     } catch (e) {}
@@ -123,6 +128,10 @@ function send_sendSelection() {
           sheetId: sheetId,
           startRow: preview.startRow,
           endRow: preview.endRow,
+          rowSig:
+            preview.selectedRowNumbers && preview.selectedRowNumbers.length
+              ? preview.selectedRowNumbers.join(',')
+              : preview.startRow + ':' + preview.endRow,
           nextIndex: i,
         }),
       );
@@ -319,6 +328,23 @@ function send_sendSelection() {
       });
     }
   } catch (logErr) {}
+
+  // Keep mobile companion sheets/charts in sync after manual sends.
+  try {
+    if (typeof mobile_refreshCompanionArtifactsForSheet_ === 'function') {
+      mobile_refreshCompanionArtifactsForSheet_(ss, sheet, {
+        columns: columns,
+        defaultCarrier:
+          mapping.defaultCarrier != null && String(mapping.defaultCarrier).trim() !== ''
+            ? String(mapping.defaultCarrier).trim()
+            : null,
+        headerRow:
+          mapping.headerRow != null && String(mapping.headerRow).trim() !== ''
+            ? Number(mapping.headerRow)
+            : 1,
+      });
+    }
+  } catch (refreshErr) {}
 
   var failedDetails = batchDetails
     .filter(function (d) { return !d.ok && d.errorMessage; })

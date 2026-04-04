@@ -7,6 +7,9 @@ var SETUP_ALIAS_SCHEMA_VERSION_ = 1;
 var SETUP_ALIAS_KEY_PREFIX_ = "dt.v1.mapAlias.";
 var SETUP_AUTODETECT_MIN_SCORE_ = 0.6;
 var SETUP_ALIAS_MAX_PER_FIELD_ = 20;
+var SETUP_DATE_SCAN_ROW_LIMIT_ = 120;
+var SETUP_DATE_SAMPLE_TARGET_ = 40;
+var SETUP_DATE_AUTODETECT_MIN_SCORE_ = 0.55;
 
 var SETUP_FIELD_KEYS_ = [
   "orderIdColumn",
@@ -298,10 +301,20 @@ var SETUP_FIELD_SYNONYMS_ = {
     "date commande",
     "date de commande",
     "purchase date",
+    "date",
+    "datetime",
+    "date time",
+    "date/time",
+    "timestamp",
     "created",
     "created at",
+    "created on",
+    "creation date",
+    "date creation",
     "تاريخ الطلب",
     "تاريخ",
+    "تاريخ ووقت",
+    "تاريخ الطلب والوقت",
   ],
 };
 
@@ -681,6 +694,9 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
   var scored = [];
 
   SETUP_FIELD_KEYS_.forEach(function (fieldKey) {
+    if (fieldKey === "orderDateColumn") {
+      return;
+    }
     var defaults = Array.isArray(SETUP_FIELD_SYNONYMS_[fieldKey])
       ? SETUP_FIELD_SYNONYMS_[fieldKey]
       : [];
@@ -721,6 +737,18 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
     }
   });
 
+  var dateCandidate = setup_findLikelyOrderDateColumn_(
+    sheet,
+    headerPayload.headerRow,
+  );
+  if (dateCandidate && dateCandidate.col != null) {
+    scored.push({
+      fieldKey: "orderDateColumn",
+      col: dateCandidate.col,
+      score: dateCandidate.score,
+    });
+  }
+
   scored.sort(function (a, b) {
     return b.score - a.score;
   });
@@ -728,7 +756,11 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
   var columns = {};
   var confidenceByField = {};
   scored.forEach(function (it) {
-    if (it.score < SETUP_AUTODETECT_MIN_SCORE_) return;
+    var minScore =
+      it.fieldKey === "orderDateColumn"
+        ? SETUP_DATE_AUTODETECT_MIN_SCORE_
+        : SETUP_AUTODETECT_MIN_SCORE_;
+    if (it.score < minScore) return;
     if (usedColumns[it.col]) return;
     columns[it.fieldKey] = it.col;
     confidenceByField[it.fieldKey] = Number(it.score.toFixed(3));
@@ -745,6 +777,254 @@ function setup_getSuggestedMapping(sheetId, headerRowRaw) {
     schemaVersion: SETUP_SCHEMA_VERSION_,
     confidenceByField: confidenceByField,
   };
+}
+
+/**
+ * @param {Date|null} d
+ * @return {boolean}
+ */
+function setup_isReasonableDateSafe_(d) {
+  if (typeof stats_isReasonableOrderDate_ === "function") {
+    return stats_isReasonableOrderDate_(d);
+  }
+  return d instanceof Date && !isNaN(d.getTime());
+}
+
+/**
+ * @param {*} rawValue
+ * @param {string} displayValue
+ * @return {Date|null}
+ */
+function setup_tryParseDateCell_(rawValue, displayValue) {
+  if (rawValue instanceof Date) {
+    return setup_isReasonableDateSafe_(rawValue) ? rawValue : null;
+  }
+
+  if (typeof rawValue === "number" && !isNaN(rawValue)) {
+    if (rawValue >= 20000 && rawValue <= 80000) {
+      var fromSerial = new Date((rawValue - 25569) * 86400 * 1000);
+      if (setup_isReasonableDateSafe_(fromSerial)) {
+        return fromSerial;
+      }
+    }
+    return null;
+  }
+
+  var text =
+    displayValue != null && String(displayValue).trim() !== ""
+      ? String(displayValue).trim()
+      : rawValue != null && rawValue !== ""
+        ? String(rawValue).trim()
+        : "";
+  if (!text) {
+    return null;
+  }
+
+  if (typeof stats_parseDateString_ === "function") {
+    return stats_parseDateString_(text);
+  }
+  return null;
+}
+
+/**
+ * Header-only score: how likely is this column to mean "order date"?
+ * @param {string} header
+ * @return {number}
+ */
+function setup_scoreOrderDateHeader_(header) {
+  var norm = setup_normalizeHeader_(header);
+  if (!norm) {
+    return 0;
+  }
+
+  var score = 0;
+  [
+    "order date",
+    "date commande",
+    "date de commande",
+    "purchase date",
+    "created at",
+    "created on",
+    "creation date",
+    "date creation",
+    "datetime",
+    "timestamp",
+    "تاريخ الطلب",
+    "تاريخ ووقت",
+  ].forEach(function (term) {
+    score = Math.max(score, setup_termScore_(norm, setup_normalizeHeader_(term)));
+  });
+
+  if (norm === "date" || norm === "datetime" || norm === "timestamp") {
+    score = Math.max(score, 0.95);
+  }
+  if (/\bdate\b/.test(norm)) {
+    score = Math.max(score, 0.86);
+  }
+  if (
+    /\b(created|creation|timestamp|datetime|time)\b/.test(norm) ||
+    /تاريخ|وقت/.test(norm)
+  ) {
+    score = Math.max(score, 0.8);
+  }
+  if (
+    /\b(status|statut|tracking|suivi|phone|telephone|mobile|address|adresse|wilaya|commune|carrier|transporteur|label|note|notes|livraison|delivery)\b/.test(
+      norm,
+    )
+  ) {
+    score = Math.max(0, score - 0.12);
+  }
+
+  return Number(Math.max(0, Math.min(1, score)).toFixed(3));
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} colIndex
+ * @param {number} headerRow
+ * @return {{
+ *   col: number,
+ *   header: string,
+ *   seen: number,
+ *   valid: number,
+ *   validRatio: number,
+ *   headerScore: number,
+ *   score: number,
+ *   looksLikeDate: boolean
+ * }}
+ */
+function setup_analyzeDateColumn_(sheet, colIndex, headerRow) {
+  var col = Number(colIndex);
+  var header = "";
+  try {
+    header =
+      col >= 1 && headerRow >= 1
+        ? String(sheet.getRange(headerRow, col, 1, 1).getDisplayValue() || "")
+        : "";
+  } catch (e) {
+    header = "";
+  }
+
+  if (!Number.isFinite(col) || col < 1) {
+    return {
+      col: col,
+      header: header,
+      seen: 0,
+      valid: 0,
+      validRatio: 0,
+      headerScore: setup_scoreOrderDateHeader_(header),
+      score: 0,
+      looksLikeDate: false,
+    };
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= headerRow) {
+    return {
+      col: col,
+      header: header,
+      seen: 0,
+      valid: 0,
+      validRatio: 0,
+      headerScore: setup_scoreOrderDateHeader_(header),
+      score: 0,
+      looksLikeDate: false,
+    };
+  }
+
+  var scanRows = Math.min(SETUP_DATE_SCAN_ROW_LIMIT_, lastRow - headerRow);
+  var range = sheet.getRange(headerRow + 1, col, scanRows, 1);
+  var values = range.getValues();
+  var displays = range.getDisplayValues();
+  var seen = 0;
+  var valid = 0;
+
+  for (var i = 0; i < values.length; i++) {
+    var raw = values[i] && values[i][0];
+    var shown = displays[i] && displays[i][0];
+    if (
+      (raw == null || raw === "") &&
+      (shown == null || String(shown).trim() === "")
+    ) {
+      continue;
+    }
+    seen++;
+    if (setup_tryParseDateCell_(raw, shown)) {
+      valid++;
+    }
+    if (seen >= SETUP_DATE_SAMPLE_TARGET_) {
+      break;
+    }
+  }
+
+  var ratio = seen > 0 ? valid / seen : 0;
+  var headerScore = setup_scoreOrderDateHeader_(header);
+  var looksLikeDate =
+    seen > 0 && valid >= Math.max(2, Math.ceil(seen * 0.4));
+  if (!looksLikeDate && seen > 0 && valid === seen && valid >= 2) {
+    looksLikeDate = true;
+  }
+
+  var score = looksLikeDate
+    ? ratio * 0.75 + headerScore * 0.25
+    : ratio * 0.45 + headerScore * 0.15;
+  if (looksLikeDate && headerScore === 0 && ratio >= 0.9 && valid >= 4) {
+    score = Math.max(score, 0.72);
+  }
+  if (!looksLikeDate && valid === 0 && headerScore >= 0.85) {
+    score = Math.min(score, 0.25);
+  }
+
+  return {
+    col: col,
+    header: header,
+    seen: seen,
+    valid: valid,
+    validRatio: Number(ratio.toFixed(3)),
+    headerScore: headerScore,
+    score: Number(Math.max(0, Math.min(1, score)).toFixed(3)),
+    looksLikeDate: looksLikeDate,
+  };
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} headerRow
+ * @return {{ col: number, header: string, seen: number, valid: number, validRatio: number, headerScore: number, score: number, looksLikeDate: boolean }|null}
+ */
+function setup_findLikelyOrderDateColumn_(sheet, headerRow) {
+  var lastCol = sheet.getLastColumn();
+  var best = null;
+  for (var col = 1; col <= lastCol; col++) {
+    var candidate = setup_analyzeDateColumn_(sheet, col, headerRow);
+    if (!candidate.looksLikeDate) {
+      continue;
+    }
+    if (
+      !best ||
+      candidate.score > best.score ||
+      (candidate.score === best.score && candidate.headerScore > best.headerScore) ||
+      (candidate.score === best.score && candidate.valid > best.valid) ||
+      (candidate.score === best.score && candidate.col < best.col)
+    ) {
+      best = candidate;
+    }
+  }
+
+  if (!best || best.score < SETUP_DATE_AUTODETECT_MIN_SCORE_) {
+    return null;
+  }
+  return best;
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} colIndex
+ * @param {number} headerRow
+ * @return {boolean}
+ */
+function setup_columnLooksLikeDate_(sheet, colIndex, headerRow) {
+  return !!setup_analyzeDateColumn_(sheet, colIndex, headerRow).looksLikeDate;
 }
 
 /**
@@ -1000,6 +1280,16 @@ function setup_saveMapping(mapping) {
     );
   } catch (e3) {
     // Learning is best-effort and must never block explicit mapping saves.
+  }
+  try {
+    if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
+      mobile_ensureOnEditTriggerForSpreadsheet_(ss);
+    }
+    if (typeof mobile_refreshCompanionArtifactsForSheet_ === 'function') {
+      mobile_refreshCompanionArtifactsForSheet_(ss, sheet, payload);
+    }
+  } catch (e4) {
+    // Companion sheets/charts are best-effort and should not block mapping saves.
   }
   return payload;
 }

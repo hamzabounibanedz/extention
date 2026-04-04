@@ -41,6 +41,151 @@
  */
 
 /**
+ * Parse an optional manual row selector like "4,8,10-12".
+ * @param {string|null|undefined} spec
+ * @return {Array<number>|null}
+ */
+function parseRowSelectionSpec_(spec) {
+  if (spec == null) {
+    return null;
+  }
+  var raw = String(spec).trim();
+  if (!raw) {
+    return null;
+  }
+
+  var seen = {};
+  var tokens = raw
+    .replace(/[;\n\r]+/g, ',')
+    .replace(/\u060C/g, ',')
+    .split(',');
+
+  for (var i = 0; i < tokens.length; i++) {
+    var part = String(tokens[i] || '').trim();
+    if (!part) {
+      continue;
+    }
+
+    var m = /^(\d+)\s*-\s*(\d+)$/.exec(part);
+    if (m) {
+      var start = Number(m[1]);
+      var end = Number(m[2]);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < 1) {
+        throw new Error(i18n_t('error.row_selection_invalid'));
+      }
+      if (start > end) {
+        var tmp = start;
+        start = end;
+        end = tmp;
+      }
+      for (var row = start; row <= end; row++) {
+        seen[row] = true;
+      }
+      continue;
+    }
+
+    if (/^\d+$/.test(part)) {
+      var single = Number(part);
+      if (!Number.isFinite(single) || single < 1) {
+        throw new Error(i18n_t('error.row_selection_invalid'));
+      }
+      seen[single] = true;
+      continue;
+    }
+
+    throw new Error(i18n_t('error.row_selection_invalid'));
+  }
+
+  var out = Object.keys(seen)
+    .map(function (k) {
+      return Number(k);
+    })
+    .sort(function (a, b) {
+      return a - b;
+    });
+  if (!out.length) {
+    throw new Error(i18n_t('error.row_selection_invalid'));
+  }
+  return out;
+}
+
+/**
+ * Read selection row numbers from live spreadsheet APIs.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @return {Array<number>}
+ */
+function readLiveSelectionRows_(sheet) {
+  var seen = {};
+
+  function addRanges_(ranges) {
+    if (!ranges || !ranges.length) {
+      return;
+    }
+    for (var i = 0; i < ranges.length; i++) {
+      var rng = ranges[i];
+      if (!rng) {
+        continue;
+      }
+      var sr = rng.getRow();
+      var nr = rng.getNumRows();
+      for (var row = sr; row < sr + nr; row++) {
+        seen[row] = true;
+      }
+    }
+  }
+
+  try {
+    var selection = SpreadsheetApp.getSelection();
+    if (selection && selection.getActiveRangeList) {
+      var list = selection.getActiveRangeList();
+      if (list) {
+        addRanges_(list.getRanges());
+      }
+    }
+  } catch (e) {}
+
+  if (!Object.keys(seen).length) {
+    try {
+      var list2 = SpreadsheetApp.getActiveRangeList();
+      if (list2) {
+        addRanges_(list2.getRanges());
+      }
+    } catch (e2) {}
+  }
+
+  if (!Object.keys(seen).length) {
+    try {
+      var r = sheet.getActiveRange();
+      if (r) {
+        addRanges_([r]);
+      }
+    } catch (e3) {}
+  }
+
+  return Object.keys(seen)
+    .map(function (k) {
+      return Number(k);
+    })
+    .sort(function (a, b) {
+      return a - b;
+    });
+}
+
+/**
+ * Returns row numbers from manual override or the live sheet selection.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {string|null|undefined} rowSelectionSpec
+ * @return {Array<number>} sorted unique 1-based row numbers
+ */
+function sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec) {
+  var manualRows = parseRowSelectionSpec_(rowSelectionSpec);
+  if (manualRows && manualRows.length) {
+    return manualRows;
+  }
+  return readLiveSelectionRows_(sheet);
+}
+
+/**
  * Preview selected rows: normalize + validate. Skips row 1 (headers). Empty data rows marked skipped.
  * @return {{
  *   sheetId: number,
@@ -57,10 +202,11 @@
  *     warnings: Array<string>,
  *     order: InternalOrderLike|null
  *   }>,
- *   duplicateIndexLastRow: number
+ *   duplicateIndexLastRow: number,
+ *   selectedRowNumbers: Array<number>
  * }}
  */
-function order_previewSelection() {
+function order_previewSelection(rowSelectionSpec) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
   var spreadsheetId = ss.getId();
@@ -94,8 +240,8 @@ function order_previewSelection() {
     headerRow = 1;
   }
 
-  var range = sheet.getActiveRange();
-  if (!range) {
+  var selectedRowNumbers = sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec);
+  if (!selectedRowNumbers.length) {
     throw new Error(i18n_t('error.select_rows'));
   }
 
@@ -111,11 +257,12 @@ function order_previewSelection() {
 
   var dupIndex = buildDuplicateIndex_(sheet, columns, defaultCarrierId, now, lastSheetRow, headerRow, values);
 
-  var startRow = range.getRow();
-  var endRow = startRow + range.getNumRows() - 1;
+  var startRow = selectedRowNumbers[0];
+  var endRow = selectedRowNumbers[selectedRowNumbers.length - 1];
 
   var rows = [];
-  for (var rowNum = startRow; rowNum <= endRow; rowNum++) {
+  for (var si = 0; si < selectedRowNumbers.length; si++) {
+    var rowNum = selectedRowNumbers[si];
     if (rowNum === headerRow) {
       rows.push({
         rowNumber: rowNum,
@@ -177,6 +324,7 @@ function order_previewSelection() {
     endRow: endRow,
     rows: rows,
     duplicateIndexLastRow: lastSheetRow,
+    selectedRowNumbers: selectedRowNumbers.slice(),
   };
 }
 
@@ -728,23 +876,55 @@ function isBlank_(s) {
  * @param {string|null} phone
  * @return {boolean}
  */
+/**
+ * Map Arabic-Indic (٠-٩) and Eastern Arabic (۰-۹) digits to ASCII so replace(/\D/g) does not drop them.
+ * @param {string} s
+ * @return {string}
+ */
+function mapUnicodeDigitsToAscii_(s) {
+  var out = '';
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charCodeAt(i);
+    if (c >= 0x0660 && c <= 0x0669) {
+      out += String(c - 0x0660);
+    } else if (c >= 0x06f0 && c <= 0x06f9) {
+      out += String(c - 0x06f0);
+    } else {
+      out += s.charAt(i);
+    }
+  }
+  return out;
+}
+
+/**
+ * Same rules as backend normalizeDzPhone_ (Algerian mobile → national 9 digits 5/6/7…).
+ * @param {string|null} phone
+ * @return {boolean}
+ */
 function isPlausiblePhone_(phone) {
   if (!phone) {
     return false;
   }
-  var digits = String(phone).replace(/\D/g, '');
+  var digits = mapUnicodeDigitsToAscii_(String(phone).trim()).replace(/\D/g, '');
   if (!digits || digits.length < 9) {
     return false;
   }
 
-  // Strip international prefixes: 00213, 213
-  if (digits.indexOf('00213') === 0) {
-    digits = digits.slice(5);
-  } else if (digits.indexOf('213') === 0 && digits.length >= 12) {
-    digits = digits.slice(3);
+  var guard;
+  for (guard = 0; guard < 6; guard++) {
+    if (digits.indexOf('00213') === 0) {
+      digits = digits.slice(5);
+    } else if (digits.indexOf('213') === 0 && digits.length >= 12) {
+      digits = digits.slice(3);
+    } else {
+      break;
+    }
   }
 
-  // Strip trunk prefix 0
+  while (digits.charAt(0) === '0' && digits.length > 10) {
+    digits = digits.slice(1);
+  }
+
   if (digits.charAt(0) === '0' && digits.length === 10) {
     digits = digits.slice(1);
   }
@@ -816,6 +996,53 @@ function isoNow_() {
 var KNOWN_CARRIER_ADAPTER_IDS_ = ['yalidine', 'zr'];
 
 /**
+ * @param {string|null|undefined} raw
+ * @return {string}
+ */
+function normalizeCarrierToken_(raw) {
+  if (raw == null) {
+    return '';
+  }
+  return String(raw)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-./]+/g, '')
+    .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
+}
+
+/**
+ * Accept friendly aliases from sheet cells (e.g. "Yalidine", "ZR Express").
+ * @param {string|null|undefined} raw
+ * @return {string|null}
+ */
+function resolveCarrierAlias_(raw) {
+  if (raw == null || String(raw).trim() === '') {
+    return null;
+  }
+  var s = String(raw).trim().toLowerCase();
+  var token = normalizeCarrierToken_(s);
+
+  if (token === 'yalidine' || token.indexOf('yalidine') === 0 || token.indexOf('yali') === 0) {
+    return 'yalidine';
+  }
+  if (/ياليدين|يالدين/.test(s)) {
+    return 'yalidine';
+  }
+
+  if (
+    token === 'zr' ||
+    token.indexOf('zrexpress') === 0 ||
+    token.indexOf('zr') === 0
+  ) {
+    return 'zr';
+  }
+  if (/زد\s*ار|زدار/.test(s)) {
+    return 'zr';
+  }
+  return null;
+}
+
+/**
  * Resolves which carrier adapter to call: explicit slug in sheet cell wins, else default from setup.
  * @param {string|null} rawFromCell
  * @param {string|null} defaultCarrierId
@@ -823,7 +1050,11 @@ var KNOWN_CARRIER_ADAPTER_IDS_ = ['yalidine', 'zr'];
  */
 function resolveCarrierAdapterId_(rawFromCell, defaultCarrierId) {
   if (rawFromCell != null && String(rawFromCell).trim() !== '') {
-    var s = String(rawFromCell).trim().toLowerCase();
+    var alias = resolveCarrierAlias_(rawFromCell);
+    if (alias) {
+      return alias;
+    }
+    var s = normalizeCarrierToken_(rawFromCell);
     for (var i = 0; i < KNOWN_CARRIER_ADAPTER_IDS_.length; i++) {
       if (s === KNOWN_CARRIER_ADAPTER_IDS_[i]) {
         return KNOWN_CARRIER_ADAPTER_IDS_[i];
@@ -831,7 +1062,16 @@ function resolveCarrierAdapterId_(rawFromCell, defaultCarrierId) {
     }
   }
   if (defaultCarrierId != null && String(defaultCarrierId).trim() !== '') {
-    return String(defaultCarrierId).trim().toLowerCase();
+    var defAlias = resolveCarrierAlias_(defaultCarrierId);
+    if (defAlias) {
+      return defAlias;
+    }
+    var def = normalizeCarrierToken_(defaultCarrierId);
+    for (var j = 0; j < KNOWN_CARRIER_ADAPTER_IDS_.length; j++) {
+      if (def === KNOWN_CARRIER_ADAPTER_IDS_[j]) {
+        return KNOWN_CARRIER_ADAPTER_IDS_[j];
+      }
+    }
   }
   return null;
 }
