@@ -70,6 +70,9 @@ const MIGRATION_SQL: string[] = [
     processed_at      TIMESTAMPTZ
   )`,
 
+  // Optional plaintext email for admin UI only (HMAC remains the stable identity key).
+  `ALTER TABLE dt_license ADD COLUMN IF NOT EXISTS google_email TEXT`,
+
   `CREATE INDEX IF NOT EXISTS idx_license_email ON dt_license(user_email_hmac)`,
   `CREATE INDEX IF NOT EXISTS idx_trial_email ON dt_trial_entitlement(user_email_hmac)`,
   `CREATE INDEX IF NOT EXISTS idx_code_lookup ON dt_admin_license_code(code) WHERE revoked = FALSE`,

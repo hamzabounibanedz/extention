@@ -128,6 +128,7 @@ export async function registerAdminRoutes(
     let sql =
       `SELECT
          user_email_hmac,
+         google_email,
          revoked,
          activated_at,
          expires_at,
@@ -135,9 +136,11 @@ export async function registerAdminRoutes(
        FROM dt_license`;
     const params: unknown[] = [];
     if (search) {
-      const h = hashClientIdentity(search.toLowerCase(), pepper);
-      sql += ' WHERE user_email_hmac = $1';
-      params.push(h);
+      const normalized = search.toLowerCase();
+      const h = hashClientIdentity(normalized, pepper);
+      sql +=
+        ' WHERE user_email_hmac = $1 OR (google_email IS NOT NULL AND POSITION($2 IN LOWER(google_email)) > 0)';
+      params.push(h, normalized);
     }
     sql += ' ORDER BY activated_at DESC NULLS LAST LIMIT 200';
 
@@ -170,10 +173,11 @@ export async function registerAdminRoutes(
         `UPDATE dt_license
          SET expires_at = GREATEST(COALESCE(expires_at, NOW()), NOW()) + ($2 || ' days')::interval,
              revoked = FALSE,
-             revoked_at = NULL
+             revoked_at = NULL,
+             google_email = COALESCE(google_email, $3)
          WHERE user_email_hmac = $1
          RETURNING expires_at`,
-        [hashClientIdentity(email, pepper), String(days)],
+        [hashClientIdentity(email, pepper), String(days), email],
       );
       if (licRes.rowCount === 0) {
         await client.query('ROLLBACK');
@@ -224,9 +228,10 @@ export async function registerAdminRoutes(
       const licRes = await client.query(
         `UPDATE dt_license
          SET revoked = TRUE,
-             revoked_at = NOW()
+             revoked_at = NOW(),
+             google_email = COALESCE(google_email, $2)
          WHERE user_email_hmac = $1`,
-        [userEmailHmac],
+        [userEmailHmac, email],
       );
       if (licRes.rowCount === 0) {
         await client.query('ROLLBACK');
