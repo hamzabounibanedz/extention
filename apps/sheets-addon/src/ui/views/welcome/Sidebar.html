@@ -1029,6 +1029,34 @@
           spellcheck="false"
         />
       </div>
+      <div id="dt-carrier-cred-yalidine-wrap" hidden>
+        <label
+          for="dt-carrier-cred-yalidine-id"
+          data-i18n="creds.yalidine_api_id"
+          >Yalidine API ID</label
+        >
+        <input
+          type="text"
+          id="dt-carrier-cred-yalidine-id"
+          class="dt-ltr"
+          data-i18n-placeholder="sidebar.ph.yalidine_api_id"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <label
+          for="dt-carrier-cred-yalidine-token"
+          data-i18n="creds.yalidine_api_token"
+          >Yalidine API Token</label
+        >
+        <input
+          type="password"
+          id="dt-carrier-cred-yalidine-token"
+          class="dt-ltr"
+          data-i18n-placeholder="sidebar.ph.yalidine_api_token"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
       <div id="dt-carrier-cred-zr-wrap" hidden>
         <label
           for="dt-carrier-cred-zr-tenant"
@@ -1190,117 +1218,6 @@
         </button>
       </div>
       <p id="dt-status" class="dt-substatus" role="status"></p>
-    </section>
-
-    <section class="dt-card" id="dt-fees" aria-labelledby="dt-fees-heading">
-      <h2 id="dt-fees-heading" data-i18n="sidebar.section.fees">Fees</h2>
-      <p class="dt-hint" data-i18n="sidebar.hint.fees"></p>
-      <label for="dt-fee-carrier" data-i18n="sidebar.label.carrier"
-        >Carrier</label
-      >
-      <select id="dt-fee-carrier"></select>
-      <label for="dt-fee-default" data-i18n="sidebar.label.fee_default_da"
-        >Default</label
-      >
-      <input
-        type="text"
-        id="dt-fee-default"
-        class="dt-ltr"
-        inputmode="decimal"
-        autocomplete="off"
-      />
-      <label for="dt-fee-wilaya" data-i18n="sidebar.label.fee_wilaya_optional"
-        >Wilaya rules</label
-      >
-      <textarea
-        id="dt-fee-wilaya"
-        class="dt-ltr"
-        rows="5"
-        data-i18n-placeholder="sidebar.ph.fee_wilaya"
-        aria-describedby="dt-fee-hint2"
-      ></textarea>
-      <p
-        id="dt-fee-hint2"
-        class="dt-hint"
-        data-i18n="sidebar.hint.fee_wilaya_line"
-      ></p>
-      <p class="dt-hint" data-i18n="sidebar.hint.fee_wilaya_compat"></p>
-      <div class="dt-actions">
-        <button
-          type="button"
-          class="dt-primary"
-          id="dt-fee-save"
-          data-i18n="sidebar.btn.save_fee_rules"
-        >
-          Save rules
-        </button>
-      </div>
-      <label class="dt-check">
-        <input type="checkbox" id="dt-fee-overwrite" checked />
-        <span data-i18n="sidebar.label.fee_overwrite">Overwrite</span>
-      </label>
-      <div class="dt-actions">
-        <button
-          type="button"
-          id="dt-fee-apply"
-          data-i18n="sidebar.btn.apply_fees_selection"
-        >
-          Apply
-        </button>
-      </div>
-      <p id="dt-fee-status" class="dt-substatus" role="status"></p>
-    </section>
-
-    <section class="dt-card" id="dt-lists" aria-labelledby="dt-lists-heading">
-      <h2 id="dt-lists-heading" data-i18n="sidebar.section.lists">Lists</h2>
-      <p class="dt-hint" data-i18n="sidebar.hint.wilaya_list"></p>
-      <label class="dt-check">
-        <input type="checkbox" id="dt-wilaya-allow-invalid" checked />
-        <span data-i18n="sidebar.label.allow_invalid_wilaya"
-          >Allow invalid</span
-        >
-      </label>
-      <div class="dt-actions">
-        <button
-          type="button"
-          class="dt-primary"
-          id="dt-wilaya-validate"
-          data-i18n="sidebar.btn.validate_wilaya"
-        >
-          Validate wilaya
-        </button>
-      </div>
-      <p class="dt-hint" data-i18n="sidebar.hint.commune_list"></p>
-      <div class="dt-row">
-        <label for="dt-commune-wilaya" data-i18n="sidebar.label.commune_wilaya"
-          >Wilaya</label
-        >
-        <select
-          id="dt-commune-wilaya"
-          aria-describedby="dt-lists-status"
-        ></select>
-      </div>
-      <div class="dt-actions">
-        <button
-          type="button"
-          class="dt-primary"
-          id="dt-commune-validate"
-          data-i18n="sidebar.btn.validate_commune"
-        >
-          Validate commune
-        </button>
-      </div>
-      <p class="dt-hint" data-i18n="sidebar.hint.blacklist_list"></p>
-      <div class="dt-actions">
-        <button
-          type="button"
-          id="dt-blacklist-highlight"
-          data-i18n="sidebar.btn.blacklist_highlight"
-        >
-          Highlight
-        </button>
-      </div>
-      <p id="dt-lists-status" class="dt-substatus" role="status"></p>
     </section>
 
     <section class="dt-card" id="dt-orders" aria-labelledby="dt-orders-heading">

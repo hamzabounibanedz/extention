@@ -5,6 +5,8 @@
 
 var SYNC_TRIGGER_HANDLER_ = 'syncRunAutoTrigger';
 var SYNC_TRIGGER_FREQ_HOURS_ = 1;
+var SYNC_ON_OPEN_MIN_INTERVAL_MS_ = 5 * 60 * 1000;
+var SYNC_ON_OPEN_MAX_SHEETS_ = 20;
 
 /**
  * Shared core for sync (selection and auto).
@@ -386,28 +388,38 @@ function sync_resolveSheetStatusText_(res) {
  * @return {string|null}
  */
 function sync_bucketFromCarrierStateName_(stateName) {
-  var token = String(stateName || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s\-./]+/g, '_');
+  var raw = String(stateName || '').trim().toLowerCase();
+  var token = raw;
+  try {
+    token = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch (e) {}
+  token = token.replace(/[\s\-./]+/g, '_');
   if (!token) {
     return null;
   }
+  // Failure/alert states first (before "livr" substring catches echec_livraison).
   if (
-    token === 'livre' ||
-    token === 'delivered' ||
-    token === 'delivered_success' ||
-    token.indexOf('deliver') >= 0 ||
-    token.indexOf('livr') >= 0
+    token.indexOf('fail') >= 0 ||
+    token.indexOf('echec') >= 0 ||
+    token.indexOf('echou') >= 0 ||
+    token.indexOf('alerte') >= 0 ||
+    token.indexOf('error') >= 0
   ) {
-    return 'delivered';
+    return 'failed';
   }
   if (token === 'returned' || token.indexOf('retour') >= 0 || token.indexOf('return') >= 0) {
     return 'returned';
   }
+  if (token.indexOf('cancel') >= 0 || token.indexOf('annul') >= 0) {
+    return 'cancelled';
+  }
+  // In-transit states (before delivered, so "en_livraison" is not caught by "livr").
   if (
     token === 'en_transit' ||
     token === 'en_cours' ||
+    token === 'vers_wilaya' ||
+    token === 'centre' ||
+    token === 'en_livraison' ||
     token.indexOf('transit') >= 0 ||
     token.indexOf('shipping') >= 0 ||
     token.indexOf('dispatch') >= 0 ||
@@ -416,21 +428,29 @@ function sync_bucketFromCarrierStateName_(stateName) {
     return 'in_transit';
   }
   if (
+    token === 'livre' ||
+    token === 'livree' ||
+    token === 'delivered' ||
+    token === 'delivered_success' ||
+    token.indexOf('deliver') >= 0 ||
+    token.indexOf('livr') >= 0
+  ) {
+    return 'delivered';
+  }
+  if (
     token === 'commande_recue' ||
     token === 'pending' ||
+    token === 'en_preparation' ||
+    token === 'recu' ||
+    token === 'pret_a_expedier' ||
     token.indexOf('attente') >= 0 ||
-    token.indexOf('waiting') >= 0
+    token.indexOf('waiting') >= 0 ||
+    token.indexOf('preparation') >= 0
   ) {
     return 'pending';
   }
   if (token.indexOf('confirm') >= 0) {
     return 'confirmed';
-  }
-  if (token.indexOf('cancel') >= 0 || token.indexOf('annul') >= 0) {
-    return 'cancelled';
-  }
-  if (token.indexOf('fail') >= 0 || token.indexOf('echec') >= 0 || token.indexOf('error') >= 0) {
-    return 'failed';
   }
   return null;
 }
@@ -511,6 +531,222 @@ function sync_isAutoSyncEnabled() {
     }
   }
   return { enabled: false };
+}
+
+/**
+ * Best-effort open-time sync for the active sheet.
+ * Helps phone users get fresh statuses right after opening the spreadsheet.
+ * Runs only when auto-sync is enabled and not throttled.
+ * @return {{ ok: boolean, ran: boolean }}
+ */
+function sync_tryRunOnOpenForActiveSheet_() {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(1500)) {
+    return { ok: false, ran: false };
+  }
+  try {
+    var auto = sync_isAutoSyncEnabled();
+    if (!auto || !auto.enabled) {
+      return { ok: true, ran: false };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return { ok: false, ran: false };
+    }
+    var sheet = ss.getActiveSheet();
+    if (!sheet) {
+      return { ok: false, ran: false };
+    }
+    var spreadsheetId = ss.getId();
+    var sheetId = sheet.getSheetId();
+
+    var lastAttemptIso = DeliveryToolStorage.getLastSyncAttemptIso(spreadsheetId, sheetId);
+    if (lastAttemptIso) {
+      var lastAttemptMs = new Date(lastAttemptIso).getTime();
+      if (
+        isFinite(lastAttemptMs) &&
+        Date.now() - lastAttemptMs < SYNC_ON_OPEN_MIN_INTERVAL_MS_
+      ) {
+        return { ok: true, ran: false };
+      }
+    }
+
+    var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
+    if (!mappingJson) {
+      return { ok: true, ran: false };
+    }
+
+    var saved;
+    try {
+      saved = setup_loadMapping(sheetId);
+    } catch (e0) {
+      return { ok: false, ran: false };
+    }
+    var columns = saved.columns || {};
+    if (columns.trackingColumn == null) {
+      return { ok: true, ran: false };
+    }
+
+    if (typeof license_assertOperationsAllowed_ === 'function') {
+      license_assertOperationsAllowed_({ skipRefresh: true });
+    }
+
+    var headerRow =
+      saved.headerRow != null && String(saved.headerRow).trim() !== ''
+        ? Number(saved.headerRow)
+        : 1;
+    if (!Number.isFinite(headerRow) || headerRow < 1) {
+      headerRow = 1;
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow <= headerRow || lastCol < 1) {
+      return { ok: true, ran: false };
+    }
+
+    var numRows = lastRow - headerRow;
+    var allValues = sheet
+      .getRange(headerRow + 1, 1, numRows, lastCol)
+      .getDisplayValues();
+    var defaultCarrierId =
+      saved.defaultCarrier != null && String(saved.defaultCarrier).trim() !== ''
+        ? String(saved.defaultCarrier).trim()
+        : '';
+
+    sync_runCore_(
+      sheet,
+      sheetId,
+      saved,
+      headerRow,
+      headerRow + 1,
+      lastRow,
+      allValues,
+      defaultCarrierId,
+      spreadsheetId,
+      true
+    );
+    return { ok: true, ran: true };
+  } catch (e) {
+    return { ok: false, ran: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Best-effort open-time sync for all mapped sheets.
+ * Useful when users work from phone and expect all tabs to refresh.
+ *
+ * @return {{ ok: boolean, ran: boolean, ranCount: number }}
+ */
+function sync_tryRunOnOpenForMappedSheets_() {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(1500)) {
+    return { ok: false, ran: false, ranCount: 0 };
+  }
+  try {
+    var auto = sync_isAutoSyncEnabled();
+    if (!auto || !auto.enabled) {
+      return { ok: true, ran: false, ranCount: 0 };
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      return { ok: false, ran: false, ranCount: 0 };
+    }
+    var spreadsheetId = ss.getId();
+    var sheets = ss.getSheets();
+    if (!sheets || !sheets.length) {
+      return { ok: true, ran: false, ranCount: 0 };
+    }
+
+    if (typeof license_assertOperationsAllowed_ === 'function') {
+      license_assertOperationsAllowed_({ skipRefresh: true });
+    }
+
+    var ranCount = 0;
+    for (
+      var i = 0;
+      i < sheets.length && ranCount < SYNC_ON_OPEN_MAX_SHEETS_;
+      i++
+    ) {
+      var sheet = sheets[i];
+      if (!sheet) continue;
+      var sheetId = sheet.getSheetId();
+      var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
+      if (!mappingJson) continue;
+
+      var lastAttemptIso = DeliveryToolStorage.getLastSyncAttemptIso(
+        spreadsheetId,
+        sheetId,
+      );
+      if (lastAttemptIso) {
+        var lastAttemptMs = new Date(lastAttemptIso).getTime();
+        if (
+          isFinite(lastAttemptMs) &&
+          Date.now() - lastAttemptMs < SYNC_ON_OPEN_MIN_INTERVAL_MS_
+        ) {
+          continue;
+        }
+      }
+
+      var saved;
+      try {
+        saved = setup_loadMapping(sheetId);
+      } catch (e0) {
+        continue;
+      }
+      var columns = saved.columns || {};
+      if (columns.trackingColumn == null) continue;
+
+      var headerRow =
+        saved.headerRow != null && String(saved.headerRow).trim() !== ''
+          ? Number(saved.headerRow)
+          : 1;
+      if (!Number.isFinite(headerRow) || headerRow < 1) {
+        headerRow = 1;
+      }
+
+      var lastRow = sheet.getLastRow();
+      var lastCol = sheet.getLastColumn();
+      if (lastRow <= headerRow || lastCol < 1) continue;
+
+      var numRows = lastRow - headerRow;
+      var allValues = sheet
+        .getRange(headerRow + 1, 1, numRows, lastCol)
+        .getDisplayValues();
+      var defaultCarrierId =
+        saved.defaultCarrier != null && String(saved.defaultCarrier).trim() !== ''
+          ? String(saved.defaultCarrier).trim()
+          : '';
+
+      try {
+        sync_runCore_(
+          sheet,
+          sheetId,
+          saved,
+          headerRow,
+          headerRow + 1,
+          lastRow,
+          allValues,
+          defaultCarrierId,
+          spreadsheetId,
+          true
+        );
+        ranCount++;
+      } catch (e1) {
+        // Continue with next mapped sheet.
+      }
+    }
+
+    return { ok: true, ran: ranCount > 0, ranCount: ranCount };
+  } catch (e) {
+    return { ok: false, ran: false, ranCount: 0 };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**

@@ -292,8 +292,6 @@
       "dt-business",
       "dt-setup",
       "dt-orders",
-      "dt-fees",
-      "dt-lists",
       "dt-journal",
       "dt-stats",
     ];
@@ -311,8 +309,6 @@
       "dt-orders": true,
       "dt-business": false,
       "dt-carrier-creds": false,
-      "dt-fees": false,
-      "dt-lists": false,
       "dt-journal": false,
       "dt-stats": false,
     };
@@ -414,6 +410,16 @@
       if (!mapping || !mapping.columns || typeof mapping.columns !== "object") {
         return false;
       }
+      function effectiveCarrierId_() {
+        var fromUi = el && el.carrier ? String(el.carrier.value || "").trim() : "";
+        if (fromUi) return fromUi.toLowerCase();
+        var fromMap =
+          mapping.defaultCarrier != null
+            ? String(mapping.defaultCarrier || "").trim()
+            : "";
+        return fromMap ? fromMap.toLowerCase() : "";
+      }
+      var carrierId = effectiveCarrierId_();
       var required = [
         "orderIdColumn",
         "phoneColumn",
@@ -421,6 +427,11 @@
         "wilayaColumn",
         "codColumn",
       ];
+      // Carrier-aware required field:
+      // Yalidine needs commune/city for all parcels; ZR home also depends on commune.
+      if (carrierId === "yalidine" || carrierId === "zr") {
+        required.push("communeColumn");
+      }
       for (var i = 0; i < required.length; i++) {
         var key = required[i];
         var v = mapping.columns[key];
@@ -430,6 +441,22 @@
         }
       }
       if (!mappingHasCustomerNameColumns_(mapping.columns)) {
+        return false;
+      }
+      // Prevent known mis-mapping: address/wilaya/commune cannot all share one column.
+      var addr = Number(mapping.columns.addressColumn);
+      var wil = Number(mapping.columns.wilayaColumn);
+      var com = Number(mapping.columns.communeColumn);
+      if (
+        isFinite(addr) &&
+        addr >= 1 &&
+        isFinite(wil) &&
+        wil >= 1 &&
+        isFinite(com) &&
+        com >= 1 &&
+        addr === wil &&
+        wil === com
+      ) {
         return false;
       }
       return true;
@@ -1618,10 +1645,14 @@
           if (stCode === "error" || stCode === "no_email") {
             setLicenseStatus((st && st.message) || t("general.error"), "err");
           } else {
-            setLicenseStatus(
+            var backendStatusMessage =
               st.apiConfigured
                 ? t("sidebar.msg.backend_configured")
-                : t("sidebar.msg.backend_need_url"),
+                : state.allowBackendConfig
+                  ? t("sidebar.msg.backend_need_url")
+                  : t("error.backend_config_locked");
+            setLicenseStatus(
+              backendStatusMessage,
               st.apiConfigured ? null : "err",
             );
           }
@@ -1681,10 +1712,9 @@
       return runServer("setup_getContext").then(function (ctx) {
         state.carriers = ctx.carriers || [];
         populateCarrierSelect();
+        populateBizCarrierSelect();
         applyMappingToFields();
-        return loadFeeState().then(function () {
-          return loadCarrierCreds();
-        });
+        return Promise.allSettled([loadCarrierCreds(), loadBusinessSettings()]);
       });
     }
 
@@ -2403,6 +2433,14 @@
       );
     }
 
+    function isYalidineCarrier_(carrierId) {
+      return (
+        String(carrierId || "")
+          .trim()
+          .toLowerCase() === "yalidine"
+      );
+    }
+
     function carrierCredHasSaved_(carrierId) {
       var id = String(carrierId || "").trim();
       if (!id) return false;
@@ -2427,6 +2465,16 @@
           ? t("sidebar.ph.zr_secret_key_saved")
           : t("sidebar.ph.zr_secret_key");
       }
+      if (el.carrierCredYalidineId) {
+        el.carrierCredYalidineId.placeholder = hasSaved
+          ? t("sidebar.ph.yalidine_api_id_saved")
+          : t("sidebar.ph.yalidine_api_id");
+      }
+      if (el.carrierCredYalidineToken) {
+        el.carrierCredYalidineToken.placeholder = hasSaved
+          ? t("sidebar.ph.yalidine_api_token_saved")
+          : t("sidebar.ph.yalidine_api_token");
+      }
     }
 
     function clearCarrierCredDraftInputs_() {
@@ -2439,14 +2487,24 @@
       if (el.carrierCredSecret) {
         el.carrierCredSecret.value = "";
       }
+      if (el.carrierCredYalidineId) {
+        el.carrierCredYalidineId.value = "";
+      }
+      if (el.carrierCredYalidineToken) {
+        el.carrierCredYalidineToken.value = "";
+      }
       renderCarrierCredPlaceholders_();
     }
 
     function renderCarrierCredInputs_() {
       var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
       var zr = isZrCarrier_(cid);
+      var yali = isYalidineCarrier_(cid);
       if (el.carrierCredSingleWrap) {
-        el.carrierCredSingleWrap.hidden = zr;
+        el.carrierCredSingleWrap.hidden = zr || yali;
+      }
+      if (el.carrierCredYalidineWrap) {
+        el.carrierCredYalidineWrap.hidden = !yali;
       }
       if (el.carrierCredZrWrap) {
         el.carrierCredZrWrap.hidden = !zr;
@@ -2484,6 +2542,7 @@
         return;
       }
       var zr = isZrCarrier_(cid);
+      var yali = isYalidineCarrier_(cid);
       var key = el.carrierCredKey
         ? String(el.carrierCredKey.value || "").trim()
         : "";
@@ -2493,8 +2552,18 @@
       var secret = el.carrierCredSecret
         ? String(el.carrierCredSecret.value || "").trim()
         : "";
+      var yaliId = el.carrierCredYalidineId
+        ? String(el.carrierCredYalidineId.value || "").trim()
+        : "";
+      var yaliToken = el.carrierCredYalidineToken
+        ? String(el.carrierCredYalidineToken.value || "").trim()
+        : "";
       if (zr && ((tenant && !secret) || (!tenant && secret))) {
         setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
+        return;
+      }
+      if (yali && ((yaliId && !yaliToken) || (!yaliId && yaliToken))) {
+        setCarrierCredStatus(t("error.yalidine_id_token_required"), "err");
         return;
       }
       setBusy(true);
@@ -2502,13 +2571,23 @@
       setCarrierCredStatus(t("sidebar.msg.saving_carrier_cred"), null);
       var saveReq = zr
         ? runServer("carrierCreds_saveZrCredentials", tenant, secret)
-        : runServer("carrierCreds_saveApiKey", cid, key);
+        : yali
+          ? runServer(
+              "carrierCreds_saveYalidineCredentials",
+              yaliId,
+              yaliToken,
+            )
+          : runServer("carrierCreds_saveApiKey", cid, key);
       saveReq
         .then(function (st) {
           populateCarrierCredSelect(st.byCarrier || {});
           clearCarrierCredDraftInputs_();
           renderCarrierCredInputs_();
-          var hasCred = zr ? !!(tenant || secret) : !!key;
+          var hasCred = zr
+            ? !!(tenant || secret)
+            : yali
+              ? !!(yaliId || yaliToken)
+              : !!key;
           setCarrierCredStatus(
             hasCred
               ? t("sidebar.msg.carrier_saved")
@@ -2532,6 +2611,7 @@
         return;
       }
       var zr = isZrCarrier_(cid);
+      var yali = isYalidineCarrier_(cid);
       var keyDraft = el.carrierCredKey
         ? String(el.carrierCredKey.value || "").trim()
         : "";
@@ -2541,6 +2621,12 @@
       var secretDraft = el.carrierCredSecret
         ? String(el.carrierCredSecret.value || "").trim()
         : "";
+      var yaliIdDraft = el.carrierCredYalidineId
+        ? String(el.carrierCredYalidineId.value || "").trim()
+        : "";
+      var yaliTokenDraft = el.carrierCredYalidineToken
+        ? String(el.carrierCredYalidineToken.value || "").trim()
+        : "";
       if (
         zr &&
         ((tenantDraft && !secretDraft) || (!tenantDraft && secretDraft))
@@ -2548,12 +2634,25 @@
         setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
         return;
       }
+      if (
+        yali &&
+        ((yaliIdDraft && !yaliTokenDraft) || (!yaliIdDraft && yaliTokenDraft))
+      ) {
+        setCarrierCredStatus(t("error.yalidine_id_token_required"), "err");
+        return;
+      }
       setBusy(true);
       setSectionBusy("dt-carrier-creds", true);
       setCarrierCredStatus(t("sidebar.msg.testing_carrier_cred"), null);
       var testReq = zr
         ? runServer("carrierCreds_testZrConnection", tenantDraft, secretDraft)
-        : runServer("carrierCreds_testConnection", cid, keyDraft);
+        : yali
+          ? runServer(
+              "carrierCreds_testYalidineConnection",
+              yaliIdDraft,
+              yaliTokenDraft,
+            )
+          : runServer("carrierCreds_testConnection", cid, keyDraft);
       testReq
         .then(function (res) {
           var ok = !!(res && res.ok);
@@ -2810,9 +2909,8 @@
         })
         .then(function (mapping) {
           state.mapping = mapping;
-          var persistedMappingReady = mappingHasRequiredColumns_(mapping);
           function finalizeMappingLoad_() {
-            state.mappingReady = persistedMappingReady;
+            state.mappingReady = mappingHasRequiredColumns_(state.mapping);
             refreshFlowReadiness_();
             setStatus(
               state.carriersWarning || t("sidebar.msg.ready"),
@@ -2826,7 +2924,19 @@
             });
             return null;
           }
-          return runServer("setup_getSuggestedMapping", sheetId, headerRow)
+          var currentCarrierId =
+            mapping && mapping.defaultCarrier != null
+              ? String(mapping.defaultCarrier || "").trim()
+              : el.carrier
+                ? String(el.carrier.value || "").trim()
+                : "";
+          return runServer(
+            "setup_getCarrierAwareSuggestedMapping",
+            sheetId,
+            headerRow,
+            currentCarrierId || null,
+            (mapping && mapping.columns) || {},
+          )
             .then(function (suggested) {
               state.mapping = mergeSuggestedMapping_(state.mapping, suggested);
               applyMappingToFields();
@@ -2845,6 +2955,50 @@
         .then(function () {
           setSectionBusy("dt-setup", false);
           setBusy(false);
+        });
+    }
+
+    function autoTuneMappingForCarrier_() {
+      var sheetId = state.currentSheetId;
+      if (sheetId == null) return Promise.resolve();
+      if (
+        !state.headerPayload ||
+        !state.headerPayload.columns ||
+        !state.headerPayload.columns.length
+      ) {
+        return Promise.resolve();
+      }
+      var carrierId = el.carrier ? String(el.carrier.value || "").trim() : "";
+      var headerRow = getSelectedHeaderRowOrDefault_();
+      var currentColumns = collectColumnsFromFields();
+      return runServer(
+        "setup_getCarrierAwareSuggestedMapping",
+        sheetId,
+        headerRow,
+        carrierId || null,
+        currentColumns,
+      )
+        .then(function (smart) {
+          var baseMapping = state.mapping || {};
+          state.mapping = mergeSuggestedMapping_(
+            {
+              spreadsheetId: state.spreadsheetId,
+              sheetId: state.currentSheetId,
+              sheetName: baseMapping.sheetName || "",
+              columns: currentColumns,
+              defaultCarrier: carrierId || null,
+              headerRow: headerRow,
+              schemaVersion: baseMapping.schemaVersion || 2,
+            },
+            smart || {},
+          );
+          applyMappingToFields();
+          state.mappingReady = mappingHasRequiredColumns_(state.mapping);
+          refreshFlowReadiness_();
+        })
+        .catch(function () {
+          // Best-effort only; never block user edits when smart tune is unavailable.
+          return null;
         });
     }
 
@@ -3174,8 +3328,11 @@
         el.journalRetrySync = $("dt-journal-retry-sync");
         el.carrierCredCarrier = $("dt-carrier-cred-carrier");
         el.carrierCredSingleWrap = $("dt-carrier-cred-single-wrap");
+        el.carrierCredYalidineWrap = $("dt-carrier-cred-yalidine-wrap");
         el.carrierCredZrWrap = $("dt-carrier-cred-zr-wrap");
         el.carrierCredKey = $("dt-carrier-cred-key");
+        el.carrierCredYalidineId = $("dt-carrier-cred-yalidine-id");
+        el.carrierCredYalidineToken = $("dt-carrier-cred-yalidine-token");
         el.carrierCredTenant = $("dt-carrier-cred-zr-tenant");
         el.carrierCredSecret = $("dt-carrier-cred-zr-secret");
         el.carrierCredSave = $("dt-carrier-cred-save");
@@ -3209,10 +3366,6 @@
         loadLicenseSidebar().catch(function () {
           // Status line already updated inside loadLicenseSidebar().
         });
-        loadSyncMeta();
-        loadAutoSyncState();
-        loadJournal();
-        populateCommuneWilayaSelect();
 
         setBusy(true);
         setStatus(t("sidebar.msg.loading"), null);
@@ -3229,24 +3382,47 @@
             populateSheetSelect();
             populateCarrierSelect();
             populateBizCarrierSelect();
-            return loadFeeState().then(function () {
-              return loadCarrierCreds();
-            });
-          })
-          .then(function () {
-            return loadBusinessSettings();
-          })
-          .then(function () {
-            if (el.feeCarrier) {
-              el.feeCarrier.addEventListener("change", function () {
-                fillFeeFormForCarrier(el.feeCarrier.value);
-              });
-            }
+            // Keep the setup section fast: load critical mapping UI first,
+            // then hydrate secondary panels in background.
             if (state.sheets.length && el.sheet) {
               state.currentSheetId = parseInt(el.sheet.value, 10);
+              setTimeout(function () {
+                loadCarrierCreds().catch(function () {
+                  return null;
+                });
+                loadBusinessSettings().catch(function () {
+                  return null;
+                });
+                loadSyncMeta().catch(function () {
+                  return null;
+                });
+                loadAutoSyncState().catch(function () {
+                  return null;
+                });
+                loadJournal().catch(function () {
+                  return null;
+                });
+              }, 0);
               return loadHeadersAndMapping();
             }
             setStatus(t("sidebar.msg.no_sheets"), "err");
+            setTimeout(function () {
+              loadCarrierCreds().catch(function () {
+                return null;
+              });
+              loadBusinessSettings().catch(function () {
+                return null;
+              });
+              loadSyncMeta().catch(function () {
+                return null;
+              });
+              loadAutoSyncState().catch(function () {
+                return null;
+              });
+              loadJournal().catch(function () {
+                return null;
+              });
+            }, 0);
             return null;
           })
           .catch(function (err) {
@@ -3266,6 +3442,17 @@
         if (headerRowInput) {
           headerRowInput.addEventListener("change", function () {
             loadHeadersAndMapping();
+          });
+        }
+        if (el.carrier) {
+          el.carrier.addEventListener("change", function () {
+            if (!state.mapping || typeof state.mapping !== "object") {
+              state.mapping = { columns: {} };
+            }
+            state.mapping.defaultCarrier = String(el.carrier.value || "").trim();
+            state.mappingReady = mappingHasRequiredColumns_(state.mapping);
+            refreshFlowReadiness_();
+            autoTuneMappingForCarrier_();
           });
         }
 
