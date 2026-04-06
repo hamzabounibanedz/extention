@@ -55,6 +55,7 @@ export type BulkCreateSuccess = {
   parcelId?: string | null;
   trackingNumber?: string | null;
   externalId?: string | null;
+  labelUrl?: string | null;
 };
 
 export type BulkCreateFailure = {

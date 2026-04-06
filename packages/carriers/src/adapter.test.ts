@@ -17,25 +17,118 @@ async function withMockFetch_(
   }
 }
 
-describe('stub adapters', () => {
-  it('Yalidine rejects send without apiKey', async () => {
+describe('carrier adapters', () => {
+  it('Yalidine rejects send without API ID/TOKEN', async () => {
     const a = new YalidineAdapter();
     const r = await a.createShipment({
       order: {} as never,
       credentials: {},
     });
     assert.equal(r.ok, false);
-    assert.ok(String(r.errorMessage || '').includes('clé'));
+    assert.ok(String(r.errorMessage || '').toLowerCase().includes('credentials'));
   });
 
-  it('Yalidine returns stub message when apiKey present', async () => {
+  it('Yalidine createShipment sends Guepex-compatible payload', async () => {
     const a = new YalidineAdapter();
-    const r = await a.createShipment({
-      order: {} as never,
-      credentials: { apiKey: 'x' },
-    });
-    assert.equal(r.ok, false);
-    assert.ok(String(r.errorMessage || '').includes('brancher'));
+    let capturedBody: any = null;
+    let capturedHeaders: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedHeaders = init?.headers || {};
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        const orderId = capturedBody?.[0]?.order_id || 'ORDER-1';
+        return new Response(
+          JSON.stringify({
+            [orderId]: {
+              success: true,
+              order_id: orderId,
+              tracking: 'yal-ABC123',
+              import_id: 42,
+              label: 'https://guepex.app/label/yal-ABC123',
+              message: '',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.createShipment({
+          order: {
+            customerFirstName: 'Ali',
+            customerLastName: 'Ben',
+            phone: '0550123456',
+            address: 'Cite Kaidi',
+            wilaya: 'Alger',
+            commune: 'Bordj El Kiffan',
+            productName: 'Machine a cafe',
+            codAmount: 2400,
+            quantity: 1,
+            deliveryType: 'pickup-point',
+            stopDeskId: '163001',
+          } as never,
+          businessSettings: {
+            senderWilaya: 'Batna',
+            defaultParcelLength: 30,
+            defaultParcelWidth: 20,
+            defaultParcelHeight: 10,
+            defaultParcelWeight: 6,
+          },
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+        });
+        assert.equal(r.ok, true);
+        assert.equal(r.trackingNumber, 'yal-ABC123');
+        assert.equal(r.labelUrl, 'https://guepex.app/label/yal-ABC123');
+      },
+    );
+    assert.equal(capturedHeaders?.['X-API-ID'], 'API-ID-1');
+    assert.equal(capturedHeaders?.['X-API-TOKEN'], 'API-TOKEN-1');
+    assert.equal(Array.isArray(capturedBody), true);
+    assert.equal(capturedBody?.[0]?.is_stopdesk, true);
+    assert.equal(capturedBody?.[0]?.stopdesk_id, 163001);
+  });
+
+  it('Yalidine createShipment falls back sender wilaya from order', async () => {
+    const a = new YalidineAdapter();
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        const orderId = capturedBody?.[0]?.order_id || 'ORDER-2';
+        return new Response(
+          JSON.stringify({
+            [orderId]: {
+              success: true,
+              order_id: orderId,
+              tracking: 'yal-XYZ999',
+              import_id: 84,
+              label: 'https://guepex.app/label/yal-XYZ999',
+              message: '',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.createShipment({
+          order: {
+            customerFirstName: 'Test',
+            customerLastName: 'User',
+            phone: '0550123456',
+            address: 'Centre Ville',
+            wilaya: 'Djelfa',
+            commune: 'Djelfa',
+            productName: 'Item',
+            codAmount: 1500,
+            quantity: 1,
+            deliveryType: 'home',
+          } as never,
+          businessSettings: {},
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+        });
+        assert.equal(r.ok, true);
+      },
+    );
+    assert.equal(capturedBody?.[0]?.from_wilaya_name, 'Djelfa');
   });
 
   it('ZR rejects tracking without credentials', async () => {
