@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { Env as AppEnv } from '../../config/env.js';
 import { hashShipmentUsageSubject, issueShipmentAccessToken } from './access-token.js';
 import {
+  activateLicenseByEmail,
   activateLicenseCode,
   hashClientIdentity,
   resolveLicenseInMemory,
@@ -22,7 +23,7 @@ const statusBodySchema = {
 
 const activateBodySchema = {
   type: 'object',
-  required: ['code', 'email'],
+  required: ['email'],
   properties: {
     code: { type: 'string' },
     email: { type: 'string' },
@@ -84,7 +85,7 @@ export async function registerLicenseRoutes(
     },
   );
 
-  app.post<{ Body: { code: string; email: string } }>(
+  app.post<{ Body: { code?: string; email: string } }>(
     '/v1/license/activate',
     {
       schema: {
@@ -104,11 +105,49 @@ export async function registerLicenseRoutes(
     async (req, reply) => {
       const code = String(req.body?.code ?? '').trim().toUpperCase();
       const email = String(req.body?.email ?? '').trim().toLowerCase();
-      if (!code || !email) {
+      if (!email) {
         return reply.code(400).send({
-          error: 'code_and_email_required',
-          code: 'CODE_AND_EMAIL_REQUIRED',
+          error: 'email_required',
+          code: 'EMAIL_REQUIRED',
         });
+      }
+      if (!code) {
+        if (!pool) {
+          return reply.code(400).send({
+            error: 'activation_failed',
+            code: 'ACTIVATION_FAILED',
+            message: 'email_direct_not_supported_without_db',
+          });
+        }
+        try {
+          const record = await activateLicenseByEmail(pool, { email }, env);
+          if (record.licenseStatus !== 'active') {
+            return reply.code(400).send({
+              error: 'activation_failed',
+              code: 'ACTIVATION_FAILED',
+              message: 'email_not_preapproved',
+            });
+          }
+          if (!env.licenseSigningSecret) {
+            return reply.send(record as any);
+          }
+          const usageSub = hashShipmentUsageSubject(email, env.licenseSigningSecret);
+          const userEmailHmac =
+            env.licensePepper && email ? hashClientIdentity(email, env.licensePepper) : null;
+          const accessToken = issueShipmentAccessToken(
+            record,
+            env.licenseSigningSecret,
+            usageSub,
+            userEmailHmac,
+          );
+          return reply.send({ ...(record as any), accessToken: accessToken ?? null });
+        } catch (e: any) {
+          return reply.code(400).send({
+            error: 'activation_failed',
+            code: 'ACTIVATION_FAILED',
+            message: e?.message || 'activation_failed',
+          });
+        }
       }
       if (!pool) {
         const record = resolveLicenseInMemory(env, { activationCode: code, clientEmail: email });

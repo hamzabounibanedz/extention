@@ -76,6 +76,32 @@ type ResolveInput = {
   spreadsheetId?: string | null;
 };
 
+type DbLicenseRow = {
+  revoked: boolean;
+  expires_at: Date;
+  plan: string | null;
+};
+
+function licenseRecordFromDbRow_(row: DbLicenseRow, customerEmail: string | null): LicenseRecord {
+  const expiresAtIso = new Date(row.expires_at).toISOString();
+  const now = Date.now();
+  const expMs = new Date(expiresAtIso).getTime();
+  const status: LicenseStatus = row.revoked
+    ? 'revoked'
+    : expMs <= now
+      ? 'expired'
+      : 'active';
+  return normalizeLicenseExpiry({
+    licenseKey: null,
+    licenseStatus: status,
+    trialStart: null,
+    trialEnd: null,
+    subscriptionEnd: expiresAtIso,
+    customerEmail,
+    planName: row.plan || 'standard',
+  });
+}
+
 /**
  * Resolves current license/trial state using the migrated schema.
  *
@@ -110,6 +136,36 @@ export async function resolveLicenseWithPool(
   );
   const lic = licenseRes.rows[0];
   if (lic) {
+    const normalized = licenseRecordFromDbRow_(lic, email);
+    if (normalized.licenseStatus === 'active') {
+      await pool.query(
+        `UPDATE dt_license
+         SET google_email = COALESCE(google_email, $1)
+         WHERE user_email_hmac = $2`,
+        [email.trim().toLowerCase(), userEmailHmac],
+      );
+      await pool.query(
+        `UPDATE dt_trial_entitlement
+         SET used = TRUE
+         WHERE user_email_hmac = $1 AND used = FALSE`,
+        [userEmailHmac],
+      );
+      return normalized;
+    }
+  }
+
+  // If the account has a pre-approved (email-bound) pending code,
+  // promote it automatically so users can activate by email without typing a code.
+  try {
+    const direct = await activateLicenseByEmail(pool, { email }, env);
+    if (direct.licenseStatus === 'active') {
+      return direct;
+    }
+  } catch {
+    // No pre-approved code (or direct activation unavailable) — continue normal flow.
+  }
+
+  if (lic) {
     await pool.query(
       `UPDATE dt_license
        SET google_email = COALESCE(google_email, $1)
@@ -122,23 +178,7 @@ export async function resolveLicenseWithPool(
        WHERE user_email_hmac = $1 AND used = FALSE`,
       [userEmailHmac],
     );
-    const expiresAtIso = new Date(lic.expires_at).toISOString();
-    const now = Date.now();
-    const expMs = new Date(expiresAtIso).getTime();
-    const status: LicenseStatus = lic.revoked
-      ? 'revoked'
-      : expMs <= now
-        ? 'expired'
-        : 'active';
-    return normalizeLicenseExpiry({
-      licenseKey: null,
-      licenseStatus: status,
-      trialStart: null,
-      trialEnd: null,
-      subscriptionEnd: expiresAtIso,
-      customerEmail: email,
-      planName: lic.plan || 'standard',
-    });
+    return licenseRecordFromDbRow_(lic, email);
   }
 
   const trialRes = await pool.query<{ created_at: Date; expires_at: Date }>(
@@ -180,6 +220,113 @@ export async function resolveLicenseWithPool(
     customerEmail: email,
     planName: 'trial',
   });
+}
+
+export async function activateLicenseByEmail(
+  pool: Pool,
+  input: { email: string },
+  env: AppEnv,
+): Promise<LicenseRecord> {
+  if (!env.licensePepper) {
+    throw new Error('license_pepper_required');
+  }
+  const normalizedEmail = String(input.email ?? '').trim().toLowerCase();
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    throw new Error('email_required');
+  }
+  const userEmailHmac = hashClientIdentity(normalizedEmail, env.licensePepper);
+
+  const activeCheck = await pool.query<DbLicenseRow>(
+    `SELECT revoked, expires_at, plan
+     FROM dt_license
+     WHERE user_email_hmac = $1
+     ORDER BY activated_at DESC
+     LIMIT 1`,
+    [userEmailHmac],
+  );
+  const existing = activeCheck.rows[0] || null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const codeRow = await client.query<{
+      id: string;
+      duration_days: number;
+      activated_at: Date | null;
+    }>(
+      `SELECT id, duration_days, activated_at
+       FROM dt_admin_license_code
+       WHERE activated_by = $1
+         AND revoked = FALSE
+       ORDER BY created_at DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [userEmailHmac],
+    );
+    if (codeRow.rows.length === 0) {
+      if (existing) {
+        await client.query('ROLLBACK');
+        return licenseRecordFromDbRow_(existing, normalizedEmail);
+      }
+      throw new Error('email_not_preapproved');
+    }
+    const row = codeRow.rows[0];
+    const activatedAt = row.activated_at ? new Date(row.activated_at) : new Date();
+    const duration = Number.isFinite(row.duration_days) && row.duration_days > 0 ? row.duration_days : 365;
+    const candidateExpiresAt = new Date(activatedAt.getTime() + duration * 24 * 60 * 60 * 1000);
+
+    await client.query(
+      `UPDATE dt_admin_license_code
+       SET activated_at = COALESCE(activated_at, $2)
+       WHERE id = $1`,
+      [row.id, activatedAt],
+    );
+
+    const upsert = await client.query<{ expires_at: Date }>(
+      `INSERT INTO dt_license (user_email_hmac, code_id, activated_at, expires_at, revoked, revoked_at, plan, google_email)
+       VALUES ($1, $2, $3, $4, FALSE, NULL, 'standard', $5)
+       ON CONFLICT (user_email_hmac) DO UPDATE
+       SET code_id = EXCLUDED.code_id,
+           activated_at = EXCLUDED.activated_at,
+           expires_at = GREATEST(dt_license.expires_at, EXCLUDED.expires_at),
+           revoked = FALSE,
+           revoked_at = NULL,
+           plan = 'standard',
+           google_email = COALESCE(dt_license.google_email, EXCLUDED.google_email)
+       RETURNING expires_at`,
+      [userEmailHmac, row.id, activatedAt, candidateExpiresAt, normalizedEmail],
+    );
+    const expiresAt = upsert.rows[0] ? new Date(upsert.rows[0].expires_at) : candidateExpiresAt;
+
+    await client.query(
+      `UPDATE dt_trial_entitlement
+       SET used = TRUE
+       WHERE user_email_hmac = $1 AND used = FALSE`,
+      [userEmailHmac],
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      licenseKey: null,
+      licenseStatus: 'active' as LicenseStatus,
+      trialStart: null,
+      trialEnd: null,
+      subscriptionEnd: expiresAt.toISOString(),
+      customerEmail: normalizedEmail,
+      planName: 'standard',
+    };
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback error
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function activateLicenseCode(
@@ -284,11 +431,7 @@ export async function resolveLicenseByHashedIdentity(
   pool: Pool,
   userEmailHmac: string,
 ): Promise<LicenseRecord | null> {
-  const r = await pool.query<{
-    revoked: boolean;
-    expires_at: Date;
-    plan: string | null;
-  }>(
+  const r = await pool.query<DbLicenseRow>(
     `SELECT revoked, expires_at, plan
      FROM dt_license
      WHERE user_email_hmac = $1
@@ -300,19 +443,5 @@ export async function resolveLicenseByHashedIdentity(
   if (!row) {
     return null;
   }
-  const expiresIso = new Date(row.expires_at).toISOString();
-  const status: LicenseStatus = row.revoked
-    ? 'revoked'
-    : new Date(expiresIso).getTime() <= Date.now()
-      ? 'expired'
-      : 'active';
-  return normalizeLicenseExpiry({
-    licenseKey: null,
-    licenseStatus: status,
-    trialStart: null,
-    trialEnd: null,
-    subscriptionEnd: expiresIso,
-    customerEmail: null,
-    planName: row.plan || 'standard',
-  });
+  return licenseRecordFromDbRow_(row, null);
 }

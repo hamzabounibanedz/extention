@@ -9,6 +9,7 @@ import {
   UnknownCarrierError,
 } from '@delivery-tool/carriers';
 import type { Pool } from 'pg';
+import type { InternalOrder } from '@delivery-tool/shared';
 
 type GenericOrderInput = Record<string, unknown>;
 
@@ -47,6 +48,9 @@ function normalizeText_(value: unknown): string {
     .replace(/ؤ/g, 'و')
     .replace(/ئ/g, 'ي')
     .replace(/ة/g, 'ه')
+    // Unify Persian-style letters often seen in Sheets dropdowns / mixed IME input.
+    .replace(/\u06a9/g, 'ك')
+    .replace(/\u06cc/g, 'ي')
     .replace(/[''`ʼ']/g, '')
     .replace(/[\s_./-]+/g, ' ')
     .trim();
@@ -202,6 +206,9 @@ function normalizeDzPhone_(raw: unknown): string | null {
 function normalizeDeliveryType_(raw: unknown): 'home' | 'pickup-point' | null {
   const t = normalizeText_(raw);
   if (!t) return null;
+  // Arabic phrases (after normalizeText_ unifies Persian ك/ي); substring rules beat noisy regex hints.
+  if (t.includes('للمكتب')) return 'pickup-point';
+  if (t.includes('للمنزل') || t.includes('المنزل')) return 'home';
   const pickupSet = new Set([
     'pickup',
     'pickup point',
@@ -211,6 +218,7 @@ function normalizeDeliveryType_(raw: unknown): 'home' | 'pickup-point' | null {
     'bureau',
     'desk',
     'stopdesk',
+    'stop desk',
     'point relais',
     'استلام',
     'مكتب',
@@ -222,6 +230,36 @@ function normalizeDeliveryType_(raw: unknown): 'home' | 'pickup-point' | null {
   if (t.includes('pickup') || t.includes('relay') || t.includes('bureau')) return 'pickup-point';
   if (t.includes('home') || t.includes('domicile') || t.includes('منزل')) return 'home';
   return null;
+}
+
+function resolveDeliveryModeRaw_(row: GenericOrderInput, defaultDeliveryType: string): string {
+  const pick = (v: unknown) => {
+    if (v == null) return '';
+    const s = String(v).trim();
+    return s;
+  };
+  const a = pick(row.deliveryMode);
+  const b = pick(row.deliveryType);
+  if (a) return a;
+  if (b) return b;
+  return defaultDeliveryType;
+}
+
+function coerceAdapterFailureMessage_(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.message === 'string' && o.message.trim()) return o.message.trim();
+    if (typeof o.detail === 'string' && o.detail.trim()) return o.detail.trim();
+    if (typeof o.error === 'string' && o.error.trim()) return o.error.trim();
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return '';
+    }
+  }
+  return String(v);
 }
 
 function resolveOrderRowIndex_(order: GenericOrderInput, idx: number): number {
@@ -294,12 +332,41 @@ function resolveTerritories_(
 ): TerritoryResolution | { error: string } {
   const wilayaNorm = normalizeText_(wilayaRaw);
   const communeNorm = normalizeText_(communeRaw);
-  if (!wilayaNorm && (wilayaCodeRaw == null || String(wilayaCodeRaw).trim() === '')) {
-    return { error: 'Wilaya is required to resolve cityTerritoryId.' };
-  }
   if (!communeNorm) {
     return { error: 'Commune is required to resolve districtTerritoryId.' };
   }
+
+  const inferFromGlobalCommune = (
+    nameToMatch: string,
+  ): TerritoryResolution | { error: string } | null => {
+    const communes = (index.byName.get(nameToMatch) || []).filter(
+      (x) => x.level === 'commune' && x.parentId && index.byId.has(x.parentId),
+    );
+    if (communes.length === 1) {
+      const district = communes[0];
+      const city = index.byId.get(String(district.parentId))!;
+      return {
+        cityTerritoryId: city.id,
+        districtTerritoryId: district.id,
+        city,
+        district,
+      };
+    }
+    if (communes.length > 1) {
+      const parentNames = Array.from(
+        new Set(
+          communes
+            .map((x) => (x.parentId ? index.byId.get(String(x.parentId)) : null))
+            .filter(Boolean)
+            .map((x) => String((x as TerritoryRecord).name)),
+        ),
+      );
+      return {
+        error: `Ambiguous commune "${String(communeRaw)}". Candidate wilayas: ${parentNames.join(', ')}`,
+      };
+    }
+    return null;
+  };
 
   let wilaya: TerritoryRecord | null = null;
   const codeN = Number(String(wilayaCodeRaw ?? '').replace(/[^\d]/g, ''));
@@ -321,6 +388,19 @@ function resolveTerritories_(
       const frCandidates = (index.byName.get(frWilaya) || []).filter((x) => x.level === 'wilaya');
       if (frCandidates.length === 1) {
         wilaya = frCandidates[0];
+      }
+    }
+  }
+  if (!wilaya) {
+    const directCommune = inferFromGlobalCommune(communeNorm);
+    if (directCommune) {
+      return directCommune;
+    }
+    const frCommune = tryArabicToFrench_(communeNorm);
+    if (frCommune) {
+      const translatedCommune = inferFromGlobalCommune(frCommune);
+      if (translatedCommune) {
+        return translatedCommune;
       }
     }
   }
@@ -418,6 +498,18 @@ function toMoney_(value: unknown): number {
   return Math.min(150000, n);
 }
 
+function toBoolLoose_(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const t = value.trim().toLowerCase();
+    if (!t) return fallback;
+    if (t === 'true' || t === '1' || t === 'yes' || t === 'oui') return true;
+    if (t === 'false' || t === '0' || t === 'no' || t === 'non') return false;
+  }
+  return fallback;
+}
+
 async function persistTrackingRows_(
   pool: Pool | null,
   input: {
@@ -461,14 +553,33 @@ async function persistTrackingRows_(
   }
 }
 
-function zrStatePresentation_(stateName: string | null): { fr: string; ar: string; color: string | null } {
-  const key = String(stateName ?? '').toLowerCase();
+function carrierStatePresentation_(stateName: string | null): { fr: string; ar: string; color: string | null } {
+  const key = String(stateName ?? '')
+    .toLowerCase()
+    .replace(/[\s\-./]+/g, '_')
+    .replace(/[éèêë]/g, 'e')
+    .replace(/[àâä]/g, 'a');
   const map: Record<string, { fr: string; ar: string; color: string | null }> = {
-    commande_recue: { fr: 'Commande recue', ar: 'تم استلام الطلب', color: '#5F6368' },
+    // ZR states
+    commande_recue: { fr: 'Commande reçue', ar: 'تم استلام الطلب', color: '#5F6368' },
     en_cours: { fr: 'En cours', ar: 'قيد المعالجة', color: '#1A73E8' },
     en_transit: { fr: 'En transit', ar: 'قيد النقل', color: '#1A73E8' },
-    livre: { fr: 'Livre', ar: 'تم التسليم', color: '#137333' },
+    livre: { fr: 'Livré', ar: 'تم التسليم', color: '#137333' },
     returned: { fr: 'Retour', ar: 'مرتجع', color: '#C5221F' },
+    // Yalidine states
+    en_preparation: { fr: 'En préparation', ar: 'قيد التحضير', color: '#5F6368' },
+    vers_wilaya: { fr: 'Vers wilaya', ar: 'نحو الولاية', color: '#1A73E8' },
+    centre: { fr: 'Centre', ar: 'في المركز', color: '#1A73E8' },
+    en_livraison: { fr: 'En livraison', ar: 'جاري التوصيل', color: '#E37400' },
+    livree: { fr: 'Livrée', ar: 'تم التسليم', color: '#137333' },
+    echec_livraison: { fr: 'Échec livraison', ar: 'فشل التوصيل', color: '#C5221F' },
+    retour: { fr: 'Retour', ar: 'مرتجع', color: '#C5221F' },
+    retour_recu: { fr: 'Retour reçu', ar: 'تم استلام المرتجع', color: '#C5221F' },
+    en_attente: { fr: 'En attente', ar: 'في الانتظار', color: '#5F6368' },
+    en_alerte: { fr: 'En alerte', ar: 'تنبيه', color: '#E37400' },
+    tentative_echouee: { fr: 'Tentative échouée', ar: 'محاولة فاشلة', color: '#E37400' },
+    recu: { fr: 'Reçu', ar: 'مستلم', color: '#5F6368' },
+    pret_a_expedier: { fr: 'Prêt à expédier', ar: 'جاهز للشحن', color: '#1A73E8' },
   };
   return map[key] || { fr: stateName || 'Unknown', ar: stateName || 'غير معروف', color: null };
 }
@@ -501,13 +612,15 @@ export async function sendOrdersBulk(
     }
     throw e;
   }
-  if (!adapter.bulkCreateParcels) {
-    return { ok: false, errorMessage: `${carrier} adapter does not support bulk create` };
+  const hasBulkCreate = typeof adapter.bulkCreateParcels === 'function';
+  const hasCreateShipment = typeof adapter.createShipment === 'function';
+  if (!hasBulkCreate && !hasCreateShipment) {
+    return { ok: false, errorMessage: `${carrier} adapter does not support parcel creation` };
   }
 
   const creds = cleanedCredentials_(input.credentials);
   let territoryIndex: TerritoryIndex | null = null;
-  if (adapter.fetchAllTerritories) {
+  if ((carrier === 'zr' || carrier === 'yalidine') && adapter.fetchAllTerritories) {
     try {
       territoryIndex = await getTerritoryIndex_(carrier, creds);
     } catch (error) {
@@ -516,7 +629,7 @@ export async function sendOrdersBulk(
         errorMessage:
           error instanceof Error
             ? error.message
-            : 'Unable to resolve carrier territories. Please check ZR credentials (tenantId/secretKey).',
+            : `Unable to resolve ${carrier} territories. Please verify carrier credentials.`,
       };
     }
   }
@@ -549,7 +662,7 @@ export async function sendOrdersBulk(
       });
       continue;
     }
-    const deliveryType = normalizeDeliveryType_(row.deliveryMode ?? row.deliveryType ?? defaultDeliveryType);
+    const deliveryType = normalizeDeliveryType_(resolveDeliveryModeRaw_(row, defaultDeliveryType));
     if (!deliveryType) {
       localFailures.push({
         index: i,
@@ -574,7 +687,18 @@ export async function sendOrdersBulk(
     }
 
     let territory: TerritoryResolution | { error: string } | null = null;
-    if (deliveryType === 'home') {
+    const rawWilayaName = String(
+      row.toWilayaName ?? row.to_wilaya_name ?? row.wilaya ?? '',
+    ).trim();
+    const rawCommuneName = String(
+      row.toCommuneName ?? row.to_commune_name ?? row.commune ?? '',
+    ).trim();
+    let resolvedWilayaName = rawWilayaName;
+    let resolvedCommuneName = rawCommuneName;
+    const needsTerritoryResolution =
+      (carrier === 'zr' && deliveryType === 'home') ||
+      (carrier === 'yalidine' && rawCommuneName !== '');
+    if (needsTerritoryResolution) {
       if (!territoryIndex) {
         localFailures.push({
           index: i,
@@ -583,7 +707,12 @@ export async function sendOrdersBulk(
         });
         continue;
       }
-      territory = resolveTerritories_(territoryIndex, row.wilaya, row.commune, row.codeWilaya ?? row.wilayaCode);
+      territory = resolveTerritories_(
+        territoryIndex,
+        rawWilayaName,
+        rawCommuneName,
+        row.codeWilaya ?? row.wilayaCode,
+      );
       if ('error' in territory) {
         localFailures.push({
           index: i,
@@ -602,6 +731,11 @@ export async function sendOrdersBulk(
       }
       // null means the carrier's territory data doesn't include delivery capability info;
       // allow the order through and let the carrier API reject if unsupported.
+      if (carrier === 'yalidine') {
+        resolvedWilayaName = String(territory.city.name ?? rawWilayaName).trim() || rawWilayaName;
+        resolvedCommuneName =
+          String(territory.district.name ?? rawCommuneName).trim() || rawCommuneName;
+      }
     }
 
     const quantity = Math.max(1, Number(row.quantity ?? 1));
@@ -611,6 +745,29 @@ export async function sendOrdersBulk(
     const stockType =
       stockTypeRaw === 'warehouse' || stockTypeRaw === 'local' ? stockTypeRaw : 'none';
     const productName = String(row.productName ?? 'Product').replace(/\|/g, ' ').slice(0, 100) || 'Product';
+    let senderWilayaName = String(
+      input.businessSettings?.senderWilaya ??
+        input.businessSettings?.wilaya ??
+        row.fromWilayaName ??
+        row.from_wilaya_name ??
+        row.toWilayaName ??
+        row.to_wilaya_name ??
+        row.wilaya ??
+        '',
+    ).trim();
+    if (!senderWilayaName) {
+      senderWilayaName = resolvedWilayaName;
+    }
+    const senderAddress = String(
+      input.businessSettings?.senderAddress ?? input.businessSettings?.address ?? '',
+    ).trim();
+    const defaultLength = Number(input.businessSettings?.defaultParcelLength ?? 0);
+    const defaultWidth = Number(input.businessSettings?.defaultParcelWidth ?? 0);
+    const defaultHeight = Number(input.businessSettings?.defaultParcelHeight ?? 0);
+    const explicitWeight = Number(input.businessSettings?.defaultParcelWeight ?? row.weight ?? 0);
+    const customerFirstName = String(row.customerFirstName ?? '').trim();
+    const customerLastName = String(row.customerLastName ?? '').trim();
+    const stopdeskRaw = String(row.stopDeskId ?? row.station ?? '').trim();
 
     const parcel: Record<string, unknown> = {
       customer: {
@@ -625,6 +782,26 @@ export async function sendOrdersBulk(
       description: String(row.note ?? row.description ?? productName).slice(0, 250),
       amount: totalPrice,
       externalId: parcelExternalId_(row, rowIndex),
+      fromWilayaName: senderWilayaName,
+      senderAddress: senderAddress,
+      toWilayaName: resolvedWilayaName,
+      toCommuneName: resolvedCommuneName,
+      address: String(row.address ?? '').trim(),
+      customerFirstName: customerFirstName,
+      customerLastName: customerLastName,
+      stopDeskId: stopdeskRaw || null,
+      freeshipping: toBoolLoose_(row.freeShipping ?? row.freeshipping, false),
+      hasExchange: toBoolLoose_(row.hasExchange ?? row.has_exchange, false),
+      productToCollect:
+        row.productToCollect != null && String(row.productToCollect).trim() !== ''
+          ? String(row.productToCollect).trim()
+          : null,
+      doInsurance: toBoolLoose_(row.doInsurance ?? row.do_insurance, false),
+      declaredValue: toMoney_(row.declaredValue ?? row.declared_value ?? totalPrice),
+      length: Number.isFinite(defaultLength) && defaultLength > 0 ? defaultLength : 0,
+      width: Number.isFinite(defaultWidth) && defaultWidth > 0 ? defaultWidth : 0,
+      height: Number.isFinite(defaultHeight) && defaultHeight > 0 ? defaultHeight : 0,
+      weightValue: Number.isFinite(explicitWeight) && explicitWeight > 0 ? explicitWeight : 0,
       orderedProducts: [
         {
           productName,
@@ -641,7 +818,7 @@ export async function sendOrdersBulk(
       ],
     };
 
-    if (deliveryType === 'home' && territory && !('error' in territory)) {
+    if (carrier === 'zr' && deliveryType === 'home' && territory && !('error' in territory)) {
       parcel.deliveryAddress = {
         cityTerritoryId: territory.cityTerritoryId,
         districtTerritoryId: territory.districtTerritoryId,
@@ -658,6 +835,7 @@ export async function sendOrdersBulk(
         continue;
       }
       parcel.hubId = hubId;
+      parcel.stopDeskId = hubId;
     }
 
     if (stockType === 'warehouse') {
@@ -673,7 +851,7 @@ export async function sendOrdersBulk(
       parcel.hubStockId = hubStockId;
     }
 
-    const weight = Number(input.businessSettings?.defaultWeight ?? row.weight ?? 0);
+    const weight = explicitWeight;
     if (Number.isFinite(weight) && weight > 0) {
       parcel.weight = {
         weight,
@@ -690,6 +868,7 @@ export async function sendOrdersBulk(
     parcelId: string | null;
     trackingNumber: string | null;
     externalId: string | null;
+    labelUrl: string | null;
   }> = [];
   const failures: BulkCreateFailure[] = [...localFailures];
 
@@ -697,38 +876,80 @@ export async function sendOrdersBulk(
     const chunkParcels = parcels.slice(offset, offset + SEND_CHUNK_SIZE);
     const chunkOriginalIndexes = parcelRowIndexes.slice(offset, offset + SEND_CHUNK_SIZE);
 
-    let result: Awaited<ReturnType<NonNullable<typeof adapter.bulkCreateParcels>>> | null = null;
-    for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
-      result = await adapter.bulkCreateParcels({
-        parcels: chunkParcels,
-        credentials: creds,
-      });
-      if (result.httpStatus !== 429 || attempt === RETRY_MAX_ATTEMPTS) break;
-      await sleep_(Math.min(8000, RETRY_BASE_MS * 2 ** (attempt - 1)));
-    }
-    if (!result) continue;
+    if (hasBulkCreate && adapter.bulkCreateParcels) {
+      let result: Awaited<ReturnType<NonNullable<typeof adapter.bulkCreateParcels>>> | null = null;
+      for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+        result = await adapter.bulkCreateParcels({
+          parcels: chunkParcels,
+          credentials: creds,
+        });
+        if (result.httpStatus !== 429 || attempt === RETRY_MAX_ATTEMPTS) break;
+        await sleep_(Math.min(8000, RETRY_BASE_MS * 2 ** (attempt - 1)));
+      }
+      if (!result) continue;
 
-    for (const s of result.successes) {
-      const originalIndex = chunkOriginalIndexes[s.index];
-      if (originalIndex == null) continue;
-      const rowIndex = resolveOrderRowIndex_(input.orders[originalIndex], originalIndex);
-      successes.push({
-        index: originalIndex,
-        rowIndex,
-        parcelId: s.parcelId ?? null,
-        trackingNumber: s.trackingNumber ?? null,
-        externalId: s.externalId ?? null,
-      });
+      for (const s of result.successes) {
+        const originalIndex = chunkOriginalIndexes[s.index];
+        if (originalIndex == null) continue;
+        const rowIndex = resolveOrderRowIndex_(input.orders[originalIndex], originalIndex);
+        successes.push({
+          index: originalIndex,
+          rowIndex,
+          parcelId: s.parcelId ?? null,
+          trackingNumber: s.trackingNumber ?? null,
+          externalId: s.externalId ?? null,
+          labelUrl: s.labelUrl ?? null,
+        });
+      }
+      for (const f of result.failures) {
+        const originalIndex = chunkOriginalIndexes[f.index];
+        if (originalIndex == null) continue;
+        failures.push({
+          index: originalIndex,
+          errorCode: f.errorCode ?? null,
+          errorMessage: coerceAdapterFailureMessage_(f.errorMessage) || 'Carrier request failed',
+          externalId: f.externalId ?? null,
+        });
+      }
+      continue;
     }
-    for (const f of result.failures) {
-      const originalIndex = chunkOriginalIndexes[f.index];
-      if (originalIndex == null) continue;
-      failures.push({
-        index: originalIndex,
-        errorCode: f.errorCode ?? null,
-        errorMessage: f.errorMessage,
-        externalId: f.externalId ?? null,
-      });
+
+    // Backward-compatibility path for older adapters that only implement createShipment().
+    for (const originalIndex of chunkOriginalIndexes) {
+      const row = input.orders[originalIndex];
+      if (originalIndex == null || !row) continue;
+      const rowIndex = resolveOrderRowIndex_(row, originalIndex);
+      try {
+        const created = await adapter.createShipment({
+          order: row as unknown as InternalOrder,
+          credentials: creds,
+          businessSettings: input.businessSettings ?? null,
+        });
+        if (created.ok) {
+          successes.push({
+            index: originalIndex,
+            rowIndex,
+            parcelId: created.externalShipmentId ?? null,
+            trackingNumber: created.trackingNumber ?? null,
+            externalId: created.externalShipmentId ?? null,
+            labelUrl: created.labelUrl ?? null,
+          });
+        } else {
+          failures.push({
+            index: originalIndex,
+            errorCode: 'CREATE_FAILED',
+            errorMessage: created.errorMessage || `${carrier} shipment creation failed`,
+            externalId: null,
+          });
+        }
+      } catch (error) {
+        failures.push({
+          index: originalIndex,
+          errorCode: 'CREATE_FAILED',
+          errorMessage: error instanceof Error ? error.message : String(error),
+          externalId: null,
+        });
+      }
     }
   }
 
@@ -777,7 +998,7 @@ async function searchTrackingOne_(
   };
   const result = await adapter.searchParcels({ body, credentials });
   if (result.httpStatus === 403) {
-    throw new Error('ZR returned 403. Supplier role/permission is required for parcel search.');
+    throw new Error(`${carrier} returned 403. Supplier role/permission is required for parcel search.`);
   }
   if (result.httpStatus >= 400) {
     const raw = result.raw;
@@ -793,7 +1014,7 @@ async function searchTrackingOne_(
       }
     }
     if (detail === 'missing_credentials') {
-      detail = 'Missing ZR credentials (tenantId/secretKey).';
+      detail = `Missing ${carrier} credentials.`;
     }
     throw new Error(
       detail
@@ -860,12 +1081,12 @@ export async function syncTrackingBulk(input: {
             deliveryPrice: null,
             amount: null,
             deliveryType: null,
-            label: zrStatePresentation_(null),
+            label: carrierStatePresentation_(null),
             found: false,
           });
           continue;
         }
-        const label = zrStatePresentation_(found.stateName);
+        const label = carrierStatePresentation_(found.stateName);
         results.push({
           trackingNumber: tracking,
           stateName: found.stateName,

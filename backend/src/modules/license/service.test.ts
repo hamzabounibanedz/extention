@@ -23,6 +23,7 @@ function env_(over: Partial<Env>): Env {
     adminSecret: undefined,
     corsOrigin: undefined,
     zrWebhookSecret: undefined,
+    yalidineWebhookSecret: undefined,
     trialDailyShipmentLimit: 0,
     ...over,
   };
