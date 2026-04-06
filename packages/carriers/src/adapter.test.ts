@@ -131,6 +131,78 @@ describe('carrier adapters', () => {
     assert.equal(capturedBody?.[0]?.from_wilaya_name, 'Djelfa');
   });
 
+  it('Yalidine bulk create surfaces quota text instead of generic 403', async () => {
+    const a = new YalidineAdapter();
+    await withMockFetch_(
+      async () =>
+        new Response('Quota API dépassé. Votre accès à l API est désactivé.', {
+          status: 403,
+          headers: { 'Content-Type': 'text/plain' },
+        }),
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+          parcels: [
+            {
+              order_id: 'ORDER-403',
+              from_wilaya_name: 'Batna',
+              firstname: 'Ali',
+              familyname: 'Ben',
+              contact_phone: '0550123456',
+              address: 'Cite Kaidi',
+              to_commune_name: 'Bordj El Kiffan',
+              to_wilaya_name: 'Alger',
+              product_list: 'Machine a cafe',
+              price: 2400,
+              do_insurance: false,
+              declared_value: 2400,
+              height: 10,
+              width: 20,
+              length: 30,
+              weight: 6,
+              freeshipping: false,
+              is_stopdesk: false,
+              has_exchange: false,
+            },
+          ],
+        });
+        assert.equal(r.successCount, 0);
+        assert.equal(r.failureCount, 1);
+        assert.ok(String(r.failures[0]?.errorMessage || '').includes('Quota API'));
+      },
+    );
+  });
+
+  it('Yalidine searchParcels batches multiple tracking numbers in one request', async () => {
+    const a = new YalidineAdapter();
+    let capturedUrl = '';
+    await withMockFetch_(
+      async (url: any) => {
+        capturedUrl = String(url);
+        return new Response(
+          JSON.stringify({
+            has_more: false,
+            data: [
+              { tracking: 'yal-1', last_status: 'Centre', date_last_status: '2026-04-06 10:00:00' },
+              { tracking: 'yal-2', last_status: 'Livré', date_last_status: '2026-04-06 11:00:00' },
+            ],
+            links: {},
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.searchParcels({
+          body: { trackingNumbers: ['yal-1', 'yal-2'] },
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+        });
+        assert.equal(r.httpStatus, 200);
+        assert.equal(r.items.length, 2);
+      },
+    );
+    assert.ok(capturedUrl.includes('tracking=yal-1%2Cyal-2'));
+  });
+
   it('ZR rejects tracking without credentials', async () => {
     const a = new ZrAdapter();
     const r = await a.getTracking({

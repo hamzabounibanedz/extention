@@ -124,7 +124,7 @@ function asRecord_(value: unknown): Record<string, unknown> {
 function coerceYalidineErrorText_(value: unknown, fallback = ''): string {
   if (value == null) return fallback;
   if (typeof value === 'string') {
-    const t = value.trim();
+    const t = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     return t || fallback;
   }
   if (typeof value === 'number' || typeof value === 'boolean') {
@@ -367,6 +367,7 @@ function parseSingleCreateResult_(
       : null;
   if (!item) {
     const message =
+      coerceYalidineErrorText_(json, '') ||
       coerceYalidineErrorText_(payload.message, '') ||
       coerceYalidineErrorText_(payload.error, '') ||
       coerceYalidineErrorText_(payload.title, '') ||
@@ -819,7 +820,7 @@ export class YalidineAdapter implements CarrierAdapter {
         const localIndex = sendIndexMap[i];
         const parcel = sendParcels[i];
         const orderId = String(parcel.order_id ?? '').trim();
-        const parsed = parseSingleCreateResult_(res.status, res.json, orderId);
+        const parsed = parseSingleCreateResult_(res.status, res.json ?? res.text, orderId);
         if (parsed.success) {
           successes.push({
             ...parsed.success,
