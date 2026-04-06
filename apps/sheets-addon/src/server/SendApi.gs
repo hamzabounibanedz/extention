@@ -5,6 +5,8 @@
 
 var SEND_BATCH_SIZE_ = 50;
 var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
+/** Wait for document lock (ms). Background auto-sync uses short per-sheet locks; this covers long sends/syncs. */
+var SEND_DOC_LOCK_WAIT_MS_ = 120000;
 
 /**
  * Backend/carrier may return structured errors; never surface "[object Object]" in the sidebar.
@@ -56,7 +58,7 @@ function send_coerceErrorMessage_(msg) {
 function send_sendSelection(rowSelectionSpec, options) {
   var opts = options && typeof options === 'object' ? options : {};
   var lock = LockService.getDocumentLock();
-  if (!lock.tryLock(15000)) {
+  if (!lock.tryLock(SEND_DOC_LOCK_WAIT_MS_)) {
     throw new Error(i18n_t('error.send_in_progress'));
   }
   try {
@@ -534,16 +536,16 @@ function send_assertSmartCoreMapping_(columns, previewRows, defaultCarrierId) {
  * @return {string}
  */
 function send_resolveDestinationWilayaText_(order) {
-  var w = order && order.wilaya != null ? String(order.wilaya).trim() : '';
-  if (w) {
-    return w;
-  }
   var wc = order && order.wilayaCode != null ? Number(order.wilayaCode) : NaN;
   if (isFinite(wc) && wc >= 1 && wc <= 58 && typeof order_getWilayaLabelByCode_ === 'function') {
     var byCode = order_getWilayaLabelByCode_(wc);
     if (byCode) {
       return byCode;
     }
+  }
+  var w = order && order.wilaya != null ? String(order.wilaya).trim() : '';
+  if (w) {
+    return w;
   }
   var commune = order && order.commune != null ? String(order.commune).trim() : '';
   if (commune && typeof wilaya_resolveCodeFromText_ === 'function') {

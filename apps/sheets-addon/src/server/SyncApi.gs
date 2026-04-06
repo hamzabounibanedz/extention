@@ -7,6 +7,10 @@ var SYNC_TRIGGER_HANDLER_ = 'syncRunAutoTrigger';
 var SYNC_TRIGGER_FREQ_HOURS_ = 1;
 var SYNC_ON_OPEN_MIN_INTERVAL_MS_ = 5 * 60 * 1000;
 var SYNC_ON_OPEN_MAX_SHEETS_ = 20;
+/** Interactive sync/send wait for document lock (ms). */
+var SYNC_DOC_LOCK_WAIT_MS_ = 120000;
+/** Per-sheet lock for background sync (auto-trigger / multi-sheet open) so manual ops can run between sheets. */
+var SYNC_BG_SHEET_LOCK_WAIT_MS_ = 45000;
 
 /**
  * Shared core for sync (selection and auto).
@@ -215,7 +219,7 @@ function sync_runCore_(
  */
 function sync_syncSelection(rowSelectionSpec) {
   var lock = LockService.getDocumentLock();
-  if (!lock.tryLock(15000)) {
+  if (!lock.tryLock(SYNC_DOC_LOCK_WAIT_MS_)) {
     throw new Error(i18n_t('error.sync_in_progress'));
   }
   try {
@@ -397,11 +401,15 @@ function sync_bucketFromCarrierStateName_(stateName) {
   if (!token) {
     return null;
   }
-  // Failure/alert states first (before "livr" substring catches echec_livraison).
+  if (token.indexOf('alerte_resolue') >= 0) {
+    return 'in_transit';
+  }
+  // Failure states first (before "livr" substring catches echec_livraison).
   if (
     token.indexOf('fail') >= 0 ||
     token.indexOf('echec') >= 0 ||
     token.indexOf('echou') >= 0 ||
+    token.indexOf('echange_echoue') >= 0 ||
     token.indexOf('alerte') >= 0 ||
     token.indexOf('error') >= 0
   ) {
@@ -420,6 +428,15 @@ function sync_bucketFromCarrierStateName_(stateName) {
     token === 'vers_wilaya' ||
     token === 'centre' ||
     token === 'en_livraison' ||
+    token === 'sorti_en_livraison' ||
+    token === 'pret_pour_livreur' ||
+    token === 'recu_a_wilaya' ||
+    token === 'en_localisation' ||
+    token === 'transfert' ||
+    token === 'expedie' ||
+    token === 'ramasse' ||
+    token === 'en_passation' ||
+    token === 'debloque' ||
     token.indexOf('transit') >= 0 ||
     token.indexOf('shipping') >= 0 ||
     token.indexOf('dispatch') >= 0 ||
@@ -441,6 +458,11 @@ function sync_bucketFromCarrierStateName_(stateName) {
     token === 'commande_recue' ||
     token === 'pending' ||
     token === 'en_preparation' ||
+    token === 'pas_encore_expedie' ||
+    token === 'pas_encore_ramasse' ||
+    token === 'a_verifier' ||
+    token === 'en_attente_du_client' ||
+    token === 'bloque' ||
     token === 'recu' ||
     token === 'pret_a_expedier' ||
     token.indexOf('attente') >= 0 ||
@@ -642,111 +664,105 @@ function sync_tryRunOnOpenForActiveSheet_() {
  * @return {{ ok: boolean, ran: boolean, ranCount: number }}
  */
 function sync_tryRunOnOpenForMappedSheets_() {
-  var lock = LockService.getDocumentLock();
-  if (!lock.tryLock(1500)) {
+  var auto = sync_isAutoSyncEnabled();
+  if (!auto || !auto.enabled) {
+    return { ok: true, ran: false, ranCount: 0 };
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
     return { ok: false, ran: false, ranCount: 0 };
   }
-  try {
-    var auto = sync_isAutoSyncEnabled();
-    if (!auto || !auto.enabled) {
-      return { ok: true, ran: false, ranCount: 0 };
-    }
+  var spreadsheetId = ss.getId();
+  var sheets = ss.getSheets();
+  if (!sheets || !sheets.length) {
+    return { ok: true, ran: false, ranCount: 0 };
+  }
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (!ss) {
+  if (typeof license_assertOperationsAllowed_ === 'function') {
+    try {
+      license_assertOperationsAllowed_({ skipRefresh: true });
+    } catch (eLic) {
       return { ok: false, ran: false, ranCount: 0 };
     }
-    var spreadsheetId = ss.getId();
-    var sheets = ss.getSheets();
-    if (!sheets || !sheets.length) {
-      return { ok: true, ran: false, ranCount: 0 };
-    }
+  }
 
-    if (typeof license_assertOperationsAllowed_ === 'function') {
-      license_assertOperationsAllowed_({ skipRefresh: true });
-    }
+  var ranCount = 0;
+  for (var i = 0; i < sheets.length && ranCount < SYNC_ON_OPEN_MAX_SHEETS_; i++) {
+    var sheet = sheets[i];
+    if (!sheet) continue;
+    var sheetId = sheet.getSheetId();
+    var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
+    if (!mappingJson) continue;
 
-    var ranCount = 0;
-    for (
-      var i = 0;
-      i < sheets.length && ranCount < SYNC_ON_OPEN_MAX_SHEETS_;
-      i++
-    ) {
-      var sheet = sheets[i];
-      if (!sheet) continue;
-      var sheetId = sheet.getSheetId();
-      var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
-      if (!mappingJson) continue;
-
-      var lastAttemptIso = DeliveryToolStorage.getLastSyncAttemptIso(
-        spreadsheetId,
-        sheetId,
-      );
-      if (lastAttemptIso) {
-        var lastAttemptMs = new Date(lastAttemptIso).getTime();
-        if (
-          isFinite(lastAttemptMs) &&
-          Date.now() - lastAttemptMs < SYNC_ON_OPEN_MIN_INTERVAL_MS_
-        ) {
-          continue;
-        }
-      }
-
-      var saved;
-      try {
-        saved = setup_loadMapping(sheetId);
-      } catch (e0) {
+    var lastAttemptIso = DeliveryToolStorage.getLastSyncAttemptIso(spreadsheetId, sheetId);
+    if (lastAttemptIso) {
+      var lastAttemptMs = new Date(lastAttemptIso).getTime();
+      if (
+        isFinite(lastAttemptMs) &&
+        Date.now() - lastAttemptMs < SYNC_ON_OPEN_MIN_INTERVAL_MS_
+      ) {
         continue;
       }
-      var columns = saved.columns || {};
-      if (columns.trackingColumn == null) continue;
-
-      var headerRow =
-        saved.headerRow != null && String(saved.headerRow).trim() !== ''
-          ? Number(saved.headerRow)
-          : 1;
-      if (!Number.isFinite(headerRow) || headerRow < 1) {
-        headerRow = 1;
-      }
-
-      var lastRow = sheet.getLastRow();
-      var lastCol = sheet.getLastColumn();
-      if (lastRow <= headerRow || lastCol < 1) continue;
-
-      var numRows = lastRow - headerRow;
-      var allValues = sheet
-        .getRange(headerRow + 1, 1, numRows, lastCol)
-        .getDisplayValues();
-      var defaultCarrierId =
-        saved.defaultCarrier != null && String(saved.defaultCarrier).trim() !== ''
-          ? String(saved.defaultCarrier).trim()
-          : '';
-
-      try {
-        sync_runCore_(
-          sheet,
-          sheetId,
-          saved,
-          headerRow,
-          headerRow + 1,
-          lastRow,
-          allValues,
-          defaultCarrierId,
-          spreadsheetId,
-          true
-        );
-        ranCount++;
-      } catch (e1) {
-        // Continue with next mapped sheet.
-      }
     }
 
-    return { ok: true, ran: ranCount > 0, ranCount: ranCount };
-  } catch (e) {
-    return { ok: false, ran: false, ranCount: 0 };
-  } finally {
-    lock.releaseLock();
+    var saved;
+    try {
+      saved = setup_loadMapping(sheetId);
+    } catch (e0) {
+      continue;
+    }
+    var columns = saved.columns || {};
+    if (columns.trackingColumn == null) continue;
+
+    var headerRow =
+      saved.headerRow != null && String(saved.headerRow).trim() !== ''
+        ? Number(saved.headerRow)
+        : 1;
+    if (!Number.isFinite(headerRow) || headerRow < 1) {
+      headerRow = 1;
+    }
+
+    var defaultCarrierId =
+      saved.defaultCarrier != null && String(saved.defaultCarrier).trim() !== ''
+        ? String(saved.defaultCarrier).trim()
+        : '';
+
+    var lock = LockService.getDocumentLock();
+    if (!lock.tryLock(SYNC_BG_SHEET_LOCK_WAIT_MS_)) {
+      continue;
+    }
+    try {
+      var lastRowIn = sheet.getLastRow();
+      var lastColIn = sheet.getLastColumn();
+      if (lastRowIn <= headerRow || lastColIn < 1) {
+        continue;
+      }
+      var numRowsIn = lastRowIn - headerRow;
+      var allValuesIn = sheet
+        .getRange(headerRow + 1, 1, numRowsIn, lastColIn)
+        .getDisplayValues();
+      sync_runCore_(
+        sheet,
+        sheetId,
+        saved,
+        headerRow,
+        headerRow + 1,
+        lastRowIn,
+        allValuesIn,
+        defaultCarrierId,
+        spreadsheetId,
+        true
+      );
+      ranCount++;
+    } catch (e1) {
+      /* next sheet */
+    } finally {
+      lock.releaseLock();
+    }
   }
+
+  return { ok: true, ran: ranCount > 0, ranCount: ranCount };
 }
 
 /**
@@ -755,24 +771,26 @@ function sync_tryRunOnOpenForMappedSheets_() {
  * (Can be extended later to scan all mapped sheets without an active range.)
  */
 function syncRunAutoTrigger() {
-  var lock = LockService.getDocumentLock();
-  if (!lock.tryLock(2000)) {
-    return;
-  }
   try {
-    // Enforce the same license gate as interactive sync operations so that
-    // premium sync behaviour is consistent between manual and trigger-based runs.
     if (typeof license_assertOperationsAllowed_ === 'function') {
-      // In trigger context we rely on previously cached license state and avoid
-      // calling backend/Session-dependent flows. Users should have opened the
-      // sidebar at least once to populate the cache.
       license_assertOperationsAllowed_({ skipRefresh: true });
     }
+  } catch (e) {
+    return;
+  }
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var spreadsheetId = ss.getId();
-    var sheets = ss.getSheets();
-    for (var i = 0; i < sheets.length; i++) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    return;
+  }
+  var spreadsheetId = ss.getId();
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var lock = LockService.getDocumentLock();
+    if (!lock.tryLock(SYNC_BG_SHEET_LOCK_WAIT_MS_)) {
+      continue;
+    }
+    try {
       var sheet = sheets[i];
       var sheetId = sheet.getSheetId();
       var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
@@ -782,7 +800,7 @@ function syncRunAutoTrigger() {
       var saved;
       try {
         saved = setup_loadMapping(sheetId);
-      } catch (e) {
+      } catch (eMap) {
         continue;
       }
       var columns = saved.columns || {};
@@ -826,15 +844,17 @@ function syncRunAutoTrigger() {
         spreadsheetId,
         true
       );
+      SpreadsheetApp.flush();
+    } catch (eRow) {
+      try {
+        Logger.log(
+          'syncRunAutoTrigger sheet error: %s',
+          eRow && eRow.message ? String(eRow.message) : String(eRow),
+        );
+      } catch (logErr) {}
+    } finally {
+      lock.releaseLock();
     }
-    SpreadsheetApp.flush();
-  } catch (e) {
-    // Log to execution logs for diagnostics but keep the trigger alive.
-    try {
-      Logger.log('syncRunAutoTrigger error: %s', e && e.message ? String(e.message) : String(e));
-    } catch (logErr) {}
-  } finally {
-    lock.releaseLock();
   }
 }
 

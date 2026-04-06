@@ -1066,7 +1066,10 @@ function classifyShipmentBucket_(statusText, hasTracking) {
     }
   }
 
-  if (/suivi echec|echec|failed|erreur|error|#error/.test(sn)) {
+  if (/alerte resolue/.test(sn)) {
+    return 'in_transit';
+  }
+  if (/suivi echec|echec|failed|erreur|error|echange echoue|#error/.test(sn)) {
     return 'failed';
   }
   if (/retour|returned|retourne/.test(sn)) {
@@ -1077,7 +1080,7 @@ function classifyShipmentBucket_(statusText, hasTracking) {
   }
   // Before "delivered": avoid matching "livre" inside "livreur" as delivered.
   if (
-    /transit|exped|expid|envoye|en cours|en livraison|vers wilaya|centre|ramasse|livreur|chez le livreur|sortie|dispatch|shipping/.test(
+    /transit|exped|expid|envoye|en cours|en livraison|vers wilaya|centre|en localisation|recu a wilaya|pret pour livreur|sorti en livraison|transfert|ramasse|passation|debloqu|livreur|chez le livreur|sortie|dispatch|shipping/.test(
       sn
     )
   ) {
@@ -1086,7 +1089,11 @@ function classifyShipmentBucket_(statusText, hasTracking) {
   if (/\bconf(?:irm|erm)(?:e|ee|es|ees|er)?\b/.test(sn)) {
     return 'confirmed';
   }
-  if (/attente|pending|en attente|a confirmer|to confirm|en preparation|pret a exp/.test(sn)) {
+  if (
+    /attente|pending|en attente|en attente du client|a confirmer|to confirm|en preparation|pret a exp|pas encore expedie|pas encore ramasse|a verifier|bloque/.test(
+      sn
+    )
+  ) {
     return 'pending';
   }
   if (/\binj(?:\s*\d+)?\b/.test(sn)) {

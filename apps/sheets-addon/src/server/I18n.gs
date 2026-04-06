@@ -208,9 +208,9 @@ var I18N_DICT_ = {
     "error.no_valid_rows_for_send":
       "لا توجد صفوف صالحة للإرسال. تحقق من ربط الأعمدة المطلوبة (الهاتف، العنوان، الولاية، اسم المستلم، شركة التوصيل).",
     "error.send_in_progress":
-      "هناك عملية إرسال قيد التنفيذ بالفعل. أعد المحاولة بعد ثوانٍ قليلة.",
+      "تعذر بدء الإرسال: جارٍ استخدام الملف (إرسال، مزامنة، أو مزامنة تلقائية). انتظر قليلاً (حتى دقيقتين للملفات الكبيرة) ثم أعد المحاولة دون النقر مرتين.",
     "error.sync_in_progress":
-      "هناك عملية مزامنة قيد التنفيذ بالفعل. أعد المحاولة بعد ثوانٍ قليلة.",
+      "تعذر بدء المزامنة: عملية أخرى تستخدم الملف. انتظر حتى تنتهي ثم أعد المحاولة.",
     // Send
     "send.button": "إرسال الطلبات",
     "send.sending": "⏳ إرسال...",
@@ -489,6 +489,8 @@ var I18N_DICT_ = {
     "sidebar.msg.missing_context": "سياق مفقود.",
     "sidebar.msg.analyzing": "جاري فحص الصفوف المحددة…",
     "sidebar.msg.sending": "جاري الإرسال…",
+    "sidebar.msg.orders_busy":
+      "عملية إرسال أو مزامنة أو فحص جارية بالفعل. انتظر حتى تظهر النتيجة ولا تنقر مرتين.",
     "sidebar.msg.syncing": "جاري المزامنة…",
     "sidebar.msg.validating_wilaya": "جاري التحقق من عمود الولاية…",
     "sidebar.msg.validating_communes": "جاري التحقق من البلديات…",
@@ -733,9 +735,9 @@ var I18N_DICT_ = {
     "error.no_valid_rows_for_send":
       "Aucune ligne valide à envoyer. Vérifiez le mapping (téléphone, adresse, wilaya, nom du destinataire, transporteur).",
     "error.send_in_progress":
-      "Un envoi est déjà en cours. Réessayez dans quelques secondes.",
+      "Envoi impossible : le classeur est verrouillé (envoi, synchro ou synchro auto en cours). Patientez jusqu’à ~2 minutes sur les gros classeurs, puis réessayez sans double-clic.",
     "error.sync_in_progress":
-      "Une synchronisation est déjà en cours. Réessayez dans quelques secondes.",
+      "Synchronisation impossible : une autre opération utilise le classeur. Patientez puis réessayez.",
     "send.button": "Envoyer les commandes",
     "send.sending": "⏳ Envoi...",
     "send.success": "{0} commande(s) envoyée(s)",
@@ -1010,6 +1012,8 @@ var I18N_DICT_ = {
     "sidebar.msg.missing_context": "Contexte manquant.",
     "sidebar.msg.analyzing": "Analyse…",
     "sidebar.msg.sending": "Envoi…",
+    "sidebar.msg.orders_busy":
+      "Un envoi, une synchro ou une analyse est déjà en cours. Attendez le résultat, évitez le double-clic.",
     "sidebar.msg.syncing": "Synchronisation…",
     "sidebar.msg.validating_wilaya": "Validation wilaya…",
     "sidebar.msg.validating_communes": "Validation communes…",
@@ -1253,9 +1257,9 @@ var I18N_DICT_ = {
     "error.no_valid_rows_for_send":
       "No valid rows to send. Check required mapping (phone, address, wilaya, recipient name, carrier).",
     "error.send_in_progress":
-      "Another send operation is already running. Please retry in a few seconds.",
+      "Cannot start send: the spreadsheet is locked (another send, sync, or hourly auto-sync is running). Wait up to ~2 minutes on large workbooks, then try again without double-clicking.",
     "error.sync_in_progress":
-      "Another sync operation is already running. Please retry in a few seconds.",
+      "Cannot start sync: another operation holds the spreadsheet lock. Wait and retry.",
     "send.button": "Send Orders",
     "send.sending": "⏳ Sending...",
     "send.success": "{0} order(s) sent successfully",
@@ -1527,6 +1531,8 @@ var I18N_DICT_ = {
     "sidebar.msg.missing_context": "Missing context.",
     "sidebar.msg.analyzing": "Analyzing…",
     "sidebar.msg.sending": "Sending…",
+    "sidebar.msg.orders_busy":
+      "A send, sync, or preview is already running. Wait for it to finish—avoid double-clicking.",
     "sidebar.msg.syncing": "Syncing…",
     "sidebar.msg.validating_wilaya": "Validating wilaya column…",
     "sidebar.msg.validating_communes": "Validating communes…",
