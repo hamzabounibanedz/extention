@@ -44,6 +44,40 @@ function license_getCurrentEmail_() {
 }
 
 /**
+ * Best-effort cache warm-up on spreadsheet open.
+ * This helps trigger-based flows work even before the sidebar is opened.
+ * @return {{ ok: boolean, refreshed: boolean, reason: string|null }}
+ */
+function license_prefetchCachedStateOnOpen_() {
+  try {
+    var cached = license_getCachedRecord_();
+    if (
+      cached &&
+      cached._cachedAt &&
+      Date.now() - Number(cached._cachedAt) < LICENSE_CACHE_TTL_MS_
+    ) {
+      return { ok: true, refreshed: false, reason: null };
+    }
+
+    var email = license_getCurrentEmail_();
+    if (!email) {
+      return { ok: false, refreshed: false, reason: 'no_email' };
+    }
+
+    var record = apiJsonPost_('/v1/license/status', { email: email });
+    if (!record || typeof record !== 'object') {
+      return { ok: false, refreshed: false, reason: 'invalid_record' };
+    }
+    record._cachedAt = Date.now();
+    DeliveryToolStorage.setLicenseCacheJson(JSON.stringify(record));
+    DeliveryToolStorage.setAccessToken(record.accessToken || null);
+    return { ok: true, refreshed: true, reason: null };
+  } catch (e) {
+    return { ok: false, refreshed: false, reason: 'error' };
+  }
+}
+
+/**
  * Enrich sidebar state with deployment UI settings and backend config flags.
  * @param {Object} state
  * @return {Object}
@@ -86,7 +120,7 @@ function license_getSidebarState() {
   if (!email) {
     return license_attachUiSettings_({
       status: "no_email",
-      message: i18n_t("general.error"),
+      message: i18n_t("license.no_email"),
       record: null,
     });
   }
@@ -165,22 +199,25 @@ function license_buildSidebarState_(record) {
 }
 
 /**
- * Activate with a code sent via WhatsApp.
+ * Activate license.
+ * When code is empty, backend may activate by pre-approved email.
  * @param {string} code
  * @return {{ ok: boolean, message: string }}
  */
 function license_activate(code) {
-  if (!code || String(code).trim() === "") {
-    throw new Error(i18n_t("license.activate_error"));
-  }
   var email = license_getCurrentEmail_();
   if (!email) {
-    throw new Error(i18n_t("general.error"));
+    throw new Error(i18n_t("license.no_email"));
   }
-  var record = apiJsonPost_("/v1/license/activate", {
-    code: String(code).trim().toUpperCase(),
-    email: email,
-  });
+  var normalizedCode = code != null ? String(code).trim().toUpperCase() : "";
+  var payload = { email: email };
+  if (normalizedCode) {
+    payload.code = normalizedCode;
+  }
+  var record = apiJsonPost_("/v1/license/activate", payload);
+  if (!record || (record.licenseStatus && String(record.licenseStatus) !== "active")) {
+    throw new Error(i18n_t("license.activate_error"));
+  }
   // Store JWT and clear/replace cache
   DeliveryToolStorage.setAccessToken(record.accessToken || null);
   record._cachedAt = Date.now();

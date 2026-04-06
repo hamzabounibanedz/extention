@@ -122,6 +122,8 @@ var I18N_DICT_ = {
     "license.activate": "تفعيل",
     "license.activate_success": "تم التفعيل بنجاح",
     "license.activate_error": "كود التفعيل غير صحيح أو منتهي الصلاحية",
+    "license.no_email":
+      "تعذر قراءة بريد حساب Google الحالي. افتح الملف بالحساب الصحيح ثم أعد المحاولة.",
     "license.expires_on": "ينتهي بتاريخ {0}",
     "license.renew_whatsapp": "تجديد الاشتراك عبر واتساب",
     "license.badge_active": "نشط",
@@ -137,6 +139,8 @@ var I18N_DICT_ = {
       "اختر شركة توصيل (القيمة الافتراضية أو عمود الناقل في قسم ربط أعمدة الورقة).",
     "error.zr_tenant_secret_required":
       "يتطلب ZR إدخال tenantId و secretKey معاً.",
+    "error.yalidine_id_token_required":
+      "يتطلب Yalidine إدخال API ID و API TOKEN معاً.",
     "error.sheet_not_found": "تعذر العثور على الورقة.",
     "error.label_column_required":
       "اربط عمود رابط البوليصة أولاً من قسم «ربط أعمدة الورقة» في الشريط الجانبي.",
@@ -145,7 +149,11 @@ var I18N_DICT_ = {
     "error.backend_config_locked":
       "إعدادات الخادم مقفلة في هذا الإصدار المنشور.",
     "error.backend_url_missing": "عنوان الخادم غير مهيأ.",
+    "error.external_request_permission_required":
+      "يلزم تفويض صلاحية الاتصال الخارجي مرة واحدة. أعد فتح الإضافة ووافق على الصلاحيات المطلوبة.",
     "error.api_http": "خطأ API ({0})",
+    "error.endpoint_temporarily_unreachable":
+      "الخادم غير متاح مؤقتاً. حدّث رابط الخادم أو أعد المحاولة بعد {0} ثانية.",
     "error.api_invalid_json": "استجابة API غير صالحة (JSON مطلوب).",
     "error.api_invalid_json_html":
       "استجابة الخادم ليست JSON (تم استلام HTML). تحقق من رابط الخادم/‏ngrok وأنه يشير إلى API الصحيح.",
@@ -190,6 +198,8 @@ var I18N_DICT_ = {
       "تعذر تحميل شركات التوصيل من الخادم. تم استخدام القائمة المحلية مؤقتاً.",
     "warn.backend_carriers_fallback_with_reason":
       "تعذر تحميل شركات التوصيل من الخادم. تم استخدام القائمة المحلية مؤقتاً. السبب: {0}",
+    "warn.backend_carriers_auth_required":
+      "تعذر التحقق من شركات التوصيل لأن صلاحية الاتصال الخارجي غير مفعلة بعد. أعد فتح الإضافة ووافق على الصلاحيات ثم أعد المحاولة.",
     "error.wrong_spreadsheet": "الملف الحالي غير مطابق للسياق المحفوظ.",
     "error.columns_format_invalid": "تنسيق الأعمدة غير صالح.",
     "error.mapping_too_large":
@@ -229,6 +239,8 @@ var I18N_DICT_ = {
       "لشركة ZR: عند التوصيل إلى المكتب/نقطة الاستلام يجب تعبئة «معرّف المكتب / نقطة الاستلام» المربوط في الورقة.",
     "val.commune_required_zr_home":
       "لشركة ZR (توصيل منزلي): البلدية مطلوبة في العمود المربوط قبل الإرسال.",
+    "val.commune_required_yalidine":
+      "لشركة Yalidine: البلدية/المدينة مطلوبة في العمود المربوط قبل الإرسال.",
     // Sync
     "sync.button": "مزامنة الآن",
     "sync.auto_enable": "تفعيل المزامنة التلقائية",
@@ -291,7 +303,7 @@ var I18N_DICT_ = {
     "biz.parcel_height": "ارتفاع الطرد (سم)",
     // Carrier creds
     "creds.yalidine_api_id": "معرف API Yalidine",
-    "creds.yalidine_api_token": "رمز API Yalidine",
+    "creds.yalidine_api_token": "Yalidine API TOKEN",
     "creds.zr_id": "معرف ZR",
     "creds.zr_token": "رمز ZR",
     // General
@@ -334,7 +346,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "إعدادات متقدمة وتشخيص",
     "sidebar.section.carrier_keys": "اعتمادات شركات التوصيل",
     "sidebar.hint.carrier_keys":
-      "اختر شركة التوصيل ثم احصل على رمز API من موقعهم الخاص",
+      "تُحفظ لكل حساب Google (ليست داخل الخلايا). Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. ثم احفظ واختبر الاتصال.",
     "sidebar.label.carrier": "شركة التوصيل",
     "sidebar.label.api_token": "مفتاح / رمز API",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -346,6 +358,11 @@ var I18N_DICT_ = {
     "sidebar.ph.zr_secret_key": "أدخل secretKey",
     "sidebar.ph.zr_tenant_saved": "tenantId محفوظ (أدخل للاستبدال)",
     "sidebar.ph.zr_secret_key_saved": "secretKey محفوظ (أدخل للاستبدال)",
+    "sidebar.ph.yalidine_api_id": "أدخل API ID",
+    "sidebar.ph.yalidine_api_token": "أدخل API TOKEN",
+    "sidebar.ph.yalidine_api_id_saved": "API ID محفوظ (أدخل للاستبدال)",
+    "sidebar.ph.yalidine_api_token_saved":
+      "API TOKEN محفوظ (أدخل للاستبدال)",
     "sidebar.section.business": "بيانات المرسل الافتراضية",
     "sidebar.hint.business":
       "تُملأ تلقائياً في الطلب عند غياب القيمة في الورقة (الاسم، الهاتف، العنوان، الولاية، إلخ).",
@@ -438,7 +455,7 @@ var I18N_DICT_ = {
     "sidebar.map.qty": "الكمية",
     "sidebar.map.cod": "مبلغ الدفع عند الاستلام",
     "sidebar.map.shippingFee": "رسوم الشحن",
-    "sidebar.map.deliveryType": "نوع التوصيل (منزل/مكتب)",
+    "sidebar.map.deliveryType": "نوع التوصيل (منزلي/مكتب أو نقطة استلام)",
     "sidebar.map.stopDeskId": "معرّف المكتب / نقطة الاستلام (Stopdesk)",
     "sidebar.map.status": "الحالة",
     "sidebar.map.carrierCol": "الناقل (عمود)",
@@ -623,6 +640,8 @@ var I18N_DICT_ = {
     "license.activate": "Activer",
     "license.activate_success": "Activation réussie",
     "license.activate_error": "Code invalide ou expiré",
+    "license.no_email":
+      "Impossible de lire l'adresse e-mail du compte Google actif. Ouvrez la feuille avec le bon compte puis réessayez.",
     "license.expires_on": "Expire le {0}",
     "license.renew_whatsapp": "Renouveler sur WhatsApp",
     "license.badge_active": "Actif",
@@ -639,6 +658,8 @@ var I18N_DICT_ = {
       "Choisissez un transporteur (valeur par défaut ou colonne transporteur dans la cartographie).",
     "error.zr_tenant_secret_required":
       "ZR exige de renseigner tenantId et secretKey ensemble.",
+    "error.yalidine_id_token_required":
+      "Yalidine exige de renseigner API ID et API TOKEN ensemble.",
     "error.sheet_not_found": "Feuille introuvable.",
     "error.label_column_required":
       "Mappez d’abord la colonne URL étiquette (section Cartographie des colonnes).",
@@ -647,7 +668,11 @@ var I18N_DICT_ = {
     "error.backend_config_locked":
       "La configuration backend est verrouillée dans ce déploiement.",
     "error.backend_url_missing": "URL backend non configurée.",
+    "error.external_request_permission_required":
+      "L'autorisation d'accès externe est requise. Rouvrez l'extension et accordez les autorisations demandées.",
     "error.api_http": "Erreur API ({0})",
+    "error.endpoint_temporarily_unreachable":
+      "Serveur temporairement indisponible. Mettez à jour l'URL backend ou réessayez dans {0}s.",
     "error.api_invalid_json": "Réponse API invalide (JSON attendu).",
     "error.api_invalid_json_html":
       "La réponse serveur n'est pas du JSON (HTML reçu). Vérifiez l'URL backend/ngrok et la route API.",
@@ -698,6 +723,8 @@ var I18N_DICT_ = {
       "Impossible de charger les transporteurs depuis le backend. La liste locale est utilisée temporairement.",
     "warn.backend_carriers_fallback_with_reason":
       "Impossible de charger les transporteurs depuis le backend. La liste locale est utilisée temporairement. Raison : {0}",
+    "warn.backend_carriers_auth_required":
+      "Impossible de vérifier les transporteurs car l'autorisation d'accès externe n'est pas encore accordée. Rouvrez l'extension, autorisez puis réessayez.",
     "error.wrong_spreadsheet": "Classeur incorrect.",
     "error.columns_format_invalid": "Format des colonnes invalide.",
     "error.mapping_too_large":
@@ -735,6 +762,8 @@ var I18N_DICT_ = {
       "ZR : pour une livraison bureau/point relais, renseignez l’ID bureau (stop-desk) dans la colonne mappée.",
     "val.commune_required_zr_home":
       "ZR (livraison à domicile) : la commune est requise dans la colonne mappée avant l’envoi.",
+    "val.commune_required_yalidine":
+      "Yalidine : la commune/ville est requise dans la colonne mappée avant l’envoi.",
     "sync.button": "Synchroniser maintenant",
     "sync.auto_enable": "Activer la sync auto",
     "sync.auto_disable": "Désactiver la sync auto",
@@ -792,7 +821,7 @@ var I18N_DICT_ = {
     "biz.parcel_width": "Largeur (cm)",
     "biz.parcel_height": "Hauteur (cm)",
     "creds.yalidine_api_id": "ID API Yalidine",
-    "creds.yalidine_api_token": "Token API Yalidine",
+    "creds.yalidine_api_token": "Yalidine API TOKEN",
     "creds.zr_id": "ID ZR",
     "creds.zr_token": "Token ZR",
     "general.error": "Erreur: {0}",
@@ -834,7 +863,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "Diagnostic avancé",
     "sidebar.section.carrier_keys": "Identifiants transporteurs",
     "sidebar.hint.carrier_keys":
-      "Stockés par compte Google, pas dans les cellules. Utilisés seulement pour « Envoyer la sélection » et « Sync suivi ». ZR : tenantId + secretKey, puis Enregistrer et Tester la connexion.",
+      "Stockés par compte Google, pas dans les cellules. Yalidine : API ID + API TOKEN. ZR : tenantId + secretKey. Ensuite Enregistrer puis Tester la connexion.",
     "sidebar.label.carrier": "Transporteur",
     "sidebar.label.api_token": "Clé / token API",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -847,6 +876,12 @@ var I18N_DICT_ = {
     "sidebar.ph.zr_tenant_saved": "tenantId enregistré (saisir pour remplacer)",
     "sidebar.ph.zr_secret_key_saved":
       "secretKey enregistré (saisir pour remplacer)",
+    "sidebar.ph.yalidine_api_id": "Saisir l'API ID",
+    "sidebar.ph.yalidine_api_token": "Saisir l'API TOKEN",
+    "sidebar.ph.yalidine_api_id_saved":
+      "API ID enregistré (saisir pour remplacer)",
+    "sidebar.ph.yalidine_api_token_saved":
+      "API TOKEN enregistré (saisir pour remplacer)",
     "sidebar.section.business": "Expéditeur par défaut",
     "sidebar.hint.business":
       "Remplissent la commande quand la feuille n’a pas la valeur (nom, téléphone, adresse, wilaya, etc.).",
@@ -940,7 +975,7 @@ var I18N_DICT_ = {
     "sidebar.map.qty": "Quantité",
     "sidebar.map.cod": "Montant COD",
     "sidebar.map.shippingFee": "Frais de livraison",
-    "sidebar.map.deliveryType": "Type livraison (domicile/point relais)",
+    "sidebar.map.deliveryType": "Type livraison (domicile/bureau ou point relais)",
     "sidebar.map.stopDeskId": "ID bureau / stop-desk",
     "sidebar.map.status": "Statut",
     "sidebar.map.carrierCol": "Transporteur (colonne)",
@@ -1130,6 +1165,8 @@ var I18N_DICT_ = {
     "license.activate": "Activate",
     "license.activate_success": "Activated successfully",
     "license.activate_error": "Invalid or expired code",
+    "license.no_email":
+      "Unable to read the active Google account email. Open the sheet with the correct account, then try again.",
     "license.expires_on": "Expires on {0}",
     "license.renew_whatsapp": "Renew on WhatsApp",
     "license.badge_active": "Active",
@@ -1145,6 +1182,8 @@ var I18N_DICT_ = {
       "Choose a carrier (default carrier or carrier column in Column mapping).",
     "error.zr_tenant_secret_required":
       "ZR requires both tenantId and secretKey.",
+    "error.yalidine_id_token_required":
+      "Yalidine requires both API ID and API TOKEN.",
     "error.sheet_not_found": "Sheet not found.",
     "error.label_column_required":
       "Map the Label URL column first (Column mapping section).",
@@ -1153,7 +1192,11 @@ var I18N_DICT_ = {
     "error.backend_config_locked":
       "Backend configuration is locked in this deployment.",
     "error.backend_url_missing": "Backend URL is not configured.",
+    "error.external_request_permission_required":
+      "External request permission is required once. Reopen the add-on and grant requested permissions.",
     "error.api_http": "API error ({0})",
+    "error.endpoint_temporarily_unreachable":
+      "Endpoint temporarily unreachable. Update backend URL or retry in {0}s.",
     "error.api_invalid_json": "Invalid API response (expected JSON).",
     "error.api_invalid_json_html":
       "Server response is not JSON (received HTML). Check backend/ngrok URL and API path.",
@@ -1200,6 +1243,8 @@ var I18N_DICT_ = {
       "Could not load carriers from backend. Using local carrier list temporarily.",
     "warn.backend_carriers_fallback_with_reason":
       "Could not load carriers from backend. Using local carrier list temporarily. Reason: {0}",
+    "warn.backend_carriers_auth_required":
+      "Could not verify carriers because external request permission is not granted yet. Reopen the add-on, authorize it, then retry.",
     "error.wrong_spreadsheet": "Wrong spreadsheet context.",
     "error.columns_format_invalid": "Invalid columns format.",
     "error.mapping_too_large":
@@ -1237,6 +1282,8 @@ var I18N_DICT_ = {
       "ZR: for desk/pickup-point delivery, fill the mapped Office / stop-desk ID column.",
     "val.commune_required_zr_home":
       "ZR (home delivery): commune is required in the mapped column before send.",
+    "val.commune_required_yalidine":
+      "Yalidine: commune/city is required in the mapped column before send.",
     "sync.button": "Sync Now",
     "sync.auto_enable": "Enable Auto-Sync",
     "sync.auto_disable": "Disable Auto-Sync",
@@ -1293,7 +1340,7 @@ var I18N_DICT_ = {
     "biz.parcel_width": "Width (cm)",
     "biz.parcel_height": "Height (cm)",
     "creds.yalidine_api_id": "Yalidine API ID",
-    "creds.yalidine_api_token": "Yalidine API Token",
+    "creds.yalidine_api_token": "Yalidine API TOKEN",
     "creds.zr_id": "ZR ID",
     "creds.zr_token": "ZR Token",
     "general.error": "Error: {0}",
@@ -1335,7 +1382,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "Advanced diagnostics",
     "sidebar.section.carrier_keys": "Carrier credentials",
     "sidebar.hint.carrier_keys":
-      "Stored per Google account, not in cells. Used only for “Send selection” and “Sync tracking”. ZR: tenantId + secretKey, then Save and Test connection.",
+      "Stored per Google account, not in cells. Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. Then Save and Test connection.",
     "sidebar.label.carrier": "Carrier",
     "sidebar.label.api_token": "API key / token",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -1347,6 +1394,11 @@ var I18N_DICT_ = {
     "sidebar.ph.zr_secret_key": "Enter secretKey",
     "sidebar.ph.zr_tenant_saved": "tenantId saved (enter to replace)",
     "sidebar.ph.zr_secret_key_saved": "secretKey saved (enter to replace)",
+    "sidebar.ph.yalidine_api_id": "Enter API ID",
+    "sidebar.ph.yalidine_api_token": "Enter API TOKEN",
+    "sidebar.ph.yalidine_api_id_saved": "API ID saved (enter to replace)",
+    "sidebar.ph.yalidine_api_token_saved":
+      "API TOKEN saved (enter to replace)",
     "sidebar.section.business": "Default sender details",
     "sidebar.hint.business":
       "Fill gaps when the sheet row is missing a value (name, phone, address, wilaya, etc.).",
@@ -1440,7 +1492,7 @@ var I18N_DICT_ = {
     "sidebar.map.qty": "Quantity",
     "sidebar.map.cod": "COD amount",
     "sidebar.map.shippingFee": "Shipping fee",
-    "sidebar.map.deliveryType": "Delivery type (home/pickup-point)",
+    "sidebar.map.deliveryType": "Delivery type (home/desk or pickup-point)",
     "sidebar.map.stopDeskId": "Office / stop-desk ID",
     "sidebar.map.status": "Status",
     "sidebar.map.carrierCol": "Carrier (column)",

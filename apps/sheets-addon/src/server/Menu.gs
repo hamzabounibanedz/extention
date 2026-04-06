@@ -38,15 +38,6 @@ function showDeliveryToolSidebar_() {
   } catch (e0) {
     // Best-effort: mobile automation should never block opening the sidebar.
   }
-  try {
-    // Best-effort eager refresh so finance/stats sheets appear without waiting
-    // for an edit event.
-    if (typeof mobile_refreshCompanionArtifactsForActiveSheet === 'function') {
-      mobile_refreshCompanionArtifactsForActiveSheet();
-    }
-  } catch (e1) {
-    // Ignore if mapping is not ready yet.
-  }
   var template = createTemplateFromFileSafe_('src/ui/views/welcome/Sidebar');
   var langPack = i18n_getClientStrings();
   template.lang = langPack.lang;
