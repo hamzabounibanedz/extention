@@ -9,6 +9,12 @@ var MOBILE_ON_EDIT_TRIGGER_HANDLER_ = 'mobile_onEditInstallable_';
 var MOBILE_VIEW_MAP_KEY_PREFIX_ = 'dt.v1.mobile.views.';
 var MOBILE_STATS_MAP_KEY_PREFIX_ = 'dt.v1.mobile.stats.';
 var MOBILE_FINANCE_MAP_KEY_PREFIX_ = 'dt.v1.mobile.finance.';
+var MOBILE_ON_EDIT_LOCK_WAIT_MS_ = 5000;
+// Auto-send should follow explicit user status edits only (no bulk backfill blasts).
+var MOBILE_AUTOSEND_MAX_EDIT_ROWS_ = 1;
+// Keep companion refresh responsive but throttled to avoid heavy work on every edit.
+var MOBILE_REFRESH_THROTTLE_MS_ = 7000;
+var MOBILE_LAST_REFRESH_KEY_PREFIX_ = 'dt.v1.mobile.lastRefresh.';
 
 var MOBILE_FINANCE_HEADERS_ = [
   'Product',
@@ -204,8 +210,10 @@ function mobile_refreshCompanionArtifactsForSheetId(sheetId) {
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e
  */
 function mobile_onEditInstallable_(e) {
-  var lock = LockService.getDocumentLock();
-  if (!lock.tryLock(1500)) {
+  // Use ScriptLock here to avoid deadlocking with send_sendSelection(), which uses
+  // DocumentLock internally.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(MOBILE_ON_EDIT_LOCK_WAIT_MS_)) {
     return;
   }
   try {
@@ -275,6 +283,25 @@ function mobile_handleOnEdit_(e) {
   }
   var editedStatusColumn =
     statusCol != null && statusCol >= startCol && statusCol <= endCol;
+  // Avoid accidental mass auto-send when users paste/import multiple rows at once.
+  if (editedStatusColumn && range.getNumRows() > MOBILE_AUTOSEND_MAX_EDIT_ROWS_) {
+    editedStatusColumn = false;
+  }
+
+  // Mobile parity: if dropdown validations are missing (provider/status),
+  // re-apply them for this mapped sheet on first real data edit.
+  try {
+    mobile_ensureCarrierAndStatusChoiceValidation_(
+      ss,
+      sheet,
+      saved,
+      headerRow,
+      startRow,
+      endRow,
+    );
+  } catch (eVal) {
+    // Best-effort only.
+  }
 
   if (editedStatusColumn) {
     var rowsToAutoSend = mobile_collectRowsToAutoSend_(
@@ -283,14 +310,124 @@ function mobile_handleOnEdit_(e) {
       statusCol,
       headerRow,
       columns,
+      saved.defaultCarrier,
     );
     if (rowsToAutoSend.length) {
       mobile_sendRowsBySelectionSpec_(ss, sheet, rowsToAutoSend);
     }
   }
 
-  // Keep mobile companion sheets/charts in sync for any data-row edit.
-  mobile_refreshCompanionArtifactsForSheet_(ss, sheet, saved);
+  // Keep mobile companion sheets/charts in sync, but avoid heavy re-render on
+  // every keystroke/edit in rapid succession.
+  if (mobile_shouldRefreshCompanionArtifacts_(spreadsheetId, sheetId)) {
+    mobile_refreshCompanionArtifactsForSheet_(ss, sheet, saved);
+  }
+}
+
+/**
+ * Ensures mapped carrier + status columns keep list-choice validation, even when
+ * mobile clients edit sheets without desktop/sidebar initialization.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {Object} saved
+ * @param {number} headerRow
+ * @param {number} startRow
+ * @param {number} endRow
+ */
+function mobile_ensureCarrierAndStatusChoiceValidation_(
+  ss,
+  sheet,
+  saved,
+  headerRow,
+  startRow,
+  endRow,
+) {
+  if (
+    typeof lists_applyCarrierAndStatusColumnValidationForSheet_ !== 'function' ||
+    typeof lists_getCarrierDropdownLabels_ !== 'function' ||
+    typeof lists_getStatusDropdownLabels_ !== 'function'
+  ) {
+    return;
+  }
+  if (endRow <= headerRow) {
+    return;
+  }
+  var columns = saved && saved.columns ? saved.columns : {};
+  var carrierCol =
+    columns.carrierColumn != null && isFinite(Number(columns.carrierColumn))
+      ? Number(columns.carrierColumn)
+      : null;
+  var statusCol =
+    columns.statusColumn != null && isFinite(Number(columns.statusColumn))
+      ? Number(columns.statusColumn)
+      : null;
+  if (carrierCol == null && statusCol == null) {
+    return;
+  }
+  var sampleRow = Math.max(headerRow + 1, startRow);
+  var needsApply = false;
+  if (carrierCol != null) {
+    var carrierRule = sheet.getRange(sampleRow, carrierCol).getDataValidation();
+    if (!carrierRule) {
+      needsApply = true;
+    }
+  }
+  if (!needsApply && statusCol != null) {
+    var statusRule = sheet.getRange(sampleRow, statusCol).getDataValidation();
+    if (!statusRule) {
+      needsApply = true;
+    }
+  }
+  if (!needsApply) {
+    return;
+  }
+
+  lists_applyCarrierAndStatusColumnValidationForSheet_(
+    ss,
+    sheet,
+    saved,
+    false,
+    lists_getCarrierDropdownLabels_(),
+    lists_getStatusDropdownLabels_(),
+  );
+}
+
+/**
+ * @param {string} spreadsheetId
+ * @param {number|string} sheetId
+ * @return {string}
+ */
+function mobile_lastRefreshStoreKey_(spreadsheetId, sheetId) {
+  return MOBILE_LAST_REFRESH_KEY_PREFIX_ + String(spreadsheetId) + ':' + String(sheetId);
+}
+
+/**
+ * Throttle expensive companion refresh work per sheet.
+ *
+ * @param {string} spreadsheetId
+ * @param {number|string} sheetId
+ * @return {boolean}
+ */
+function mobile_shouldRefreshCompanionArtifacts_(spreadsheetId, sheetId) {
+  var sid = Number(sheetId);
+  if (!spreadsheetId || !isFinite(sid) || sid < 1) {
+    return true;
+  }
+  var key = mobile_lastRefreshStoreKey_(spreadsheetId, sid);
+  var now = Date.now();
+  try {
+    var props = PropertiesService.getDocumentProperties();
+    var raw = props.getProperty(key);
+    var last = raw != null ? Number(raw) : 0;
+    if (isFinite(last) && last > 0 && now - last < MOBILE_REFRESH_THROTTLE_MS_) {
+      return false;
+    }
+    props.setProperty(key, String(now));
+  } catch (e) {
+    // If properties fail for any reason, keep functionality over optimization.
+  }
+  return true;
 }
 
 /**
@@ -338,9 +475,17 @@ function mobile_deleteOnEditTriggers_() {
  * @param {number} statusCol
  * @param {number} headerRow
  * @param {Object} columns
+ * @param {string|null|undefined} defaultCarrier
  * @return {Array<number>}
  */
-function mobile_collectRowsToAutoSend_(sheet, range, statusCol, headerRow, columns) {
+function mobile_collectRowsToAutoSend_(
+  sheet,
+  range,
+  statusCol,
+  headerRow,
+  columns,
+  defaultCarrier,
+) {
   var rows = [];
   var startRow = range.getRow();
   var startCol = range.getColumn();
@@ -350,6 +495,17 @@ function mobile_collectRowsToAutoSend_(sheet, range, statusCol, headerRow, colum
   }
 
   var values = range.getDisplayValues();
+  var defaultCarrierId = defaultCarrier != null ? String(defaultCarrier).trim() : '';
+  var carrierCol = mobile_toColumnIndex_(columns && columns.carrierColumn);
+  var carrierValues = null;
+  var carrierCredReadyCache = {};
+  if (carrierCol != null) {
+    try {
+      carrierValues = sheet.getRange(startRow, carrierCol, range.getNumRows(), 1).getDisplayValues();
+    } catch (e0) {
+      carrierValues = null;
+    }
+  }
   for (var i = 0; i < values.length; i++) {
     var rowNum = startRow + i;
     if (rowNum <= headerRow) {
@@ -357,6 +513,26 @@ function mobile_collectRowsToAutoSend_(sheet, range, statusCol, headerRow, colum
     }
     var statusRaw = values[i] && values[i].length > statusOffset ? values[i][statusOffset] : '';
     if (!mobile_isConfirmedStatus_(statusRaw)) {
+      continue;
+    }
+    var resolvedCarrier = '';
+    // Row-level carrier routing for mobile/desktop parity:
+    // when a carrier column is mapped, auto-send only if this row has a selected carrier.
+    if (carrierCol != null) {
+      var carrierRaw = carrierValues && carrierValues[i] && carrierValues[i].length ? carrierValues[i][0] : '';
+      if (carrierRaw == null || String(carrierRaw).trim() === '') {
+        continue;
+      }
+      resolvedCarrier = String(carrierRaw).trim();
+    }
+    if (!resolvedCarrier && defaultCarrierId) {
+      resolvedCarrier = defaultCarrierId;
+    }
+    if (!resolvedCarrier) {
+      continue;
+    }
+    // Require carrier credentials before attempting auto-send to avoid noisy failures.
+    if (!mobile_hasCarrierCredentialsForAutoSend_(resolvedCarrier, carrierCredReadyCache)) {
       continue;
     }
     if (mobile_rowAlreadySent_(sheet, rowNum, columns)) {
@@ -377,6 +553,48 @@ function mobile_collectRowsToAutoSend_(sheet, range, statusCol, headerRow, colum
     }
   }
   return unique;
+}
+
+/**
+ * @param {string} carrierId
+ * @param {Object<string, boolean>=} cache
+ * @return {boolean}
+ */
+function mobile_hasCarrierCredentialsForAutoSend_(carrierId, cache) {
+  var id = carrierId != null ? String(carrierId).trim().toLowerCase() : '';
+  if (!id) {
+    return false;
+  }
+  if (cache && cache[id] != null) {
+    return !!cache[id];
+  }
+  // If credentials helper is unavailable for any reason, do not block auto-send.
+  if (typeof carrierCreds_getForCarrier_ !== 'function') {
+    if (cache) {
+      cache[id] = true;
+    }
+    return true;
+  }
+  var creds = carrierCreds_getForCarrier_(id) || {};
+  var ok = true;
+  if (id === 'zr') {
+    var tenant = creds.tenantId != null ? String(creds.tenantId).trim() : '';
+    var secret =
+      creds.secretKey != null && String(creds.secretKey).trim() !== ''
+        ? String(creds.secretKey).trim()
+        : creds.apiKey != null
+          ? String(creds.apiKey).trim()
+          : '';
+    ok = !!(tenant && secret);
+  } else if (id === 'yalidine') {
+    var apiId = creds.apiId != null ? String(creds.apiId).trim() : '';
+    var apiToken = creds.apiToken != null ? String(creds.apiToken).trim() : '';
+    ok = !!(apiId && apiToken);
+  }
+  if (cache) {
+    cache[id] = ok;
+  }
+  return ok;
 }
 
 /**
@@ -457,7 +675,10 @@ function mobile_sendRowsBySelectionSpec_(ss, targetSheet, rows) {
     if (!previous || previous.getSheetId() !== targetSheet.getSheetId()) {
       ss.setActiveSheet(targetSheet);
     }
-    send_sendSelection(rows.join(','));
+    send_sendSelection(rows.join(','), {
+      skipLicenseRefresh: true,
+      source: 'mobile_on_edit',
+    });
   } catch (e) {
     try {
       Logger.log(

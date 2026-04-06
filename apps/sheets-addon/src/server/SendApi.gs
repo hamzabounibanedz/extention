@@ -7,7 +7,42 @@ var SEND_BATCH_SIZE_ = 50;
 var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
 
 /**
+ * Backend/carrier may return structured errors; never surface "[object Object]" in the sidebar.
+ * @param {*} msg
+ * @return {string}
+ */
+function send_coerceErrorMessage_(msg) {
+  if (msg == null || msg === '') {
+    return '';
+  }
+  if (typeof msg === 'string') {
+    return msg;
+  }
+  if (typeof msg === 'object') {
+    try {
+      if (msg.message != null) {
+        var inner = send_coerceErrorMessage_(msg.message);
+        if (inner) {
+          return inner;
+        }
+      }
+      if (typeof msg.detail === 'string') {
+        return String(msg.detail);
+      }
+      if (typeof msg.error === 'string') {
+        return String(msg.error);
+      }
+      return JSON.stringify(msg);
+    } catch (e) {
+      return String(msg);
+    }
+  }
+  return String(msg);
+}
+
+/**
  * Batches send for selected rows, with checkpoint/resume and label URL collection.
+ * @param {Object=} options
  * @return {{
  *   attempted: number,
  *   succeeded: number,
@@ -18,33 +53,41 @@ var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
  *   labelUrls?: Array<{ rowNumber: number, url: string }>
  * }}
  */
-function send_sendSelection(rowSelectionSpec) {
+function send_sendSelection(rowSelectionSpec, options) {
+  var opts = options && typeof options === 'object' ? options : {};
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(15000)) {
     throw new Error(i18n_t('error.send_in_progress'));
   }
   try {
-  license_assertOperationsAllowed_();
+    license_assertOperationsAllowed_({
+      skipRefresh: !!opts.skipLicenseRefresh,
+    });
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var spreadsheetId = ss.getId();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var spreadsheetId = ss.getId();
 
-  var activeSheet = ss.getActiveSheet();
-  var sheetId = activeSheet.getSheetId();
+    var activeSheet = ss.getActiveSheet();
+    var sheetId = activeSheet.getSheetId();
 
-  var mapping = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
-  if (!mapping) {
-    throw new Error(i18n_t('error.mapping_setup_required'));
-  }
-  mapping = typeof mapping === 'string' ? JSON.parse(mapping) : mapping;
+    var mapping = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
+    if (!mapping) {
+      throw new Error(i18n_t('error.mapping_setup_required'));
+    }
+    mapping = typeof mapping === 'string' ? JSON.parse(mapping) : mapping;
 
-  var columns = mapping.columns || {};
-  var sheet = getSheetById_(ss, mapping.sheetId || sheetId);
-  if (!sheet) {
-    throw new Error(i18n_t('error.sheet_not_found'));
-  }
+    var columns = mapping.columns || {};
+    var sheet = getSheetById_(ss, mapping.sheetId || sheetId);
+    if (!sheet) {
+      throw new Error(i18n_t('error.sheet_not_found'));
+    }
 
   var preview = order_previewSelection(rowSelectionSpec);
+  send_assertSmartCoreMapping_(
+    columns,
+    preview && preview.rows ? preview.rows : [],
+    mapping && mapping.defaultCarrier ? String(mapping.defaultCarrier) : null,
+  );
 
   // If there are no valid rows at all but we did analyze some, surface a clear
   // error instead of silently returning a zero-send result. This usually means
@@ -186,12 +229,29 @@ function send_sendSelection(rowSelectionSpec) {
     Object.keys(byCarrier).forEach(function (carrierId) {
       var carrierRows = byCarrier[carrierId];
       var creds = carrierCreds_getForCarrier_(carrierId);
+      var credsError = send_getCarrierCredentialsError_(carrierId, creds);
+      if (credsError) {
+        carrierRows.forEach(function (rowObj) {
+          failed++;
+          if (columns.statusColumn != null) {
+            sheet
+              .getRange(rowObj.rowNumber, Number(columns.statusColumn))
+              .setValue(i18n_format('general.error', credsError));
+          }
+          batchDetails.push({
+            rowNumber: rowObj.rowNumber,
+            ok: false,
+            errorMessage: credsError,
+          });
+        });
+        return;
+      }
       var payload = {
         carrier: String(carrierId),
         spreadsheetId: spreadsheetId,
         sheetName: sheet.getName(),
         orders: carrierRows.map(function (r) {
-          return send_buildBackendOrder_(r.order, r.rowNumber);
+          return send_buildBackendOrder_(r.order, r.rowNumber, businessSettings);
         }),
         businessSettings: businessSettings,
         credentials: creds || {},
@@ -260,7 +320,8 @@ function send_sendSelection(rowSelectionSpec) {
           if (isNaN(idx) || idx < 0 || idx >= carrierRows.length) return;
           handled[idx] = true;
           var rowObj = carrierRows[idx];
-          var errMsg = f.errorMessage != null ? String(f.errorMessage) : i18n_t('send.error_generic');
+          var errMsg =
+            send_coerceErrorMessage_(f.errorMessage) || i18n_t('send.error_generic');
           if (columns.statusColumn != null) {
             sheet.getRange(rowObj.rowNumber, Number(columns.statusColumn)).setValue(i18n_format('general.error', errMsg));
           }
@@ -347,8 +408,12 @@ function send_sendSelection(rowSelectionSpec) {
   } catch (refreshErr) {}
 
   var failedDetails = batchDetails
-    .filter(function (d) { return !d.ok && d.errorMessage; })
-    .map(function (d) { return { row: d.rowNumber, error: d.errorMessage }; });
+    .filter(function (d) {
+      return !d.ok && send_coerceErrorMessage_(d.errorMessage);
+    })
+    .map(function (d) {
+      return { row: d.rowNumber, error: send_coerceErrorMessage_(d.errorMessage) };
+    });
   return {
     attempted: sent + failed,
     succeeded: sent,
@@ -365,11 +430,153 @@ function send_sendSelection(rowSelectionSpec) {
 }
 
 /**
+ * Validate required credentials for known carriers before network calls.
+ *
+ * @param {string} carrierId
+ * @param {Object<string, *>|null|undefined} creds
+ * @return {string} Empty string when credentials look valid.
+ */
+function send_getCarrierCredentialsError_(carrierId, creds) {
+  var id = carrierId != null ? String(carrierId).trim().toLowerCase() : '';
+  var c = creds && typeof creds === 'object' ? creds : {};
+  if (id === 'zr') {
+    var tenant = c.tenantId != null ? String(c.tenantId).trim() : '';
+    var secret =
+      c.secretKey != null && String(c.secretKey).trim() !== ''
+        ? String(c.secretKey).trim()
+        : c.apiKey != null
+          ? String(c.apiKey).trim()
+          : '';
+    if (!tenant || !secret) {
+      return i18n_t('error.zr_tenant_secret_required');
+    }
+  } else if (id === 'yalidine') {
+    var apiId = c.apiId != null ? String(c.apiId).trim() : '';
+    var apiToken = c.apiToken != null ? String(c.apiToken).trim() : '';
+    if (!apiId || !apiToken) {
+      return i18n_t('error.yalidine_id_token_required');
+    }
+  }
+  return '';
+}
+
+/**
+ * Smart sanity checks to catch common mapping mistakes early.
+ * Prevents sending rows when core destination fields are clearly mis-mapped.
+ *
+ * @param {Object} columns
+ * @param {Array<Object>=} previewRows
+ * @param {string|null=} defaultCarrierId
+ */
+function send_assertSmartCoreMapping_(columns, previewRows, defaultCarrierId) {
+  var c = columns || {};
+  var addressCol = c.addressColumn != null ? Number(c.addressColumn) : null;
+  var wilayaCol = c.wilayaColumn != null ? Number(c.wilayaColumn) : null;
+  var communeCol = c.communeColumn != null ? Number(c.communeColumn) : null;
+
+  var hasAddress = Number.isFinite(addressCol) && addressCol >= 1;
+  var hasWilaya = Number.isFinite(wilayaCol) && wilayaCol >= 1;
+  var hasCommune = Number.isFinite(communeCol) && communeCol >= 1;
+
+  // If all three are mapped to the exact same column, shipping payload quality is invalid.
+  if (
+    hasAddress &&
+    hasWilaya &&
+    hasCommune &&
+    addressCol === wilayaCol &&
+    wilayaCol === communeCol
+  ) {
+    // Yalidine can work with a single BALADIA-like column when commune is present;
+    // ZR and unknown carriers still need strict territory safety checks.
+    var rows = Array.isArray(previewRows) ? previewRows : [];
+    var analyzedCount = 0;
+    var allYalidine = rows.length > 0;
+    var canInferTerritory = false;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      if (row.skipped || !row.order) {
+        continue;
+      }
+      analyzedCount++;
+      var ord = row.order || {};
+      var carrierId =
+        typeof resolveCarrierAdapterId_ === 'function'
+          ? resolveCarrierAdapterId_(ord.carrier || null, defaultCarrierId || null)
+          : ord.carrier != null
+            ? String(ord.carrier).trim().toLowerCase()
+            : defaultCarrierId != null
+              ? String(defaultCarrierId).trim().toLowerCase()
+              : '';
+      if (carrierId !== 'yalidine') {
+        allYalidine = false;
+      }
+      var commune = ord.commune != null ? String(ord.commune).trim() : '';
+      var wCode = Number(ord.wilayaCode);
+      if (commune && isFinite(wCode) && wCode >= 1 && wCode <= 58) {
+        canInferTerritory = true;
+        break;
+      }
+    }
+    if (analyzedCount > 0 && allYalidine) {
+      return;
+    }
+    if (!canInferTerritory) {
+      throw new Error(
+        'ربط الأعمدة غير صحيح: لا يمكن أن تكون «العنوان» و«الولاية» و«البلدية/المدينة» نفس العمود. قم بتصحيح الربط ثم أعد الإرسال.',
+      );
+    }
+  }
+}
+
+/**
+ * Best-effort destination wilaya string for carrier APIs (Yalidine needs non-empty names).
+ * @param {Object} order
+ * @return {string}
+ */
+function send_resolveDestinationWilayaText_(order) {
+  var w = order && order.wilaya != null ? String(order.wilaya).trim() : '';
+  if (w) {
+    return w;
+  }
+  var wc = order && order.wilayaCode != null ? Number(order.wilayaCode) : NaN;
+  if (isFinite(wc) && wc >= 1 && wc <= 58 && typeof order_getWilayaLabelByCode_ === 'function') {
+    var byCode = order_getWilayaLabelByCode_(wc);
+    if (byCode) {
+      return byCode;
+    }
+  }
+  var commune = order && order.commune != null ? String(order.commune).trim() : '';
+  if (commune && typeof wilaya_resolveCodeFromText_ === 'function') {
+    var inferred = wilaya_resolveCodeFromText_(commune);
+    if (inferred != null && inferred >= 1 && inferred <= 58 && typeof order_getWilayaLabelByCode_ === 'function') {
+      var byInf = order_getWilayaLabelByCode_(inferred);
+      if (byInf) {
+        return byInf;
+      }
+    }
+  }
+  return commune;
+}
+
+/**
  * @param {Object} order
  * @param {number} rowNumber
+ * @param {Object=} businessSettings
  * @return {Object}
  */
-function send_buildBackendOrder_(order, rowNumber) {
+function send_buildBackendOrder_(order, rowNumber, businessSettings) {
+  var bs =
+    businessSettings && typeof businessSettings === 'object'
+      ? businessSettings
+      : businessSettings_get().value || businessSettings_getDefaults_();
+  var senderWilaya = bs && bs.senderWilaya != null ? String(bs.senderWilaya).trim() : '';
+  if (!senderWilaya && bs && bs.wilaya != null) {
+    senderWilaya = String(bs.wilaya).trim();
+  }
+
+  var destWilaya = send_resolveDestinationWilayaText_(order || {});
+  var fromWilaya = senderWilaya || destWilaya;
+
   var first = order && order.customerFirstName ? String(order.customerFirstName).trim() : '';
   var last = order && order.customerLastName ? String(order.customerLastName).trim() : '';
   var customerName = [first, last].join(' ').trim();
@@ -380,13 +587,22 @@ function send_buildBackendOrder_(order, rowNumber) {
     rowIndex: rowNumber,
     spreadsheetId: order && order.spreadsheetId ? order.spreadsheetId : null,
     sheetName: order && order.sheetName ? order.sheetName : null,
+    orderId: order && order.orderId ? String(order.orderId) : null,
     customerName: customerName,
+    customerFirstName: first,
+    customerLastName: last,
     phone1: order && order.phone ? String(order.phone) : '',
     phone2: null,
-    wilaya: order && order.wilaya ? String(order.wilaya) : '',
+    address: order && order.address ? String(order.address) : '',
+    wilaya: destWilaya,
     commune: order && order.commune ? String(order.commune) : '',
     codeWilaya: order && order.wilayaCode != null ? order.wilayaCode : null,
+    fromWilayaName: fromWilaya,
+    toWilayaName: destWilaya,
+    from_wilaya_name: fromWilaya,
+    to_wilaya_name: destWilaya,
     deliveryMode: order && order.deliveryType ? String(order.deliveryType) : '',
+    deliveryType: order && order.deliveryType ? String(order.deliveryType) : '',
     totalPrice: order && order.codAmount != null ? Number(order.codAmount) : 0,
     productName: order && order.productName ? String(order.productName) : '',
     quantity: order && order.quantity != null ? Number(order.quantity) : 1,
@@ -396,7 +612,18 @@ function send_buildBackendOrder_(order, rowNumber) {
         : null,
     note: order && order.notes ? String(order.notes) : null,
     station: order && order.stopDeskId ? String(order.stopDeskId) : null,
-    externalId: order && order.externalShipmentId ? String(order.externalShipmentId) : null,
+    hasExchange: !!(order && order.hasExchange),
+    freeShipping: !!(order && order.freeShipping),
+    productToCollect:
+      order && order.productToCollect != null
+        ? String(order.productToCollect)
+        : null,
+    externalId:
+      order && order.externalShipmentId
+        ? String(order.externalShipmentId)
+        : order && order.orderId
+          ? String(order.orderId)
+          : null,
   };
 }
 

@@ -40,6 +40,125 @@
  * @property {string} updatedAt
  */
 
+var ORDER_DELIVERY_PICKUP_TERMS_ = {
+  stopdesk: true,
+  'stop desk': true,
+  pickup: true,
+  'pick up': true,
+  'pickup point': true,
+  pickuppoint: true,
+  'pickup-point': true,
+  'point relais': true,
+  relay: true,
+  relais: true,
+  bureau: true,
+  desk: true,
+  office: true,
+  agence: true,
+  agency: true,
+  'point de retrait': true,
+  'point retrait': true,
+  'نقطة استلام': true,
+  'نقطة الاستلام': true,
+  مكتب: true,
+  'مكتب استلام': true,
+  'مكتب التوصيل': true,
+  // Common sheet phrasing (office / stop-desk) — same column as delivery type
+  'التوصيل للمكتب': true,
+  'توصيل للمكتب': true,
+  'الى المكتب': true,
+  'إلى المكتب': true,
+  'استلام من المكتب': true,
+};
+
+var ORDER_DELIVERY_HOME_TERMS_ = {
+  home: true,
+  'at home': true,
+  domicile: true,
+  'a domicile': true,
+  maison: true,
+  house: true,
+  residence: true,
+  livraison: true,
+  livrasion: true,
+  livrason: true,
+  'livraison domicile': true,
+  'livraison a domicile': true,
+  منزل: true,
+  'الى المنزل': true,
+  'إلى المنزل': true,
+  البيت: true,
+  بيت: true,
+  'توصيل منزلي': true,
+  'توصيل للمنزل': true,
+  'التوصيل للمنزل': true,
+};
+
+var ORDER_DELIVERY_PICKUP_HINT_RE_ =
+  /(^|\b)(pickup|pick up|stop ?desk|desk|office|bureau|relay|relais|agence|agency|point relais|point de retrait|point retrait)(\b|$)|نقطة\s*الاستلام|نقطة\s*استلام|مكتب/;
+var ORDER_DELIVERY_HOME_HINT_RE_ =
+  /(^|\b)(home|domicile|maison|house|residence|livraison|delivery)(\b|$)|منزل|البيت|بيت|منزلي/;
+var ORDER_WILAYA_LABEL_BY_CODE_CACHE_ = null;
+
+/**
+ * Normalize loose location text for equality checks.
+ * @param {*} raw
+ * @return {string}
+ */
+function order_normalizeLocationText_(raw) {
+  if (raw == null) {
+    return '';
+  }
+  var s = String(raw).trim().toLowerCase();
+  if (!s) {
+    return '';
+  }
+  try {
+    s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch (e) {}
+  return s
+    .replace(/[_./|,\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Best human-readable wilaya label by code (cached).
+ * @param {number|string} code
+ * @return {string}
+ */
+function order_getWilayaLabelByCode_(code) {
+  var n = Number(code);
+  if (!isFinite(n) || n < 1 || n > 58) {
+    return '';
+  }
+  n = Math.floor(n);
+  if (!ORDER_WILAYA_LABEL_BY_CODE_CACHE_) {
+    ORDER_WILAYA_LABEL_BY_CODE_CACHE_ = {};
+    try {
+      if (typeof wilaya_getAll_ === 'function') {
+        var rows = wilaya_getAll_() || [];
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i] || {};
+          var codeNum = Number(row.code);
+          if (!isFinite(codeNum) || codeNum < 1 || codeNum > 58) {
+            continue;
+          }
+          var labelFr = row.fr != null ? String(row.fr).trim() : '';
+          var labelAr = row.ar != null ? String(row.ar).trim() : '';
+          var label = labelFr || labelAr;
+          if (label) {
+            ORDER_WILAYA_LABEL_BY_CODE_CACHE_[Math.floor(codeNum)] = label;
+          }
+        }
+      }
+    } catch (eRows) {
+      ORDER_WILAYA_LABEL_BY_CODE_CACHE_ = {};
+    }
+  }
+  return ORDER_WILAYA_LABEL_BY_CODE_CACHE_[n] || '';
+}
+
 /**
  * Parse an optional manual row selector like "4,8,10-12".
  * @param {string|null|undefined} spec
@@ -438,25 +557,17 @@ function buildOrderFromRow_(
   if (wilayaCode == null) {
     wilayaCode = 0;
   }
-
-  var deliveryType = 'home';
-  var deliveryRaw = fromValues(columns.deliveryTypeColumn);
-  if (deliveryRaw) {
-    var d = String(deliveryRaw).trim().toLowerCase();
-    if (
-      d === 'stopdesk' ||
-      d === 'pickup-point' ||
-      d === 'pickup point' ||
-      d === 'pickuppoint' ||
-      d === 'point' ||
-      d === 'pickup' ||
-      d === 'relay' ||
-      d === 'bureau' ||
-      d === 'point relais'
-    ) {
-      deliveryType = 'pickup-point';
-    } else if (d === 'home' || d === 'domicile' || d === 'livraison' || d === 'منزل') {
-      deliveryType = 'home';
+  // Smart fallback: when wilaya text is missing or clearly mis-mapped to the same
+  // value as commune, auto-fill a valid wilaya label from inferred code.
+  var canonicalWilaya =
+    wilayaCode != null && Number(wilayaCode) >= 1 && Number(wilayaCode) <= 58
+      ? order_getWilayaLabelByCode_(wilayaCode)
+      : '';
+  if (canonicalWilaya) {
+    var wilayaNorm = order_normalizeLocationText_(wilaya);
+    var communeNorm = order_normalizeLocationText_(commune);
+    if (!wilayaNorm || (communeNorm && wilayaNorm === communeNorm)) {
+      wilaya = canonicalWilaya;
     }
   }
 
@@ -465,6 +576,8 @@ function buildOrderFromRow_(
   if (stopDeskRaw != null && String(stopDeskRaw).trim() !== '') {
     stopDeskId = String(stopDeskRaw).trim();
   }
+  var deliveryRaw = fromValues(columns.deliveryTypeColumn);
+  var deliveryType = order_parseDeliveryType_(deliveryRaw, stopDeskRaw);
 
   var blRaw = fromValues(columns.blacklistColumn);
   var blParsed = parseBoolean_(blRaw);
@@ -576,6 +689,8 @@ function isRowEmpty_(order) {
  */
 function validateOrder_(sheet, rowNum, order, columns) {
   var errors = [];
+  var carrierIdLc = String(order.carrier || '').trim().toLowerCase();
+  var yalidineCommuneOnlyMode = carrierIdLc === 'yalidine' && !isBlank_(order.commune);
 
   if (isBlank_(order.phone)) {
     errors.push(i18n_t('val.phone_required'));
@@ -583,7 +698,7 @@ function validateOrder_(sheet, rowNum, order, columns) {
     errors.push(i18n_t('val.phone_invalid'));
   }
 
-  var carrierForAddrCheck = String(order.carrier || '').trim().toLowerCase();
+  var carrierForAddrCheck = carrierIdLc;
   if (isBlank_(order.address)) {
     // ZR uses territory IDs (wilaya+commune) instead of a free-text address,
     // so address is not strictly required when wilaya+commune are present.
@@ -595,9 +710,14 @@ function validateOrder_(sheet, rowNum, order, columns) {
   }
 
   if (isBlank_(order.wilaya)) {
-    errors.push(i18n_t('val.wilaya_required'));
+    if (!yalidineCommuneOnlyMode) {
+      errors.push(i18n_t('val.wilaya_required'));
+    }
   } else {
-    if (order.wilayaCode == null || order.wilayaCode < 1 || order.wilayaCode > 58) {
+    if (
+      !yalidineCommuneOnlyMode &&
+      (order.wilayaCode == null || order.wilayaCode < 1 || order.wilayaCode > 58)
+    ) {
       // Guide users to either add a wilaya code column or include a numeric prefix like "16 — Alger".
       errors.push(i18n_t('val.wilaya_invalid'));
     }
@@ -620,10 +740,12 @@ function validateOrder_(sheet, rowNum, order, columns) {
     errors.push(i18n_t(isZr ? 'val.stopdesk_required_zr' : 'val.stopdesk_required'));
   }
 
-  // ZR home deliveries require commune for territory resolution on backend.
-  var carrierIdLc = String(order.carrier || '').trim().toLowerCase();
+  // Carrier-specific commune requirements.
   if (carrierIdLc === 'zr' && order.deliveryType === 'home' && isBlank_(order.commune)) {
     errors.push(i18n_t('val.commune_required_zr_home'));
+  }
+  if (carrierIdLc === 'yalidine' && isBlank_(order.commune)) {
+    errors.push(i18n_t('val.commune_required_yalidine'));
   }
 
   if (order.externalShipmentId) {
@@ -873,6 +995,69 @@ function isBlank_(s) {
 }
 
 /**
+ * @param {*} raw
+ * @return {string}
+ */
+function order_normalizeDeliveryText_(raw) {
+  if (raw == null) {
+    return '';
+  }
+  var text = String(raw).trim().toLowerCase();
+  if (!text) {
+    return '';
+  }
+  try {
+    text = text.replace(/[\u200c\u200d\u200e\u200f\u2066\u2067\u2068\u2069\ufeff]/g, '');
+  } catch (eStrip) {}
+  try {
+    text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch (e) {}
+  // Unify Persian Kaf / Farsi Yeh (common in mixed-IME Sheets dropdowns).
+  text = text.replace(/\u06a9/g, '\u0643');
+  text = text.replace(/\u06cc/g, '\u064a');
+  return text
+    .replace(/[_./|,\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Parse row delivery mode with multilingual + typo-tolerant matching.
+ * When no explicit value is present, a filled stop-desk id implies pickup-point.
+ * @param {*} deliveryRaw
+ * @param {*} stopDeskRaw
+ * @return {'home'|'pickup-point'}
+ */
+function order_parseDeliveryType_(deliveryRaw, stopDeskRaw) {
+  var normalized = order_normalizeDeliveryText_(deliveryRaw);
+  if (normalized) {
+    // Arabic: distinguish office/stop-desk vs home using substrings (robust vs dropdown quirks).
+    if (normalized.indexOf('للمكتب') !== -1) {
+      return 'pickup-point';
+    }
+    if (normalized.indexOf('للمنزل') !== -1 || normalized.indexOf('المنزل') !== -1) {
+      return 'home';
+    }
+    if (ORDER_DELIVERY_PICKUP_TERMS_[normalized]) {
+      return 'pickup-point';
+    }
+    if (ORDER_DELIVERY_HOME_TERMS_[normalized]) {
+      return 'home';
+    }
+    if (ORDER_DELIVERY_PICKUP_HINT_RE_.test(normalized)) {
+      return 'pickup-point';
+    }
+    if (ORDER_DELIVERY_HOME_HINT_RE_.test(normalized)) {
+      return 'home';
+    }
+  }
+  if (stopDeskRaw != null && String(stopDeskRaw).trim() !== '') {
+    return 'pickup-point';
+  }
+  return 'home';
+}
+
+/**
  * @param {string|null} phone
  * @return {boolean}
  */
@@ -1022,10 +1207,17 @@ function resolveCarrierAlias_(raw) {
   var s = String(raw).trim().toLowerCase();
   var token = normalizeCarrierToken_(s);
 
-  if (token === 'yalidine' || token.indexOf('yalidine') === 0 || token.indexOf('yali') === 0) {
+  if (
+    token === 'yalidine' ||
+    token === 'yallidine' ||
+    token.indexOf('yalidine') === 0 ||
+    token.indexOf('yallidine') === 0 ||
+    token.indexOf('yali') === 0 ||
+    token.indexOf('yall') === 0
+  ) {
     return 'yalidine';
   }
-  if (/ياليدين|يالدين/.test(s)) {
+  if (/ياليدين|يالدين|يالي?دين/.test(s)) {
     return 'yalidine';
   }
 
