@@ -20,11 +20,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     admin_secret_label: 'كلمة سر الإدارة',
     admin_secret_placeholder: 'قيمة ADMIN_SECRET',
     admin_secret_hint: 'تُخزن في sessionStorage لهذه التبويبة فقط.',
-    issue_title: 'إصدار كود ترخيص',
-    issue_button: 'إصدار كود',
+    issue_title: 'تفعيل بريد مباشرة',
+    issue_button: 'تفعيل البريد',
     email_label: 'بريد Google',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'تم إصدار {0} ({1}).',
+    issue_success: 'تم تفعيل البريد مباشرة ({1}) عبر {0}.',
     list_title: 'أحدث الأكواد',
     list_refresh: 'تحديث القائمة',
     list_search_placeholder: 'تصفية الأكواد حسب البريد (اختياري)…',
@@ -33,6 +33,10 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     clients_reload: 'إعادة تحميل العملاء',
     clients_search_placeholder: 'تصفية حسب البريد (اختياري)…',
     clients_search_label: 'البحث في العملاء حسب البريد',
+    trials_title: 'تفعيلات الفترة التجريبية',
+    trials_reload: 'إعادة تحميل التجارب',
+    trials_search_placeholder: 'تصفية التجارب حسب البريد (اختياري)…',
+    trials_search_label: 'البحث في التجارب حسب البريد',
     actions_extend_title: 'تمديد الاشتراك',
     actions_revoke_title: 'إلغاء الترخيص',
     target_email_label: 'البريد',
@@ -45,11 +49,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     enter_secret_codes: 'أدخل كلمة سر الإدارة لتحميل الأكواد.',
     enter_secret_clients: 'أدخل كلمة سر الإدارة لتحميل العملاء.',
     enter_secret_stats: 'أدخل كلمة سر الإدارة لتحميل الإحصائيات.',
+    enter_secret_trials: 'أدخل كلمة سر الإدارة لتحميل التجارب.',
     no_codes: 'لا توجد أكواد بعد.',
     no_clients: 'لا يوجد عملاء بعد.',
+    no_trials: 'لا توجد تفعيلات تجريبية بعد.',
     th_code: 'الكود',
     th_client_hash: 'بصمة العميل',
     th_email: 'البريد',
+    th_spreadsheet: 'معرّف الجدول',
     th_status: 'الحالة',
     th_created: 'تاريخ الإنشاء',
     th_expires: 'الانتهاء',
@@ -89,11 +96,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     admin_secret_label: 'Secret admin',
     admin_secret_placeholder: 'Valeur ADMIN_SECRET',
     admin_secret_hint: 'Stocké dans sessionStorage pour cet onglet uniquement.',
-    issue_title: 'Émettre un code de licence',
-    issue_button: 'Émettre le code',
+    issue_title: 'Activer un email directement',
+    issue_button: "Activer l'email",
     email_label: 'Email Google',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'Code {0} émis ({1}).',
+    issue_success: 'Email activé directement ({1}) via {0}.',
     list_title: 'Codes récents',
     list_refresh: 'Actualiser la liste',
     list_search_placeholder: 'Filtrer les codes par email (optionnel)…',
@@ -102,6 +109,10 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     clients_reload: 'Recharger les clients',
     clients_search_placeholder: 'Filtrer par email (optionnel)…',
     clients_search_label: 'Rechercher un client par email',
+    trials_title: "Activations d'essai",
+    trials_reload: 'Recharger les essais',
+    trials_search_placeholder: 'Filtrer les essais par email (optionnel)…',
+    trials_search_label: 'Rechercher les essais par email',
     actions_extend_title: "Prolonger l'abonnement",
     actions_revoke_title: 'Révoquer la licence',
     target_email_label: 'Email cible',
@@ -114,11 +125,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     enter_secret_codes: 'Saisissez le secret admin pour charger les codes.',
     enter_secret_clients: 'Saisissez le secret admin pour charger les clients.',
     enter_secret_stats: 'Saisissez le secret admin pour charger les statistiques.',
+    enter_secret_trials: 'Saisissez le secret admin pour charger les essais.',
     no_codes: 'Aucun code pour le moment.',
     no_clients: 'Aucun client pour le moment.',
+    no_trials: "Aucune activation d'essai pour le moment.",
     th_code: 'Code',
     th_client_hash: 'Empreinte client',
     th_email: 'Email',
+    th_spreadsheet: 'ID feuille',
     th_status: 'Statut',
     th_created: 'Créé',
     th_expires: 'Expire',
@@ -158,11 +172,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     admin_secret_label: 'Admin secret',
     admin_secret_placeholder: 'ADMIN_SECRET value',
     admin_secret_hint: 'Stored in session storage for this browser tab only.',
-    issue_title: 'Issue license code',
-    issue_button: 'Issue code',
+    issue_title: 'Activate Email Directly',
+    issue_button: 'Activate Email',
     email_label: 'Google account email',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'Issued {0} ({1}).',
+    issue_success: 'Email activated directly ({1}) via {0}.',
     list_title: 'Recent codes',
     list_refresh: 'Refresh list',
     list_search_placeholder: 'Filter codes by email (optional)…',
@@ -171,6 +185,10 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     clients_reload: 'Reload clients',
     clients_search_placeholder: 'Filter by email (optional)…',
     clients_search_label: 'Search clients by email',
+    trials_title: 'Trial Activations',
+    trials_reload: 'Reload trials',
+    trials_search_placeholder: 'Filter trials by email (optional)…',
+    trials_search_label: 'Search trials by email',
     actions_extend_title: 'Extend subscription',
     actions_revoke_title: 'Revoke license',
     target_email_label: 'Target email',
@@ -183,11 +201,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     enter_secret_codes: 'Enter admin secret to load codes.',
     enter_secret_clients: 'Enter admin secret to load clients.',
     enter_secret_stats: 'Enter admin secret to load stats.',
+    enter_secret_trials: 'Enter admin secret to load trials.',
     no_codes: 'No codes yet.',
     no_clients: 'No clients yet.',
+    no_trials: 'No trial activations yet.',
     th_code: 'Code',
     th_client_hash: 'Client hash',
     th_email: 'Email',
+    th_spreadsheet: 'Spreadsheet ID',
     th_status: 'Status',
     th_created: 'Created',
     th_expires: 'Expires',
@@ -237,6 +258,16 @@ type ClientRow = {
   activated_at: string | null;
   expires_at: string | null;
   plan: string | null;
+};
+
+type TrialRow = {
+  userEmailHmac: string | null;
+  googleEmail: string | null;
+  spreadsheetId: string | null;
+  createdAt: string | null;
+  expiresAt: string | null;
+  used: boolean;
+  status: string;
 };
 
 type AdminStats = {
@@ -505,6 +536,11 @@ const App: React.FC = () => {
   const [clientsMessage, setClientsMessage] = useState<MessageState>(null);
   const [clientsSearch, setClientsSearch] = useState('');
 
+  const [trials, setTrials] = useState<TrialRow[] | null>(null);
+  const [trialsLoading, setTrialsLoading] = useState(false);
+  const [trialsError, setTrialsError] = useState<string | null>(null);
+  const [trialsSearch, setTrialsSearch] = useState('');
+
   const [extendEmail, setExtendEmail] = useState('');
   const [extendDays, setExtendDays] = useState('365');
   const [extendLoading, setExtendLoading] = useState(false);
@@ -572,6 +608,27 @@ const App: React.FC = () => {
     }
   }, [canQuery, clientsSearch]);
 
+  const loadTrials = useCallback(async () => {
+    setTrialsError(null);
+    if (!canQuery) {
+      setTrials(null);
+      return;
+    }
+    setTrialsLoading(true);
+    try {
+      const search = trialsSearch.trim();
+      const qs = search ? `&search=${encodeURIComponent(search)}` : '';
+      const data = await api<{ items: TrialRow[] }>(`/admin/v1/trials?limit=200${qs}`);
+      setTrials(data.items ?? []);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      setTrialsError(m);
+      setTrials(null);
+    } finally {
+      setTrialsLoading(false);
+    }
+  }, [canQuery, trialsSearch]);
+
   const loadStats = async () => {
     setStatsError(null);
     if (!canQuery) {
@@ -610,6 +667,18 @@ const App: React.FC = () => {
     }, delay);
     return () => window.clearTimeout(id);
   }, [canQuery, clientsSearch, loadClients]);
+
+  useEffect(() => {
+    if (!canQuery) {
+      setTrials(null);
+      return;
+    }
+    const delay = trialsSearch === '' ? 0 : 250;
+    const id = window.setTimeout(() => {
+      void loadTrials();
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [canQuery, trialsSearch, loadTrials]);
 
   useEffect(() => {
     if (!canQuery) {
@@ -1142,6 +1211,110 @@ const App: React.FC = () => {
                           {it.expires_at
                             ? new Date(it.expires_at).toLocaleString()
                             : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </Panel>
+
+        <Panel title={t(lang, 'trials_title')}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 items-center gap-2">
+              <label className="sr-only" htmlFor="trials-search">
+                {t(lang, 'trials_search_label')}
+              </label>
+              <input
+                id="trials-search"
+                type="search"
+                value={trialsSearch}
+                onChange={(e) => setTrialsSearch(e.target.value)}
+                placeholder={t(lang, 'trials_search_placeholder')}
+                className="min-w-0 flex-1 rounded-dt-sm border border-dt-border bg-dt-surface px-2.5 py-2 text-sm text-dt-text outline-none focus:border-dt-accent focus:ring-2 focus:ring-dt-accent/40"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void loadTrials();
+                  }
+                }}
+              />
+            </div>
+            <SecondaryButton
+              type="button"
+              onClick={() => void loadTrials()}
+              disabled={!canQuery || trialsLoading}
+            >
+              {t(lang, 'trials_reload')}
+            </SecondaryButton>
+          </div>
+
+          {trialsError ? (
+            <p className="mt-3 text-sm text-dt-danger">{trialsError}</p>
+          ) : null}
+
+          {trialsLoading ? (
+            <p className="mt-4 text-sm text-dt-text-secondary">{t(lang, 'loading')}</p>
+          ) : !canQuery ? (
+            <p className="mt-4 text-sm text-dt-text-secondary">
+              {t(lang, 'enter_secret_trials')}
+            </p>
+          ) : trials && trials.length === 0 ? (
+            <p className="mt-4 text-sm text-dt-text-secondary">
+              {t(lang, 'no_trials')}
+            </p>
+          ) : trials && trials.length > 0 ? (
+            <div className="mt-4 overflow-x-auto rounded-md border border-dt-border bg-dt-surface-elevated">
+              <table className="min-w-[760px] w-full border-collapse text-sm">
+                <thead className="bg-dt-surface-elevated">
+                  <tr className="text-left text-xs uppercase tracking-[0.14em] text-dt-text-secondary">
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_email')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_client_hash')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_spreadsheet')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_created')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_expires')}
+                    </th>
+                    <th className="border-b border-dt-border px-3 py-2">
+                      {t(lang, 'th_status')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trials?.map((it, idx) => {
+                    const token = statusToken(it.status);
+                    return (
+                      <tr
+                        key={`${it.userEmailHmac || 'h'}-${it.spreadsheetId || 's'}-${it.createdAt || idx}`}
+                        className="border-b border-dt-border/80 last:border-b-0 hover:bg-black/5"
+                      >
+                        <td className="px-3 py-2 align-top break-all">
+                          {it.googleEmail?.trim() ? it.googleEmail : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top font-mono text-xs text-dt-text-secondary">
+                          {it.userEmailHmac ? `${it.userEmailHmac.slice(0, 12)}…` : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top font-mono text-xs">
+                          {it.spreadsheetId ? `${it.spreadsheetId.slice(0, 20)}…` : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          {it.createdAt ? new Date(it.createdAt).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          {it.expiresAt ? new Date(it.expiresAt).toLocaleString() : '—'}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <StatusBadge token={token} label={statusLabel(lang, token)} />
                         </td>
                       </tr>
                     );

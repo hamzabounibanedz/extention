@@ -34,6 +34,79 @@ function carrierCreds_getZrSecret_(row) {
 }
 
 /**
+ * @param {Object<string, unknown>|null|undefined} row
+ * @return {string}
+ */
+function carrierCreds_getYalidineApiId_(row) {
+  return carrierCreds_pickFirst_(row, ["apiId", "id"]);
+}
+
+/**
+ * @param {Object<string, unknown>|null|undefined} row
+ * @return {string}
+ */
+function carrierCreds_getYalidineApiToken_(row) {
+  return carrierCreds_pickFirst_(row, ["apiToken", "token", "apiKey"]);
+}
+
+/**
+ * Yalidine accepts either:
+ * - apiId|apiToken
+ * - apiId:apiToken
+ * - JSON: {"apiId":"...","apiToken":"..."}
+ * - apiToken alone (apiId reused from existing value)
+ *
+ * @param {string} rawInput
+ * @param {Object<string, unknown>|null|undefined} existingRow
+ * @return {{ apiId: string, apiToken: string }}
+ */
+function carrierCreds_parseYalidineInput_(rawInput, existingRow) {
+  var text = rawInput != null ? String(rawInput).trim() : "";
+  var existingId = carrierCreds_getYalidineApiId_(existingRow);
+  var existingToken = carrierCreds_getYalidineApiToken_(existingRow);
+  if (!text) {
+    return { apiId: "", apiToken: "" };
+  }
+
+  if (text.charAt(0) === "{") {
+    try {
+      var parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object") {
+        var parsedId = carrierCreds_pickFirst_(parsed, ["apiId", "id", "api_id"]);
+        var parsedToken = carrierCreds_pickFirst_(parsed, [
+          "apiToken",
+          "token",
+          "api_token",
+          "apiKey",
+        ]);
+        return {
+          apiId: parsedId || existingId,
+          apiToken: parsedToken || existingToken,
+        };
+      }
+    } catch (e) {
+      // Fall back to other formats.
+    }
+  }
+
+  var sep = text.indexOf("|") >= 0 ? "|" : text.indexOf(":") >= 0 ? ":" : "";
+  if (sep) {
+    var parts = text.split(sep);
+    var apiId = parts.length ? String(parts.shift() || "").trim() : "";
+    var apiToken = String(parts.join(sep) || "").trim();
+    return {
+      apiId: apiId || existingId,
+      apiToken: apiToken || existingToken,
+    };
+  }
+
+  return {
+    apiId: existingId,
+    apiToken: text,
+  };
+}
+
+/**
  * ZR accepts either:
  * - tenantId|secretKey
  * - tenantId:secretKey
@@ -132,6 +205,19 @@ function carrierCreds_getForCarrier_(carrierId) {
     return {};
   }
   var out = {};
+  if (id === "yalidine") {
+    var yaliId = carrierCreds_getYalidineApiId_(row);
+    var yaliToken = carrierCreds_getYalidineApiToken_(row);
+    if (yaliId && yaliToken) {
+      out.apiId = yaliId;
+      out.apiToken = yaliToken;
+      // Compatibility aliases for older adapter code paths.
+      out.id = yaliId;
+      out.token = yaliToken;
+      out.apiKey = yaliToken;
+    }
+    return out;
+  }
   var secret = carrierCreds_getZrSecret_(row);
   if (secret) {
     out.apiKey = secret;
@@ -162,18 +248,26 @@ function carrierCreds_getState() {
     var id = carriers[i].id;
     var row = map[id];
     var zrSecret = carrierCreds_getZrSecret_(row);
+    var yaliId = carrierCreds_getYalidineApiId_(row);
+    var yaliToken = carrierCreds_getYalidineApiToken_(row);
     var hasZrPair =
       id === "zr" &&
       row &&
       row.tenantId != null &&
       String(row.tenantId).trim() !== "" &&
       zrSecret !== "";
+    var hasYalidinePair =
+      id === "yalidine" &&
+      row &&
+      yaliId !== "" &&
+      yaliToken !== "";
     var has =
       row &&
       typeof row === "object" &&
       ((carrierCreds_getZrSecret_(row) !== "") ||
         (row.token && String(row.token).trim() !== "") ||
-        hasZrPair);
+        hasZrPair ||
+        hasYalidinePair);
     byCarrier[id] = { hasApiKey: !!has };
   }
   return { carriers: carriers, byCarrier: byCarrier };
@@ -199,6 +293,8 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
   if (!k) {
     if (map[id]) {
       delete map[id].apiKey;
+      delete map[id].apiToken;
+      delete map[id].apiId;
       delete map[id].secretKey;
       if (id === "zr") {
         delete map[id].tenantId;
@@ -210,8 +306,16 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
         row && row.apiKey != null && String(row.apiKey).trim() !== "";
       var hasSecret =
         row && row.secretKey != null && String(row.secretKey).trim() !== "";
+      var hasYaliId =
+        row && row.apiId != null && String(row.apiId).trim() !== "";
+      var hasYaliToken =
+        row &&
+        ((row.apiToken != null && String(row.apiToken).trim() !== "") ||
+          (row.apiKey != null && String(row.apiKey).trim() !== ""));
       if (!hasToken && !hasApi && !hasSecret) {
-        delete map[id];
+        if (id !== "yalidine" || (!hasYaliId && !hasYaliToken)) {
+          delete map[id];
+        }
       }
     }
   } else {
@@ -227,6 +331,17 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
       map[id].secretKey = parsed.secretKey;
       // Keep apiKey mirror for backward compatibility with older adapter builds.
       map[id].apiKey = parsed.secretKey;
+    } else if (id === "yalidine") {
+      var yaliParsed = carrierCreds_parseYalidineInput_(k, map[id]);
+      if (!yaliParsed.apiId || !yaliParsed.apiToken) {
+        throw new Error(i18n_t("error.yalidine_id_token_required"));
+      }
+      map[id].apiId = yaliParsed.apiId;
+      map[id].apiToken = yaliParsed.apiToken;
+      // Keep aliases for backward compatibility.
+      map[id].id = yaliParsed.apiId;
+      map[id].token = yaliParsed.apiToken;
+      map[id].apiKey = yaliParsed.apiToken;
     } else {
       map[id].apiKey = k;
     }
@@ -275,6 +390,57 @@ function carrierCreds_saveZrCredentials(tenantId, secretKey) {
     map[id].secretKey = secret;
     // Keep apiKey mirror for backward compatibility with older adapter builds.
     map[id].apiKey = secret;
+  }
+  PropertiesService.getUserProperties().setProperty(
+    DT_CARRIER_CREDS_KEY_,
+    JSON.stringify(map),
+  );
+  return carrierCreds_getState();
+}
+
+/**
+ * Save Yalidine credentials from dedicated fields (apiId + apiToken).
+ * Pass both empty strings to clear saved Yalidine credentials.
+ *
+ * @param {string} apiId
+ * @param {string} apiToken
+ * @return {ReturnType<typeof carrierCreds_getState>}
+ */
+function carrierCreds_saveYalidineCredentials(apiId, apiToken) {
+  var id = "yalidine";
+  var yaliId = apiId != null ? String(apiId).trim() : "";
+  var yaliToken = apiToken != null ? String(apiToken).trim() : "";
+  var map = carrierCreds_parseMap_();
+  if (!yaliId && !yaliToken) {
+    if (map[id] && typeof map[id] === "object") {
+      delete map[id].apiId;
+      delete map[id].apiToken;
+      delete map[id].id;
+      delete map[id].token;
+      delete map[id].apiKey;
+      var row = map[id];
+      var hasAny =
+        row &&
+        ((row.apiId != null && String(row.apiId).trim() !== "") ||
+          (row.apiToken != null && String(row.apiToken).trim() !== "") ||
+          (row.apiKey != null && String(row.apiKey).trim() !== ""));
+      if (!hasAny) {
+        delete map[id];
+      }
+    }
+  } else {
+    if (!yaliId || !yaliToken) {
+      throw new Error(i18n_t("error.yalidine_id_token_required"));
+    }
+    if (!map[id] || typeof map[id] !== "object") {
+      map[id] = {};
+    }
+    map[id].apiId = yaliId;
+    map[id].apiToken = yaliToken;
+    // Keep aliases for backward compatibility.
+    map[id].id = yaliId;
+    map[id].token = yaliToken;
+    map[id].apiKey = yaliToken;
   }
   PropertiesService.getUserProperties().setProperty(
     DT_CARRIER_CREDS_KEY_,
@@ -382,6 +548,17 @@ function carrierCreds_testConnection(carrierId, draftKey) {
       creds.tenantId = parsed.tenantId;
       creds.secretKey = parsed.secretKey;
       creds.apiKey = parsed.secretKey;
+    } else if (id === "yalidine") {
+      var mapYali = carrierCreds_parseMap_();
+      var yaliParsed = carrierCreds_parseYalidineInput_(draft, mapYali[id]);
+      if (!yaliParsed.apiId || !yaliParsed.apiToken) {
+        throw new Error(i18n_t("error.yalidine_id_token_required"));
+      }
+      creds.apiId = yaliParsed.apiId;
+      creds.apiToken = yaliParsed.apiToken;
+      creds.id = yaliParsed.apiId;
+      creds.token = yaliParsed.apiToken;
+      creds.apiKey = yaliParsed.apiToken;
     } else {
       creds.apiKey = draft;
     }
@@ -393,6 +570,15 @@ function carrierCreds_testConnection(carrierId, draftKey) {
       !(creds.secretKey || creds.apiKey))
   ) {
     throw new Error(i18n_t("error.zr_tenant_secret_required"));
+  }
+  if (
+    id === "yalidine" &&
+    (!creds.apiId ||
+      String(creds.apiId).trim() === "" ||
+      !creds.apiToken ||
+      String(creds.apiToken).trim() === "")
+  ) {
+    throw new Error(i18n_t("error.yalidine_id_token_required"));
   }
   try {
     return apiJsonPost_("/v1/carriers/" + encodeURIComponent(id) + "/test-connection", {
@@ -443,4 +629,39 @@ function carrierCreds_testZrConnection(tenantId, secretKey) {
     }
     throw e;
   }
+}
+
+/**
+ * Runs backend Yalidine adapter testConnection with optional draft API ID/TOKEN.
+ * If draft values are blank, falls back to saved Yalidine credentials.
+ *
+ * @param {string=} apiId
+ * @param {string=} apiToken
+ * @return {Object}
+ */
+function carrierCreds_testYalidineConnection(apiId, apiToken) {
+  var idValue = apiId != null ? String(apiId).trim() : "";
+  var tokenValue = apiToken != null ? String(apiToken).trim() : "";
+  var creds = carrierCreds_getForCarrier_("yalidine");
+  if (idValue || tokenValue) {
+    if (!idValue || !tokenValue) {
+      throw new Error(i18n_t("error.yalidine_id_token_required"));
+    }
+    creds.apiId = idValue;
+    creds.apiToken = tokenValue;
+    creds.id = idValue;
+    creds.token = tokenValue;
+    creds.apiKey = tokenValue;
+  }
+  if (
+    !creds.apiId ||
+    String(creds.apiId).trim() === "" ||
+    !creds.apiToken ||
+    String(creds.apiToken).trim() === ""
+  ) {
+    throw new Error(i18n_t("error.yalidine_id_token_required"));
+  }
+  return apiJsonPost_("/v1/carriers/yalidine/test-connection", {
+    credentials: creds || {},
+  });
 }

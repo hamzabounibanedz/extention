@@ -45,27 +45,46 @@ function config_getUiMode_() {
     DT_SCRIPT_UI_MODE_KEY_,
   );
   var s = raw != null ? String(raw).trim().toLowerCase() : '';
-  return s === 'prod' || s === 'production' ? 'prod' : 'local';
+  // Explicit override always wins.
+  if (s === 'local' || s === 'dev' || s === 'development') {
+    return 'local';
+  }
+  if (s === 'prod' || s === 'production') {
+    return 'prod';
+  }
+  // Auto mode:
+  // - if script backend URL is set => production UX (client cannot edit backend)
+  // - otherwise => local testing UX (backend URL editable)
+  var scriptRaw = PropertiesService.getScriptProperties().getProperty(
+    DT_SCRIPT_API_BASE_URL_KEY_,
+  );
+  return scriptRaw != null && String(scriptRaw).trim() !== '' ? 'prod' : 'local';
 }
 
 /**
  * @return {boolean}
  */
 function config_allowUserBackendConfig_() {
+  if (config_getUiMode_() === 'prod') {
+    return false;
+  }
   var raw = PropertiesService.getScriptProperties().getProperty(
     DT_SCRIPT_ALLOW_USER_BACKEND_CONFIG_KEY_,
   );
-  return config_parseBoolean_(raw, config_getUiMode_() !== 'prod');
+  return config_parseBoolean_(raw, true);
 }
 
 /**
  * @return {boolean}
  */
 function config_showTechnicalDetails_() {
+  if (config_getUiMode_() === 'prod') {
+    return false;
+  }
   var raw = PropertiesService.getScriptProperties().getProperty(
     DT_SCRIPT_SHOW_TECHNICAL_DETAILS_KEY_,
   );
-  return config_parseBoolean_(raw, config_getUiMode_() !== 'prod');
+  return config_parseBoolean_(raw, true);
 }
 
 /**
@@ -133,31 +152,50 @@ function getScriptApiKey_() {
  * @return {string} Base URL without trailing slash, or empty if unset
  */
 function getApiBaseUrl_() {
-  if (config_allowUserBackendConfig_()) {
-    var userRaw = PropertiesService.getUserProperties().getProperty(
-      DT_USER_API_BASE_URL_KEY_,
-    );
-    if (userRaw != null && String(userRaw).trim() !== '') {
-      return normalizeApiBaseUrl_(userRaw);
-    }
+  var userRaw = PropertiesService.getUserProperties().getProperty(
+    DT_USER_API_BASE_URL_KEY_,
+  );
+  if (
+    config_allowUserBackendConfig_() &&
+    userRaw != null &&
+    String(userRaw).trim() !== ''
+  ) {
+    return normalizeApiBaseUrl_(userRaw);
   }
   var scriptRaw = PropertiesService.getScriptProperties().getProperty(
     DT_SCRIPT_API_BASE_URL_KEY_,
   );
-  return scriptRaw ? normalizeApiBaseUrl_(scriptRaw) : '';
+  if (scriptRaw && String(scriptRaw).trim() !== '') {
+    return normalizeApiBaseUrl_(scriptRaw);
+  }
+  // Compatibility fallback: if a user had previously configured a URL in local mode
+  // and deployment switched to locked prod mode without script URL yet, keep read-only usage.
+  if (userRaw != null && String(userRaw).trim() !== '') {
+    return normalizeApiBaseUrl_(userRaw);
+  }
+  return '';
 }
 
 /**
  * @return {string} API key or empty
  */
 function getUserApiKey_() {
-  if (config_allowUserBackendConfig_()) {
-    var raw = PropertiesService.getUserProperties().getProperty(DT_USER_API_KEY_);
-    if (raw && String(raw).trim() !== '') {
-      return String(raw).trim();
-    }
+  var userRaw = PropertiesService.getUserProperties().getProperty(
+    DT_USER_API_KEY_,
+  );
+  if (
+    config_allowUserBackendConfig_() &&
+    userRaw &&
+    String(userRaw).trim() !== ''
+  ) {
+    return String(userRaw).trim();
   }
-  return getScriptApiKey_();
+  var scriptKey = getScriptApiKey_();
+  if (scriptKey) {
+    return scriptKey;
+  }
+  // Compatibility fallback for existing test users if script key is not set yet.
+  return userRaw ? String(userRaw).trim() : '';
 }
 
 /**
@@ -173,12 +211,16 @@ function config_saveApiBaseUrl(url) {
   var u = normalizeApiBaseUrl_(url);
   if (!u) {
     PropertiesService.getUserProperties().deleteProperty(DT_USER_API_BASE_URL_KEY_);
+    // URL changed/cleared: reset temporary endpoint cooldown.
+    PropertiesService.getUserProperties().deleteProperty('dt.api.endpointCooldown');
     return { ok: true };
   }
   if (!/^https?:\/\//i.test(u)) {
     throw new Error(i18n_t('error.url_must_be_http'));
   }
   PropertiesService.getUserProperties().setProperty(DT_USER_API_BASE_URL_KEY_, u.replace(/\/$/, ''));
+  // URL updated: clear stale "endpoint unreachable" cooldown from previous host.
+  PropertiesService.getUserProperties().deleteProperty('dt.api.endpointCooldown');
   return { ok: true };
 }
 
