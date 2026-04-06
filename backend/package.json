@@ -7,7 +7,7 @@
     "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "test": "tsx --test src/modules/license/service.test.ts src/modules/license/access-token.test.ts src/modules/license/integration.test.ts",
+    "test": "tsx --test src/modules/license/service.test.ts src/modules/license/access-token.test.ts src/modules/license/integration.test.ts src/modules/shipments/service.test.ts",
     "test:admin": "tsx --test src/modules/admin/routes.test.ts",
     "data:communes": "node scripts/build-communes-data.mjs"
   },

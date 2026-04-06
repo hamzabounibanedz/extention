@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   getCarrierAdapterOrThrow,
@@ -25,9 +28,10 @@ const TERRITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const SEND_CHUNK_SIZE = 50;
 const RETRY_BASE_MS = 600;
 const RETRY_MAX_ATTEMPTS = 4;
-const TRACKING_CONCURRENCY = 5;
+const TRACKING_BATCH_SIZE = 50;
 
 const territoryCache = new Map<string, TerritoryIndex>();
+let localCommunesByWilayaCache: Record<string, string[]> | null = null;
 
 function cleanedCredentials_(credentials?: Record<string, string> | null): AdapterCredentials {
   if (!credentials || typeof credentials !== 'object') return {};
@@ -130,6 +134,98 @@ function tryArabicToFrench_(normalizedArabic: string): string | null {
     return ARABIC_TO_FRENCH_CITY_[withoutArticle];
   }
   return null;
+}
+
+function localCommunesDataPath_(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return join(here, '..', '..', '..', 'data', 'communes-by-wilaya.json');
+}
+
+function loadLocalCommunesByWilaya_(): Record<string, string[]> {
+  if (localCommunesByWilayaCache) {
+    return localCommunesByWilayaCache;
+  }
+  try {
+    const raw = readFileSync(localCommunesDataPath_(), 'utf8');
+    localCommunesByWilayaCache = JSON.parse(raw) as Record<string, string[]>;
+    return localCommunesByWilayaCache;
+  } catch {
+    localCommunesByWilayaCache = {};
+    return localCommunesByWilayaCache;
+  }
+}
+
+function titleCaseFrenchPlace_(raw: string): string {
+  return String(raw || '')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function resolveYalidinePlaceNames_(
+  wilayaRaw: unknown,
+  communeRaw: unknown,
+  wilayaCodeRaw: unknown,
+): { wilayaName: string; communeName: string } {
+  const wilayaNorm = normalizeText_(wilayaRaw);
+  const communeNorm = normalizeText_(communeRaw);
+  let wilayaName = String(wilayaRaw ?? '').trim();
+  let communeName = String(communeRaw ?? '').trim();
+
+  const translatedWilaya = wilayaNorm ? tryArabicToFrench_(wilayaNorm) : null;
+  if (translatedWilaya) {
+    wilayaName = titleCaseFrenchPlace_(translatedWilaya);
+  }
+
+  const codeN = Number(String(wilayaCodeRaw ?? '').replace(/[^\d]/g, ''));
+  const communes =
+    Number.isFinite(codeN) && codeN >= 1 && codeN <= 58
+      ? loadLocalCommunesByWilaya_()[String(codeN)] || []
+      : [];
+
+  const candidateNorms: string[] = [];
+  if (communeNorm) {
+    candidateNorms.push(communeNorm);
+    const translatedCommune = tryArabicToFrench_(communeNorm);
+    if (translatedCommune && translatedCommune !== communeNorm) {
+      candidateNorms.push(translatedCommune);
+    }
+  }
+
+  if (communes.length && candidateNorms.length) {
+    const normalizedCommunes = communes.map((name) => ({
+      name,
+      normalized: normalizeText_(name),
+    }));
+    for (const candidate of candidateNorms) {
+      const exact = normalizedCommunes.find((entry) => entry.normalized === candidate);
+      if (exact) {
+        communeName = exact.name;
+        return { wilayaName, communeName };
+      }
+    }
+    for (const candidate of candidateNorms) {
+      let best: { name: string; normalized: string } | null = null;
+      let bestScore = 0;
+      for (const entry of normalizedCommunes) {
+        const score = similarity_(candidate, entry.normalized);
+        if (score > bestScore) {
+          bestScore = score;
+          best = entry;
+        }
+      }
+      if (best && bestScore >= 0.88) {
+        communeName = best.name;
+        return { wilayaName, communeName };
+      }
+    }
+  }
+
+  if (candidateNorms.length > 1 && !communeName) {
+    communeName = titleCaseFrenchPlace_(candidateNorms[1]);
+  }
+  return { wilayaName, communeName };
 }
 
 function similarity_(a: string, b: string): number {
@@ -260,6 +356,67 @@ function coerceAdapterFailureMessage_(v: unknown): string {
     }
   }
   return String(v);
+}
+
+function coerceCarrierApiDetail_(raw: unknown): string {
+  if (raw == null) return '';
+  if (typeof raw === 'string') {
+    return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    if (o.error != null) {
+      const msg = coerceCarrierApiDetail_(o.error);
+      if (msg) return msg;
+    }
+    if (o.message != null) {
+      const msg = coerceCarrierApiDetail_(o.message);
+      if (msg) return msg;
+    }
+    if (o.detail != null) {
+      const msg = coerceCarrierApiDetail_(o.detail);
+      if (msg) return msg;
+    }
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return '';
+    }
+  }
+  return String(raw);
+}
+
+function trackingSearchBody_(carrier: string, trackingNumbers: string[]): Record<string, unknown> {
+  if (carrier === 'yalidine') {
+    return {
+      trackingNumbers,
+    };
+  }
+  return {
+    pageNumber: 1,
+    pageSize: Math.max(10, trackingNumbers.length),
+    advancedSearch: {
+      field: 'trackingNumber',
+      keyword: trackingNumbers.join(','),
+    },
+  };
+}
+
+function trackingSearchErrorMessage_(
+  carrier: string,
+  httpStatus: number,
+  raw: unknown,
+): string {
+  let detail = coerceCarrierApiDetail_(raw);
+  if (detail === 'missing_credentials') {
+    detail = `Missing ${carrier} credentials.`;
+  }
+  if (!detail && carrier === 'zr' && httpStatus === 403) {
+    detail = 'ZR returned 403. Supplier role/permission is required for parcel search.';
+  }
+  return detail
+    ? `Tracking lookup failed (${httpStatus}): ${detail}`
+    : `Tracking lookup failed (${httpStatus}).`;
 }
 
 function resolveOrderRowIndex_(order: GenericOrderInput, idx: number): number {
@@ -620,7 +777,7 @@ export async function sendOrdersBulk(
 
   const creds = cleanedCredentials_(input.credentials);
   let territoryIndex: TerritoryIndex | null = null;
-  if ((carrier === 'zr' || carrier === 'yalidine') && adapter.fetchAllTerritories) {
+  if (carrier === 'zr' && adapter.fetchAllTerritories) {
     try {
       territoryIndex = await getTerritoryIndex_(carrier, creds);
     } catch (error) {
@@ -695,9 +852,7 @@ export async function sendOrdersBulk(
     ).trim();
     let resolvedWilayaName = rawWilayaName;
     let resolvedCommuneName = rawCommuneName;
-    const needsTerritoryResolution =
-      (carrier === 'zr' && deliveryType === 'home') ||
-      (carrier === 'yalidine' && rawCommuneName !== '');
+    const needsTerritoryResolution = carrier === 'zr' && deliveryType === 'home';
     if (needsTerritoryResolution) {
       if (!territoryIndex) {
         localFailures.push({
@@ -731,10 +886,18 @@ export async function sendOrdersBulk(
       }
       // null means the carrier's territory data doesn't include delivery capability info;
       // allow the order through and let the carrier API reject if unsupported.
-      if (carrier === 'yalidine') {
-        resolvedWilayaName = String(territory.city.name ?? rawWilayaName).trim() || rawWilayaName;
-        resolvedCommuneName =
-          String(territory.district.name ?? rawCommuneName).trim() || rawCommuneName;
+    }
+    if (carrier === 'yalidine') {
+      const resolved = resolveYalidinePlaceNames_(
+        rawWilayaName,
+        rawCommuneName,
+        row.codeWilaya ?? row.wilayaCode,
+      );
+      if (resolved.wilayaName) {
+        resolvedWilayaName = resolved.wilayaName;
+      }
+      if (resolved.communeName) {
+        resolvedCommuneName = resolved.communeName;
       }
     }
 
@@ -757,6 +920,9 @@ export async function sendOrdersBulk(
     ).trim();
     if (!senderWilayaName) {
       senderWilayaName = resolvedWilayaName;
+    }
+    if (carrier === 'yalidine' && senderWilayaName) {
+      senderWilayaName = resolveYalidinePlaceNames_(senderWilayaName, '', null).wilayaName || senderWilayaName;
     }
     const senderAddress = String(
       input.businessSettings?.senderAddress ?? input.businessSettings?.address ?? '',
@@ -979,52 +1145,6 @@ export async function sendOrdersBulk(
   };
 }
 
-async function searchTrackingOne_(
-  carrier: string,
-  trackingNumber: string,
-  credentials: AdapterCredentials,
-): Promise<ParcelStatus | null> {
-  const adapter = getCarrierAdapterOrThrow(carrier);
-  if (!adapter.searchParcels) {
-    throw new Error(`${carrier} adapter does not support searchParcels`);
-  }
-  const body = {
-    pageNumber: 1,
-    pageSize: 10,
-    advancedSearch: {
-      field: 'trackingNumber',
-      keyword: trackingNumber,
-    },
-  };
-  const result = await adapter.searchParcels({ body, credentials });
-  if (result.httpStatus === 403) {
-    throw new Error(`${carrier} returned 403. Supplier role/permission is required for parcel search.`);
-  }
-  if (result.httpStatus >= 400) {
-    const raw = result.raw;
-    let detail = '';
-    if (typeof raw === 'string') {
-      detail = raw.trim();
-    } else if (raw && typeof raw === 'object') {
-      const candidate = raw as { error?: unknown; message?: unknown };
-      if (typeof candidate.error === 'string') {
-        detail = candidate.error;
-      } else if (typeof candidate.message === 'string') {
-        detail = candidate.message;
-      }
-    }
-    if (detail === 'missing_credentials') {
-      detail = `Missing ${carrier} credentials.`;
-    }
-    throw new Error(
-      detail
-        ? `Tracking lookup failed (${result.httpStatus}): ${detail}`
-        : `Tracking lookup failed (${result.httpStatus}).`,
-    );
-  }
-  return result.items.find((x) => x.trackingNumber.toLowerCase() === trackingNumber.toLowerCase()) || null;
-}
-
 export async function syncTrackingBulk(input: {
   carrier: string;
   trackingNumbers: string[];
@@ -1062,51 +1182,64 @@ export async function syncTrackingBulk(input: {
     found: boolean;
   }> = [];
   const errors: Array<{ trackingNumber: string; message: string }> = [];
-
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(TRACKING_CONCURRENCY, uniqueTracking.length) }).map(async () => {
-    while (true) {
-      const i = cursor;
-      cursor += 1;
-      if (i >= uniqueTracking.length) return;
-      const tracking = uniqueTracking[i];
-      try {
-        const found = await searchTrackingOne_(carrier, tracking, credentials);
-        if (!found) {
-          results.push({
-            trackingNumber: tracking,
-            stateName: null,
-            stateColor: null,
-            lastStateUpdateAt: null,
-            deliveryPrice: null,
-            amount: null,
-            deliveryType: null,
-            label: carrierStatePresentation_(null),
-            found: false,
-          });
-          continue;
-        }
-        const label = carrierStatePresentation_(found.stateName);
+  for (let offset = 0; offset < uniqueTracking.length; offset += TRACKING_BATCH_SIZE) {
+    const chunk = uniqueTracking.slice(offset, offset + TRACKING_BATCH_SIZE);
+    let result;
+    try {
+      result = await adapter.searchParcels({
+        body: trackingSearchBody_(carrier, chunk),
+        credentials,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      chunk.forEach((trackingNumber) => {
+        errors.push({ trackingNumber, message });
+      });
+      continue;
+    }
+    if (result.httpStatus >= 400) {
+      const message = trackingSearchErrorMessage_(carrier, result.httpStatus, result.raw);
+      chunk.forEach((trackingNumber) => {
+        errors.push({ trackingNumber, message });
+      });
+      continue;
+    }
+    const byTracking = new Map<string, ParcelStatus>();
+    for (const item of result.items) {
+      const key = String(item.trackingNumber || '').trim().toLowerCase();
+      if (!key) continue;
+      byTracking.set(key, item);
+    }
+    for (const tracking of chunk) {
+      const found = byTracking.get(tracking.toLowerCase());
+      if (!found) {
         results.push({
           trackingNumber: tracking,
-          stateName: found.stateName,
-          stateColor: found.stateColor,
-          lastStateUpdateAt: found.lastStateUpdateAt,
-          deliveryPrice: found.deliveryPrice,
-          amount: found.amount,
-          deliveryType: found.deliveryType,
-          label,
-          found: true,
+          stateName: null,
+          stateColor: null,
+          lastStateUpdateAt: null,
+          deliveryPrice: null,
+          amount: null,
+          deliveryType: null,
+          label: carrierStatePresentation_(null),
+          found: false,
         });
-      } catch (error) {
-        errors.push({
-          trackingNumber: tracking,
-          message: error instanceof Error ? error.message : String(error),
-        });
+        continue;
       }
+      const label = carrierStatePresentation_(found.stateName);
+      results.push({
+        trackingNumber: tracking,
+        stateName: found.stateName,
+        stateColor: found.stateColor,
+        lastStateUpdateAt: found.lastStateUpdateAt,
+        deliveryPrice: found.deliveryPrice,
+        amount: found.amount,
+        deliveryType: found.deliveryType,
+        label,
+        found: true,
+      });
     }
-  });
-  await Promise.all(workers);
+  }
   results.sort((a, b) => a.trackingNumber.localeCompare(b.trackingNumber));
   return {
     ok: true,

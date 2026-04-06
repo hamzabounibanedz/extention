@@ -170,6 +170,8 @@
       allowBackendConfig: BOOTSTRAP.allowBackendConfig !== false,
       showTechnicalDetails: BOOTSTRAP.showTechnicalDetails !== false,
       lastStatsResult: null,
+      /** Prevents overlapping send/sync/preview server calls (double-clicks vs. slow responses). */
+      ordersPipelineBusy: false,
     };
 
     var el = {
@@ -2101,7 +2103,7 @@
       return new Promise(function (resolve, reject) {
         setTimeout(function () {
           runServer.apply(null, [fnName].concat(args)).then(resolve, reject);
-        }, 120);
+        }, 50);
       });
     }
 
@@ -3003,6 +3005,11 @@
     }
 
     function previewOrders() {
+      if (state.ordersPipelineBusy) {
+        setOrdersStatus(t("sidebar.msg.orders_busy"), "err");
+        return;
+      }
+      state.ordersPipelineBusy = true;
       var rowSelectionSpec = getRowSelectionSpec_();
       clearStructuredOutput(el.ordersOut);
       setOrdersStatus(t("sidebar.msg.analyzing"), null);
@@ -3066,12 +3073,18 @@
           setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
+          state.ordersPipelineBusy = false;
           setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function sendSelection() {
+      if (state.ordersPipelineBusy) {
+        setOrdersStatus(t("sidebar.msg.orders_busy"), "err");
+        return;
+      }
+      state.ordersPipelineBusy = true;
       var rowSelectionSpec = getRowSelectionSpec_();
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
@@ -3105,12 +3118,18 @@
           setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
+          state.ordersPipelineBusy = false;
           setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
     }
 
     function syncSelection() {
+      if (state.ordersPipelineBusy) {
+        setOrdersStatus(t("sidebar.msg.orders_busy"), "err");
+        return;
+      }
+      state.ordersPipelineBusy = true;
       var rowSelectionSpec = getRowSelectionSpec_();
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
@@ -3143,6 +3162,7 @@
           setOrdersStatus(err.message || String(err), "err");
         })
         .then(function () {
+          state.ordersPipelineBusy = false;
           setSectionBusy("dt-orders", false);
           setOrdersBusy(false);
         });
