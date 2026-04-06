@@ -18,6 +18,7 @@ export type Env = {
   adminSecret: string | undefined;
   corsOrigin: string | undefined;
   zrWebhookSecret: string | undefined;
+  yalidineWebhookSecret: string | undefined;
   trialDailyShipmentLimit: number;
 };
 
@@ -74,6 +75,11 @@ export function loadEnv(): Env {
   const adminSecret = (process.env.ADMIN_SECRET ?? '').trim();
   const corsOrigin = (process.env.CORS_ORIGIN ?? '').trim();
   const zrWebhookSecret = (process.env.ZR_WEBHOOK_SECRET ?? '').trim();
+  const yalidineWebhookSecret = (
+    process.env.YALIDINE_WEBHOOK_SECRET ??
+    process.env.GUEPEX_WEBHOOK_SECRET ??
+    ''
+  ).trim();
   const out: Env = {
     nodeEnv,
     port: parsePort_(process.env.PORT, 3000),
@@ -89,6 +95,7 @@ export function loadEnv(): Env {
     adminSecret: adminSecret || undefined,
     corsOrigin: corsOrigin || undefined,
     zrWebhookSecret: zrWebhookSecret || undefined,
+    yalidineWebhookSecret: yalidineWebhookSecret || undefined,
   };
   // Fail-fast in production (locked checklist).
   const isProd = nodeEnv === 'production';

@@ -83,7 +83,11 @@ if (licensePool && env.adminSecret) {
   app.log.warn('ADMIN_SECRET is set but DATABASE_URL is missing or DB init failed; admin API is disabled.');
 }
 await registerShipmentRoutes(app, { env, pool: licensePool });
-await registerWebhookRoutes(app, { pool: licensePool, zrWebhookSecret: env.zrWebhookSecret });
+await registerWebhookRoutes(app, {
+  pool: licensePool,
+  zrWebhookSecret: env.zrWebhookSecret,
+  yalidineWebhookSecret: env.yalidineWebhookSecret,
+});
 
 const port = env.port;
 const host = env.host;

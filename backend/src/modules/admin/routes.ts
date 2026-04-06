@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 
 import type { Env } from '../../config/env.js';
 import { insertAdminLicenseCode, listAdminLicenseCodes } from './codes.js';
-import { hashClientIdentity } from '../license/service.js';
+import { activateLicenseByEmail, hashClientIdentity } from '../license/service.js';
 
 const issueBodySchema = {
   type: 'object',
@@ -56,15 +56,41 @@ export async function registerAdminRoutes(
         notes: request.body?.notes ?? null,
         activatedBy,
       });
+      let responseRow = row;
+      if (normalizedGoogleEmail) {
+        // Direct email activation flow: issuing a code bound to an email
+        // instantly activates that email without sharing the code.
+        await activateLicenseByEmail(pool, { email: normalizedGoogleEmail }, env);
+        const refreshed = await pool.query<{
+          id: string;
+          code: string;
+          created_at: Date;
+          duration_days: number;
+          notes: string | null;
+          revoked: boolean;
+          revoked_at: Date | null;
+          activated_by: string | null;
+          activated_at: Date | null;
+        }>(
+          `SELECT id, code, created_at, duration_days, notes, revoked, revoked_at, activated_by, activated_at
+           FROM dt_admin_license_code
+           WHERE id = $1
+           LIMIT 1`,
+          [row.id],
+        );
+        if (refreshed.rows[0]) {
+          responseRow = refreshed.rows[0];
+        }
+      }
       return reply.code(201).send({
         code,
-        id: row.id,
-        createdAt: new Date(row.created_at).toISOString(),
-        durationDays: row.duration_days,
-        notes: row.notes,
-        activatedAt: row.activated_at ? new Date(row.activated_at).toISOString() : null,
-        revoked: row.revoked,
-        status: row.revoked ? 'revoked' : row.activated_at ? 'active' : 'pending',
+        id: responseRow.id,
+        createdAt: new Date(responseRow.created_at).toISOString(),
+        durationDays: responseRow.duration_days,
+        notes: responseRow.notes,
+        activatedAt: responseRow.activated_at ? new Date(responseRow.activated_at).toISOString() : null,
+        revoked: responseRow.revoked,
+        status: responseRow.revoked ? 'revoked' : responseRow.activated_at ? 'active' : 'pending',
         boundToEmail: normalizedGoogleEmail || null,
       });
     },
@@ -147,6 +173,79 @@ export async function registerAdminRoutes(
     const result = await pool.query(sql, params);
     return reply.send({ clients: result.rows });
   });
+
+  // GET /admin/v1/trials — recent trial activations/entitlements
+  app.get<{ Querystring: { limit?: string; search?: string } }>(
+    '/admin/v1/trials',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'string' },
+            search: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const lim = request.query.limit != null ? Number(request.query.limit) : 200;
+      const safeLimit = Number.isFinite(lim) ? Math.min(1000, Math.max(1, lim)) : 200;
+      const searchRaw =
+        request.query.search != null ? String(request.query.search).trim().toLowerCase() : '';
+
+      const whereParts: string[] = [];
+      const params: unknown[] = [];
+      if (searchRaw) {
+        if (!env.licensePepper) {
+          return reply
+            .code(500)
+            .send({ error: 'license_pepper_required', code: 'LICENSE_PEPPER_REQUIRED' });
+        }
+        const hashed = hashClientIdentity(searchRaw, env.licensePepper);
+        params.push(hashed);
+        params.push(searchRaw);
+        whereParts.push(
+          `(t.user_email_hmac = $${params.length - 1}
+             OR (l.google_email IS NOT NULL AND POSITION($${params.length} IN LOWER(l.google_email)) > 0))`,
+        );
+      }
+      params.push(safeLimit);
+
+      const sql =
+        `SELECT
+           t.user_email_hmac,
+           t.spreadsheet_id,
+           t.created_at,
+           t.expires_at,
+           t.used,
+           l.google_email
+         FROM dt_trial_entitlement t
+         LEFT JOIN dt_license l ON l.user_email_hmac = t.user_email_hmac` +
+        (whereParts.length ? ` WHERE ${whereParts.join(' AND ')}` : '') +
+        ` ORDER BY t.created_at DESC
+          LIMIT $${params.length}`;
+
+      const result = await pool.query(sql, params);
+      const now = Date.now();
+      return reply.send({
+        items: result.rows.map((row) => {
+          const expiresAt = row.expires_at ? new Date(row.expires_at).toISOString() : null;
+          const expired = expiresAt ? Date.parse(expiresAt) <= now : false;
+          const used = !!row.used;
+          return {
+            userEmailHmac: row.user_email_hmac ? String(row.user_email_hmac) : null,
+            googleEmail: row.google_email ? String(row.google_email) : null,
+            spreadsheetId: row.spreadsheet_id ? String(row.spreadsheet_id) : null,
+            createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+            expiresAt,
+            used,
+            status: used ? 'used' : expired ? 'expired' : 'trial',
+          };
+        }),
+      });
+    },
+  );
 
   // POST /admin/v1/licenses/extend  { email, days? }
   app.post('/admin/v1/licenses/extend', async (request, reply) => {
