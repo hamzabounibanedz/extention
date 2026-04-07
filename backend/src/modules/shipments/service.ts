@@ -341,49 +341,91 @@ function resolveDeliveryModeRaw_(row: GenericOrderInput, defaultDeliveryType: st
   return defaultDeliveryType;
 }
 
-function coerceAdapterFailureMessage_(v: unknown): string {
-  if (v == null) return '';
-  if (typeof v === 'string') return v;
+function isObjectPlaceholderText_(value: string): boolean {
+  return /^\[object [^\]]+\]$/i.test(String(value || '').trim());
+}
+
+function compactErrorText_(value: string): string {
+  return String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function coerceUnknownErrorText_(v: unknown, depth = 0): string {
+  if (depth > 5 || v == null) return '';
+  if (typeof v === 'string') {
+    const text = compactErrorText_(v);
+    if (!text || isObjectPlaceholderText_(text)) return '';
+    const startsLikeJson = text.startsWith('{') || text.startsWith('[');
+    const endsLikeJson = text.endsWith('}') || text.endsWith(']');
+    if (startsLikeJson && endsLikeJson) {
+      try {
+        const parsed = JSON.parse(text);
+        const inner = coerceUnknownErrorText_(parsed, depth + 1);
+        if (inner) return inner;
+      } catch {
+        // Keep original non-JSON text.
+      }
+    }
+    return text;
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) {
+    return v
+      .map((item) => coerceUnknownErrorText_(item, depth + 1))
+      .filter(Boolean)
+      .join(' | ');
+  }
   if (typeof v === 'object') {
     const o = v as Record<string, unknown>;
-    if (typeof o.message === 'string' && o.message.trim()) return o.message.trim();
-    if (typeof o.detail === 'string' && o.detail.trim()) return o.detail.trim();
-    if (typeof o.error === 'string' && o.error.trim()) return o.error.trim();
+    const preferredKeys = [
+      'message',
+      'detail',
+      'error',
+      'title',
+      'description',
+      'reason',
+      'cause',
+      'errors',
+    ];
+    for (const key of preferredKeys) {
+      if (o[key] == null) continue;
+      const inner = coerceUnknownErrorText_(o[key], depth + 1);
+      if (inner) return inner;
+    }
+
+    const fragments: string[] = [];
+    for (const [key, value] of Object.entries(o)) {
+      if (value == null || key === 'stack' || key === 'raw') continue;
+      const inner = coerceUnknownErrorText_(value, depth + 1);
+      if (!inner) continue;
+      fragments.push(inner);
+      if (fragments.length >= 3) break;
+    }
+    if (fragments.length) {
+      return Array.from(new Set(fragments)).join(' | ');
+    }
+
     try {
-      return JSON.stringify(v);
+      const encoded = compactErrorText_(JSON.stringify(v));
+      if (!encoded || encoded === '{}' || encoded === '[]' || isObjectPlaceholderText_(encoded)) {
+        return '';
+      }
+      return encoded.length > 600 ? `${encoded.slice(0, 597)}...` : encoded;
     } catch {
       return '';
     }
   }
-  return String(v);
+  return '';
+}
+
+function coerceAdapterFailureMessage_(v: unknown): string {
+  return coerceUnknownErrorText_(v);
 }
 
 function coerceCarrierApiDetail_(raw: unknown): string {
-  if (raw == null) return '';
-  if (typeof raw === 'string') {
-    return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  }
-  if (typeof raw === 'object') {
-    const o = raw as Record<string, unknown>;
-    if (o.error != null) {
-      const msg = coerceCarrierApiDetail_(o.error);
-      if (msg) return msg;
-    }
-    if (o.message != null) {
-      const msg = coerceCarrierApiDetail_(o.message);
-      if (msg) return msg;
-    }
-    if (o.detail != null) {
-      const msg = coerceCarrierApiDetail_(o.detail);
-      if (msg) return msg;
-    }
-    try {
-      return JSON.stringify(raw);
-    } catch {
-      return '';
-    }
-  }
-  return String(raw);
+  return coerceUnknownErrorText_(raw);
 }
 
 function trackingSearchBody_(carrier: string, trackingNumbers: string[]): Record<string, unknown> {
@@ -1070,10 +1112,19 @@ export async function sendOrdersBulk(
       for (const f of result.failures) {
         const originalIndex = chunkOriginalIndexes[f.index];
         if (originalIndex == null) continue;
+        const baseText = coerceAdapterFailureMessage_(f.errorMessage);
+        const rawText = coerceCarrierApiDetail_(result.raw);
+        const failureText =
+          baseText ||
+          (rawText
+            ? `Carrier request failed (${String(f.errorCode ?? 'REQUEST_FAILED')}): ${rawText}`
+            : f.errorCode
+              ? `Carrier request failed (${String(f.errorCode)}).`
+              : '');
         failures.push({
           index: originalIndex,
           errorCode: f.errorCode ?? null,
-          errorMessage: coerceAdapterFailureMessage_(f.errorMessage) || 'Carrier request failed',
+          errorMessage: failureText || 'Carrier request failed.',
           externalId: f.externalId ?? null,
         });
       }
@@ -1104,7 +1155,9 @@ export async function sendOrdersBulk(
           failures.push({
             index: originalIndex,
             errorCode: 'CREATE_FAILED',
-            errorMessage: created.errorMessage || `${carrier} shipment creation failed`,
+            errorMessage:
+              coerceUnknownErrorText_(created.errorMessage) ||
+              `${carrier} shipment creation failed`,
             externalId: null,
           });
         }
@@ -1112,7 +1165,8 @@ export async function sendOrdersBulk(
         failures.push({
           index: originalIndex,
           errorCode: 'CREATE_FAILED',
-          errorMessage: error instanceof Error ? error.message : String(error),
+          errorMessage:
+            coerceUnknownErrorText_(error) || `${carrier} shipment creation failed.`,
           externalId: null,
         });
       }
@@ -1191,7 +1245,7 @@ export async function syncTrackingBulk(input: {
         credentials,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = coerceUnknownErrorText_(error) || 'Tracking lookup failed.';
       chunk.forEach((trackingNumber) => {
         errors.push({ trackingNumber, message });
       });

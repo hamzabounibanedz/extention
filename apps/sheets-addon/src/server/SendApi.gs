@@ -11,19 +11,69 @@ var SEND_DOC_LOCK_WAIT_MS_ = 120000;
 /**
  * Backend/carrier may return structured errors; never surface "[object Object]" in the sidebar.
  * @param {*} msg
+ * @param {number=} depth
  * @return {string}
  */
-function send_coerceErrorMessage_(msg) {
-  if (msg == null || msg === '') {
+function send_isObjectPlaceholder_(text) {
+  return /^\[object [^\]]+\]$/i.test(String(text || '').trim());
+}
+
+/**
+ * @param {*} text
+ * @return {string}
+ */
+function send_compactErrorText_(text) {
+  return String(text == null ? '' : text)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * @param {string} text
+ * @return {*}
+ */
+function send_tryParseJsonText_(text) {
+  var t = String(text || '').trim();
+  if (!t) return null;
+  var startsLikeJson = t.charAt(0) === '{' || t.charAt(0) === '[';
+  var endsLikeJson =
+    t.charAt(t.length - 1) === '}' || t.charAt(t.length - 1) === ']';
+  if (!startsLikeJson || !endsLikeJson) return null;
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    return null;
+  }
+}
+
+function send_coerceErrorMessage_(msg, depth) {
+  var d = Number(depth || 0);
+  if (!isFinite(d) || d < 0) d = 0;
+  if (d > 5 || msg == null || msg === '') {
     return '';
   }
   if (typeof msg === 'string') {
-    return msg;
+    var text = send_compactErrorText_(msg);
+    if (!text || send_isObjectPlaceholder_(text)) {
+      return '';
+    }
+    var parsed = send_tryParseJsonText_(text);
+    if (parsed != null) {
+      var parsedText = send_coerceErrorMessage_(parsed, d + 1);
+      if (parsedText) {
+        return parsedText;
+      }
+    }
+    return text;
+  }
+  if (typeof msg === 'number' || typeof msg === 'boolean') {
+    return String(msg);
   }
   if (Array.isArray(msg)) {
     var parts = msg
       .map(function (item) {
-        return send_coerceErrorMessage_(item);
+        return send_coerceErrorMessage_(item, d + 1);
       })
       .filter(function (item) {
         return item;
@@ -32,38 +82,99 @@ function send_coerceErrorMessage_(msg) {
   }
   if (typeof msg === 'object') {
     try {
-      if (msg.message != null) {
-        var inner = send_coerceErrorMessage_(msg.message);
-        if (inner) {
-          return inner;
+      var preferredKeys = [
+        'message',
+        'detail',
+        'error',
+        'title',
+        'description',
+        'reason',
+        'cause',
+        'errors',
+      ];
+      for (var i = 0; i < preferredKeys.length; i++) {
+        var preferredKey = preferredKeys[i];
+        if (msg[preferredKey] == null) {
+          continue;
+        }
+        var preferredText = send_coerceErrorMessage_(msg[preferredKey], d + 1);
+        if (preferredText) {
+          return preferredText;
         }
       }
-      if (msg.detail != null) {
-        var detail = send_coerceErrorMessage_(msg.detail);
-        if (detail) {
-          return detail;
+      var fragments = [];
+      for (var k in msg) {
+        if (!Object.prototype.hasOwnProperty.call(msg, k)) {
+          continue;
+        }
+        if (k === 'stack' || k === 'raw') {
+          continue;
+        }
+        var part = send_coerceErrorMessage_(msg[k], d + 1);
+        if (!part) {
+          continue;
+        }
+        if (fragments.indexOf(part) === -1) {
+          fragments.push(part);
+        }
+        if (fragments.length >= 3) {
+          break;
         }
       }
-      if (msg.error != null) {
-        var err = send_coerceErrorMessage_(msg.error);
-        if (err) {
-          return err;
-        }
+      if (fragments.length) {
+        return fragments.join(' | ');
       }
-      if (msg.title != null) {
-        var title = send_coerceErrorMessage_(msg.title);
-        if (title) {
-          return title;
-        }
+      var encoded = send_compactErrorText_(JSON.stringify(msg));
+      if (
+        !encoded ||
+        encoded === '{}' ||
+        encoded === '[]' ||
+        send_isObjectPlaceholder_(encoded)
+      ) {
+        return '';
       }
-      return JSON.stringify(msg);
+      if (encoded.length > 600) {
+        return encoded.slice(0, 597) + '...';
+      }
+      return encoded;
     } catch (e) {
-      return String(msg);
+      var fallback = send_compactErrorText_(String(msg));
+      if (!fallback || send_isObjectPlaceholder_(fallback)) {
+        return '';
+      }
+      return fallback;
     }
   }
-  return String(msg);
+  var fallbackText = send_compactErrorText_(String(msg));
+  if (!fallbackText || send_isObjectPlaceholder_(fallbackText)) {
+    return '';
+  }
+  return fallbackText;
 }
 
+/**
+ * Coerce then hard-sanitize the final user-facing error string.
+ * This extra guard ensures placeholders such as "[object Object]" never leak.
+ *
+ * @param {*} raw
+ * @param {string=} fallbackText
+ * @return {string}
+ */
+function send_finalizeErrorMessage_(raw, fallbackText) {
+  var fallback = send_compactErrorText_(fallbackText || '');
+  if (!fallback || send_isObjectPlaceholder_(fallback)) {
+    fallback = i18n_t('send.error_generic');
+  }
+  var text = send_coerceErrorMessage_(raw);
+  if (!text || send_isObjectPlaceholder_(text)) {
+    return fallback;
+  }
+  var normalized = send_compactErrorText_(text);
+  if (!normalized || send_isObjectPlaceholder_(normalized)) {
+    return fallback;
+  }
+  return normalized;
+}
 /**
  * Guard against a common mis-mapping where the address column is actually a
  * delivery-mode column (e.g. "التوصيل للمكتب" / "A domicile").
@@ -229,6 +340,7 @@ function send_sendSelection(rowSelectionSpec, options) {
   var failed = 0;
   var labelUrls = [];
   var batchDetails = [];
+  var genericSendError = i18n_t('send.error_generic');
 
   var startTime = Date.now();
   var MAX_MS = 5 * 60 * 1000; // 5 minutes, leave buffer before Apps Script 6-min limit.
@@ -331,12 +443,21 @@ function send_sendSelection(rowSelectionSpec, options) {
       };
       try {
         var res = apiJsonPost_('/v1/shipments/send', payload);
-        var globalErrorMessage =
-          res && res.ok === false
-            ? send_coerceErrorMessage_(
-                res.errorMessage != null ? res.errorMessage : res.message != null ? res.message : '',
-              ) || i18n_t('send.error_generic')
-            : '';
+        var globalErrorMessage = '';
+        if (res && res.ok === false) {
+          var globalFallback =
+            res.errorCode != null
+              ? 'Carrier request failed (' + String(res.errorCode) + ').'
+              : genericSendError;
+          globalErrorMessage = send_finalizeErrorMessage_(
+            res.errorMessage != null
+              ? res.errorMessage
+              : res.message != null
+                ? res.message
+                : res,
+            globalFallback,
+          );
+        }
         if (globalErrorMessage) {
           carrierRows.forEach(function (rowObj) {
             failed++;
@@ -391,8 +512,16 @@ function send_sendSelection(rowSelectionSpec, options) {
           if (isNaN(idx) || idx < 0 || idx >= carrierRows.length) return;
           handled[idx] = true;
           var rowObj = carrierRows[idx];
-          var errMsg =
-            send_coerceErrorMessage_(f.errorMessage) || i18n_t('send.error_generic');
+          var failureFallback =
+            f && f.errorCode != null
+              ? 'Carrier request failed (' + String(f.errorCode) + ').'
+              : genericSendError;
+          var errMsg = send_finalizeErrorMessage_(
+            f && Object.prototype.hasOwnProperty.call(f, 'errorMessage')
+              ? f.errorMessage
+              : f,
+            failureFallback,
+          );
           if (columns.statusColumn != null) {
             sheet.getRange(rowObj.rowNumber, Number(columns.statusColumn)).setValue(i18n_format('general.error', errMsg));
           }
@@ -408,7 +537,7 @@ function send_sendSelection(rowSelectionSpec, options) {
         carrierRows.forEach(function (rowObj, idx) {
           if (handled[idx]) return;
           failed++;
-          var missingMsg = i18n_t('send.error_generic');
+          var missingMsg = genericSendError;
           if (columns.statusColumn != null) {
             sheet
               .getRange(rowObj.rowNumber, Number(columns.statusColumn))
@@ -423,9 +552,7 @@ function send_sendSelection(rowSelectionSpec, options) {
       } catch (e) {
         carrierRows.forEach(function (rowObj) {
           failed++;
-          var errText =
-            send_coerceErrorMessage_(e && e.message != null ? e.message : e) ||
-            i18n_t('send.error_generic');
+          var errText = send_finalizeErrorMessage_(e, genericSendError);
           if (columns.statusColumn != null) {
             sheet
               .getRange(rowObj.rowNumber, Number(columns.statusColumn))
@@ -483,10 +610,13 @@ function send_sendSelection(rowSelectionSpec, options) {
 
   var failedDetails = batchDetails
     .filter(function (d) {
-      return !d.ok && send_coerceErrorMessage_(d.errorMessage);
+      return !d.ok;
     })
     .map(function (d) {
-      return { row: d.rowNumber, error: send_coerceErrorMessage_(d.errorMessage) };
+      return {
+        row: d.rowNumber,
+        error: send_finalizeErrorMessage_(d.errorMessage, genericSendError),
+      };
     });
   return {
     attempted: sent + failed,

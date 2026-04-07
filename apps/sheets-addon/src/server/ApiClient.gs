@@ -332,6 +332,107 @@ function fetchWithRetry_(url, options, baseUrl) {
 
  */
 
+function api_isObjectPlaceholderText_(text) {
+  return /^\[object [^\]]+\]$/i.test(String(text || "").trim());
+}
+
+/**
+ * @param {*} text
+ * @return {string}
+ */
+function api_compactErrorText_(text) {
+  return String(text == null ? "" : text)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * @param {string} text
+ * @return {*}
+ */
+function api_tryParseJsonText_(text) {
+  var t = String(text || "").trim();
+  if (!t) return null;
+  var startsLikeJson = t.charAt(0) === "{" || t.charAt(0) === "[";
+  var endsLikeJson =
+    t.charAt(t.length - 1) === "}" || t.charAt(t.length - 1) === "]";
+  if (!startsLikeJson || !endsLikeJson) return null;
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * @param {*} value
+ * @param {number=} depth
+ * @return {string}
+ */
+function api_coerceErrorText_(value, depth) {
+  var d = Number(depth || 0);
+  if (!isFinite(d) || d < 0) d = 0;
+  if (d > 5 || value == null || value === "") return "";
+
+  if (typeof value === "string") {
+    var text = api_compactErrorText_(value);
+    if (!text || api_isObjectPlaceholderText_(text)) return "";
+    var parsed = api_tryParseJsonText_(text);
+    if (parsed != null) {
+      var parsedText = api_coerceErrorText_(parsed, d + 1);
+      if (parsedText) return parsedText;
+    }
+    return text;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map(function (item) {
+        return api_coerceErrorText_(item, d + 1);
+      })
+      .filter(function (item) {
+        return item;
+      })
+      .join(" | ");
+  }
+  if (typeof value === "object") {
+    var keys = [
+      "message",
+      "detail",
+      "error",
+      "title",
+      "description",
+      "reason",
+      "cause",
+      "errors",
+    ];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (value[k] == null) continue;
+      var inner = api_coerceErrorText_(value[k], d + 1);
+      if (inner) return inner;
+    }
+    try {
+      var encoded = api_compactErrorText_(JSON.stringify(value));
+      if (
+        !encoded ||
+        encoded === "{}" ||
+        encoded === "[]" ||
+        api_isObjectPlaceholderText_(encoded)
+      ) {
+        return "";
+      }
+      return encoded.length > 600 ? encoded.slice(0, 597) + "..." : encoded;
+    } catch (e2) {
+      return "";
+    }
+  }
+  return "";
+}
+
 function parseApiResponse_(res) {
   var code = res.getResponseCode();
 
@@ -342,29 +443,19 @@ function parseApiResponse_(res) {
 
     try {
       var errJson = JSON.parse(text);
-
-      if (errJson && typeof errJson === "object") {
-        if (errJson.message && typeof errJson.message === "string") {
-          msg = String(errJson.message);
-        } else if (errJson.error) {
-          if (typeof errJson.error === "string") {
-            msg = String(errJson.error);
-          } else if (errJson.error && typeof errJson.error === "object" && errJson.error.message) {
-            msg = String(errJson.error.message);
-          } else {
-            try {
-              msg = JSON.stringify(errJson.error);
-            } catch (e2) {
-              msg = String(errJson.error);
-            }
-          }
-        } else if (errJson.code) {
-          msg = String(errJson.code);
-        }
+      var extracted = api_coerceErrorText_(errJson);
+      if (!extracted && errJson && typeof errJson === "object" && errJson.code != null) {
+        extracted = api_coerceErrorText_(errJson.code);
+      }
+      if (extracted) {
+        msg = extracted;
       }
     } catch (e) {
-      if (text) {
-        msg = msg + ": " + text.slice(0, 180);
+      var textMsg = api_coerceErrorText_(text);
+      if (textMsg) {
+        msg = textMsg.length > 180 ? textMsg.slice(0, 180) : textMsg;
+      } else if (text) {
+        msg = msg + ": " + String(text).slice(0, 180);
       }
     }
 

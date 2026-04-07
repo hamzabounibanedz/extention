@@ -77,6 +77,131 @@ describe('shipments tracking sync', () => {
     assert.equal(urls.some((u) => u.includes('/parcels/')), true);
   });
 
+  it('coerces nested carrier failure objects into readable text', async () => {
+    await withMockFetch_(
+      async (url: any) => {
+        var u = String(url || '');
+        if (u.includes('/territories/search')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              totalCount: 0,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            successes: [],
+            failures: [
+              {
+                index: 0,
+                errorCode: 'VALIDATION_ERROR',
+                errorMessage: {
+                  message: 'Commune not serviceable for this hub',
+                },
+              },
+            ],
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await sendOrdersBulk(
+          {
+            carrier: 'zr',
+            orders: [
+              {
+                rowIndex: 7,
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: 'Cite Kaidi',
+                commune: 'Bordj El Kiffan',
+                wilaya: 'Alger',
+                totalPrice: 2400,
+                productName: 'Machine a cafe',
+                quantity: 1,
+                deliveryMode: 'pickup-point',
+                deliveryType: 'pickup-point',
+                hubId: 'HUB-16',
+              },
+            ],
+            credentials: { tenantId: 'tenant', secretKey: 'secret' },
+            businessSettings: { senderWilaya: 'Batna' },
+          },
+          { pool: null },
+        );
+        assert.equal(r.ok, true);
+        assert.equal(r.failureCount, 1);
+        const message = String(r.failures[0]?.errorMessage || '');
+        assert.ok(
+          message.includes('Commune not serviceable') ||
+            message.includes('VALIDATION_ERROR'),
+        );
+        assert.equal(message.includes('[object Object]'), false);
+      },
+    );
+  });
+
+  it('never returns [object Object] for Yalidine carrier failures', async () => {
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : [];
+        const orderId = body?.[0]?.order_id || 'ORDER-YAL-FAIL';
+        return new Response(
+          JSON.stringify({
+            [orderId]: {
+              success: false,
+              order_id: orderId,
+              message: '[object Object]',
+              error: {
+                detail: 'Delivery address is invalid',
+              },
+            },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await sendOrdersBulk(
+          {
+            carrier: 'yalidine',
+            orders: [
+              {
+                rowIndex: 19,
+                orderId: 'ORDER-YAL-FAIL',
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: 'Cite Kaidi',
+                commune: 'Bordj El Kiffan',
+                wilaya: 'Alger',
+                codeWilaya: 16,
+                fromWilayaName: 'Batna',
+                toWilayaName: 'Alger',
+                toCommuneName: 'Bordj El Kiffan',
+                totalPrice: 2400,
+                productName: 'Machine a cafe',
+                quantity: 1,
+                deliveryMode: 'home',
+                deliveryType: 'home',
+              },
+            ],
+            credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+            businessSettings: { senderWilaya: 'Batna' },
+          },
+          { pool: null },
+        );
+        assert.equal(r.ok, true);
+        assert.equal(r.failureCount, 1);
+        const message = String(r.failures[0]?.errorMessage || '');
+        assert.equal(message.includes('[object Object]'), false);
+        assert.ok(message.trim().length > 0);
+      },
+    );
+  });
+
   it('batches Yalidine tracking lookups into one carrier call per chunk', async () => {
     let fetchCount = 0;
     let capturedUrl = '';
