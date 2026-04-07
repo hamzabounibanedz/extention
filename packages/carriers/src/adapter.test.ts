@@ -173,6 +173,62 @@ describe('carrier adapters', () => {
     );
   });
 
+  it('Yalidine bulk create ignores [object Object] placeholders', async () => {
+    const a = new YalidineAdapter();
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : [];
+        const orderId = body?.[0]?.order_id || 'ORDER-PLACEHOLDER';
+        return new Response(
+          JSON.stringify({
+            [orderId]: {
+              success: false,
+              order_id: orderId,
+              message: '[object Object]',
+              error: {
+                detail: 'Commune not serviceable for this hub',
+              },
+            },
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+          parcels: [
+            {
+              order_id: 'ORDER-PLACEHOLDER',
+              from_wilaya_name: 'Batna',
+              firstname: 'Ali',
+              familyname: 'Ben',
+              contact_phone: '0550123456',
+              address: 'Cite Kaidi',
+              to_commune_name: 'Bordj El Kiffan',
+              to_wilaya_name: 'Alger',
+              product_list: 'Machine a cafe',
+              price: 2400,
+              do_insurance: false,
+              declared_value: 2400,
+              height: 10,
+              width: 20,
+              length: 30,
+              weight: 6,
+              freeshipping: false,
+              is_stopdesk: false,
+              has_exchange: false,
+            },
+          ],
+        });
+        assert.equal(r.successCount, 0);
+        assert.equal(r.failureCount, 1);
+        const message = String(r.failures[0]?.errorMessage || '');
+        assert.equal(message.includes('[object Object]'), false);
+        assert.ok(message.includes('Commune not serviceable for this hub'));
+      },
+    );
+  });
+
   it('Yalidine searchParcels batches multiple tracking numbers in one request', async () => {
     const a = new YalidineAdapter();
     let capturedUrl = '';
@@ -243,6 +299,60 @@ describe('carrier adapters', () => {
     assert.equal(r.successCount, 0);
     assert.equal(r.failureCount, 1);
     assert.ok(String(r.failures[0]?.errorMessage || '').includes('hubId'));
+  });
+
+  it('ZR bulk create flattens nested error objects', async () => {
+    const a = new ZrAdapter();
+    await withMockFetch_(
+      async () =>
+        new Response(
+          JSON.stringify({
+            successes: [],
+            failures: [
+              {
+                index: 0,
+                errorCode: 'VALIDATION_ERROR',
+                errorMessage: {
+                  message: 'Delivery address is invalid',
+                },
+              },
+            ],
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        ),
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { tenantId: 'tenant', secretKey: 'secret' },
+          parcels: [
+            {
+              customer: {
+                customerId: 'c-2',
+                name: 'Test Customer',
+                phone: { number1: '+213550000000' },
+              },
+              deliveryType: 'pickup-point',
+              hubId: 'HUB-1',
+              description: 'desc',
+              amount: 1200,
+              externalId: 'ext-2',
+              orderedProducts: [
+                {
+                  productName: 'P1',
+                  unitPrice: 1200,
+                  quantity: 1,
+                  stockType: 'none',
+                },
+              ],
+            },
+          ],
+        });
+        assert.equal(r.successCount, 0);
+        assert.equal(r.failureCount, 1);
+        const message = String(r.failures[0]?.errorMessage || '');
+        assert.ok(message.includes('Delivery address is invalid'));
+        assert.equal(message.includes('[object Object]'), false);
+      },
+    );
   });
 
   it('ZR createShipment forwards stopDeskId as hubId', async () => {

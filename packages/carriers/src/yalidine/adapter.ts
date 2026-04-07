@@ -121,27 +121,69 @@ function asRecord_(value: unknown): Record<string, unknown> {
 }
 
 /** Yalidine sometimes returns `message` / `error` as nested objects; never stringify to "[object Object]". */
-function coerceYalidineErrorText_(value: unknown, fallback = ''): string {
-  if (value == null) return fallback;
+function coerceYalidineErrorText_(value: unknown, fallback = '', depth = 0): string {
+  if (depth > 5 || value == null) return fallback;
   if (typeof value === 'string') {
-    const t = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    return t || fallback;
+    const text = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text || /^\[object [^\]]+\]$/i.test(text)) return fallback;
+    const startsLikeJson = text.startsWith('{') || text.startsWith('[');
+    const endsLikeJson = text.endsWith('}') || text.endsWith(']');
+    if (startsLikeJson && endsLikeJson) {
+      try {
+        const parsed = JSON.parse(text);
+        const parsedText = coerceYalidineErrorText_(parsed, '', depth + 1);
+        if (parsedText) return parsedText;
+      } catch {
+        // Keep original non-JSON text.
+      }
+    }
+    return text;
   }
   if (typeof value === 'number' || typeof value === 'boolean') {
     return String(value);
   }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => coerceYalidineErrorText_(item, '', depth + 1))
+      .filter(Boolean);
+    return parts.length ? parts.join(' | ') : fallback;
+  }
   if (typeof value === 'object') {
     const o = value as Record<string, unknown>;
-    for (const k of ['message', 'detail', 'error'] as const) {
-      const v = o[k];
-      if (typeof v === 'string' && v.trim()) return v.trim();
-      if (v != null && typeof v === 'object') {
-        const inner = coerceYalidineErrorText_(v, '');
-        if (inner) return inner;
-      }
+    const preferredKeys = [
+      'message',
+      'detail',
+      'error',
+      'title',
+      'description',
+      'reason',
+      'cause',
+      'errors',
+    ] as const;
+    for (const key of preferredKeys) {
+      if (o[key] == null) continue;
+      const inner = coerceYalidineErrorText_(o[key], '', depth + 1);
+      if (inner) return inner;
     }
+
+    const fragments: string[] = [];
+    for (const [key, item] of Object.entries(o)) {
+      if (item == null || key === 'stack' || key === 'raw') continue;
+      const inner = coerceYalidineErrorText_(item, '', depth + 1);
+      if (!inner) continue;
+      fragments.push(inner);
+      if (fragments.length >= 3) break;
+    }
+    if (fragments.length) {
+      return Array.from(new Set(fragments)).join(' | ');
+    }
+
     try {
-      return JSON.stringify(value);
+      const encoded = JSON.stringify(value).replace(/\s+/g, ' ').trim();
+      if (!encoded || encoded === '{}' || encoded === '[]' || /^\[object [^\]]+\]$/i.test(encoded)) {
+        return fallback;
+      }
+      return encoded.length > 600 ? `${encoded.slice(0, 597)}...` : encoded;
     } catch {
       return fallback || 'Yalidine error';
     }

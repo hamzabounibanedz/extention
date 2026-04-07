@@ -110,6 +110,80 @@ function asArray_(value: unknown): unknown[] {
   return [];
 }
 
+function isObjectPlaceholderText_(value: string): boolean {
+  return /^\[object [^\]]+\]$/i.test(String(value || '').trim());
+}
+
+function compactErrorText_(value: unknown): string {
+  return String(value == null ? '' : value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tryParseJsonText_(value: string): unknown | null {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const startsLikeJson = text.startsWith('{') || text.startsWith('[');
+  const endsLikeJson = text.endsWith('}') || text.endsWith(']');
+  if (!startsLikeJson || !endsLikeJson) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function coerceZrErrorText_(value: unknown, depth = 0): string {
+  if (depth > 5 || value == null) return '';
+  if (typeof value === 'string') {
+    const text = compactErrorText_(value);
+    if (!text || isObjectPlaceholderText_(text)) return '';
+    const parsed = tryParseJsonText_(text);
+    if (parsed != null) {
+      const parsedText = coerceZrErrorText_(parsed, depth + 1);
+      if (parsedText) return parsedText;
+    }
+    return text;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => coerceZrErrorText_(item, depth + 1))
+      .filter(Boolean)
+      .join(' | ');
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    for (const key of [
+      'message',
+      'detail',
+      'error',
+      'title',
+      'description',
+      'reason',
+      'cause',
+      'errors',
+    ]) {
+      if (obj[key] == null) continue;
+      const inner = coerceZrErrorText_(obj[key], depth + 1);
+      if (inner) return inner;
+    }
+    try {
+      const encoded = compactErrorText_(JSON.stringify(value));
+      if (!encoded || encoded === '{}' || encoded === '[]' || isObjectPlaceholderText_(encoded)) {
+        return '';
+      }
+      return encoded.length > 600 ? `${encoded.slice(0, 597)}...` : encoded;
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
 function extractItems_(json: unknown): unknown[] {
   if (!json || typeof json !== 'object') return [];
   const o = json as Record<string, unknown>;
@@ -240,7 +314,8 @@ function parseBulkResponse_(
     failures.push({
       index: sentIndexMap[localIndex],
       errorCode: o.errorCode != null ? String(o.errorCode) : null,
-      errorMessage: o.errorMessage != null ? String(o.errorMessage) : `ZR error (${status})`,
+      errorMessage:
+        coerceZrErrorText_(o.errorMessage) || `ZR error (${status})`,
       externalId:
         o.externalId != null
           ? String(o.externalId)
@@ -252,11 +327,11 @@ function parseBulkResponse_(
 
   if (status >= 400 && failures.length === 0) {
     const message =
-      payload.message != null
-        ? String(payload.message)
-        : payload.title != null
-          ? String(payload.title)
-          : `ZR bulk request failed (${status})`;
+      coerceZrErrorText_(payload.message) ||
+      coerceZrErrorText_(payload.error) ||
+      coerceZrErrorText_(payload.detail) ||
+      coerceZrErrorText_(payload.title) ||
+      `ZR bulk request failed (${status})`;
     for (let i = 0; i < sentIndexMap.length; i++) {
       failures.push({
         index: sentIndexMap[i],
