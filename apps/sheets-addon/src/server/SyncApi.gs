@@ -79,6 +79,9 @@ function sync_runCore_(
       track = rawTrack != null && String(rawTrack).trim() !== '' ? String(rawTrack).trim() : null;
     }
     if (!track) continue;
+    if (isAuto && !sync_shouldAutoTrackRow_(row, columns)) {
+      continue;
+    }
     attempted++;
 
     var carrierRaw = null;
@@ -495,6 +498,55 @@ function sync_bucketToSheetStatusLabel_(bucket) {
     return i18n_t('sync.updated').replace('{0}', '1');
   }
   return i18n_t('stats.bucket.' + key);
+}
+
+/**
+ * @param {string|null} bucket
+ * @return {boolean}
+ */
+function sync_isTerminalBucket_(bucket) {
+  var key = String(bucket || '').trim();
+  return key === 'delivered' || key === 'returned' || key === 'failed' || key === 'cancelled';
+}
+
+/**
+ * @param {*} statusText
+ * @return {string|null}
+ */
+function sync_bucketFromSheetStatusText_(statusText) {
+  var raw = statusText != null ? String(statusText).trim() : '';
+  if (!raw) {
+    return null;
+  }
+  var bucket = sync_bucketFromCarrierStateName_(raw);
+  if (!bucket && typeof classifyShipmentBucket_ === 'function') {
+    try {
+      var classified = classifyShipmentBucket_(raw, true);
+      if (classified && classified !== 'unknown') {
+        bucket = classified;
+      }
+    } catch (e) {}
+  }
+  return bucket || null;
+}
+
+/**
+ * Auto-sync should keep active shipments fresh, but skip terminal rows forever to
+ * avoid burning carrier quota on already-finished deliveries.
+ * @param {Array<string>} row
+ * @param {Object} columns
+ * @return {boolean}
+ */
+function sync_shouldAutoTrackRow_(row, columns) {
+  if (!row || !columns || columns.statusColumn == null) {
+    return true;
+  }
+  var statusCol = Number(columns.statusColumn);
+  if (!isFinite(statusCol) || statusCol < 1 || statusCol > row.length) {
+    return true;
+  }
+  var bucket = sync_bucketFromSheetStatusText_(row[statusCol - 1]);
+  return !sync_isTerminalBucket_(bucket);
 }
 
 /**

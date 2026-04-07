@@ -1991,17 +1991,16 @@ function setup_saveMapping(mapping) {
     if (typeof mobile_ensureOnEditTriggerForSpreadsheet_ === 'function') {
       mobile_ensureOnEditTriggerForSpreadsheet_(ss);
     }
-    if (typeof mobile_refreshCompanionArtifactsForSheet_ === 'function') {
-      mobile_refreshCompanionArtifactsForSheet_(ss, sheet, payload);
-    }
   } catch (e4) {
-    // Companion sheets/charts are best-effort and should not block mapping saves.
+    // Trigger install is best-effort and must not block mapping saves.
   }
   try {
     // Enforce dropdown choices for provider + status right after mapping save.
     if (
       typeof lists_applyCarrierAndStatusColumnValidationForSheet_ === 'function'
     ) {
+      // Keep mapping saves fast on large sheets; mobile/onEdit will re-apply if missing.
+      var maxApplyRows = Math.min(600, Math.max(sheet.getLastRow() - payload.headerRow, 1));
       lists_applyCarrierAndStatusColumnValidationForSheet_(
         ss,
         sheet,
@@ -2013,6 +2012,7 @@ function setup_saveMapping(mapping) {
         typeof lists_getStatusDropdownLabels_ === 'function'
           ? lists_getStatusDropdownLabels_()
           : [],
+        maxApplyRows,
       );
     }
   } catch (e5) {
