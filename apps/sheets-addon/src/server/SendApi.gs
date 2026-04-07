@@ -20,6 +20,16 @@ function send_coerceErrorMessage_(msg) {
   if (typeof msg === 'string') {
     return msg;
   }
+  if (Array.isArray(msg)) {
+    var parts = msg
+      .map(function (item) {
+        return send_coerceErrorMessage_(item);
+      })
+      .filter(function (item) {
+        return item;
+      });
+    return parts.join(' | ');
+  }
   if (typeof msg === 'object') {
     try {
       if (msg.message != null) {
@@ -28,11 +38,23 @@ function send_coerceErrorMessage_(msg) {
           return inner;
         }
       }
-      if (typeof msg.detail === 'string') {
-        return String(msg.detail);
+      if (msg.detail != null) {
+        var detail = send_coerceErrorMessage_(msg.detail);
+        if (detail) {
+          return detail;
+        }
       }
-      if (typeof msg.error === 'string') {
-        return String(msg.error);
+      if (msg.error != null) {
+        var err = send_coerceErrorMessage_(msg.error);
+        if (err) {
+          return err;
+        }
+      }
+      if (msg.title != null) {
+        var title = send_coerceErrorMessage_(msg.title);
+        if (title) {
+          return title;
+        }
       }
       return JSON.stringify(msg);
     } catch (e) {
@@ -40,6 +62,51 @@ function send_coerceErrorMessage_(msg) {
     }
   }
   return String(msg);
+}
+
+/**
+ * Guard against a common mis-mapping where the address column is actually a
+ * delivery-mode column (e.g. "التوصيل للمكتب" / "A domicile").
+ * @param {*} raw
+ * @return {boolean}
+ */
+function send_looksLikeDeliveryModeValue_(raw) {
+  var normalized =
+    typeof order_normalizeDeliveryText_ === 'function'
+      ? order_normalizeDeliveryText_(raw)
+      : raw != null
+        ? String(raw).trim().toLowerCase()
+        : '';
+  if (!normalized || normalized.length > 40) {
+    return false;
+  }
+  if (normalized.indexOf('للمكتب') !== -1) {
+    return true;
+  }
+  if (normalized.indexOf('للمنزل') !== -1 || normalized.indexOf('المنزل') !== -1) {
+    return true;
+  }
+  if (typeof ORDER_DELIVERY_PICKUP_TERMS_ === 'object' && ORDER_DELIVERY_PICKUP_TERMS_[normalized]) {
+    return true;
+  }
+  if (typeof ORDER_DELIVERY_HOME_TERMS_ === 'object' && ORDER_DELIVERY_HOME_TERMS_[normalized]) {
+    return true;
+  }
+  if (
+    typeof ORDER_DELIVERY_PICKUP_HINT_RE_ !== 'undefined' &&
+    ORDER_DELIVERY_PICKUP_HINT_RE_ &&
+    ORDER_DELIVERY_PICKUP_HINT_RE_.test(normalized)
+  ) {
+    return true;
+  }
+  if (
+    typeof ORDER_DELIVERY_HOME_HINT_RE_ !== 'undefined' &&
+    ORDER_DELIVERY_HOME_HINT_RE_ &&
+    ORDER_DELIVERY_HOME_HINT_RE_.test(normalized)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -84,7 +151,11 @@ function send_sendSelection(rowSelectionSpec, options) {
       throw new Error(i18n_t('error.sheet_not_found'));
     }
 
-  var preview = order_previewSelection(rowSelectionSpec);
+  var fastPreviewMode =
+    rowSelectionSpec != null && String(rowSelectionSpec).trim() !== '';
+  var preview = order_previewSelection(rowSelectionSpec, {
+    skipDuplicateScan: fastPreviewMode,
+  });
   send_assertSmartCoreMapping_(
     columns,
     preview && preview.rows ? preview.rows : [],
@@ -262,11 +333,9 @@ function send_sendSelection(rowSelectionSpec, options) {
         var res = apiJsonPost_('/v1/shipments/send', payload);
         var globalErrorMessage =
           res && res.ok === false
-            ? res.errorMessage != null
-              ? String(res.errorMessage)
-              : res.message != null
-              ? String(res.message)
-              : i18n_t('send.error_generic')
+            ? send_coerceErrorMessage_(
+                res.errorMessage != null ? res.errorMessage : res.message != null ? res.message : '',
+              ) || i18n_t('send.error_generic')
             : '';
         if (globalErrorMessage) {
           carrierRows.forEach(function (rowObj) {
@@ -354,15 +423,18 @@ function send_sendSelection(rowSelectionSpec, options) {
       } catch (e) {
         carrierRows.forEach(function (rowObj) {
           failed++;
+          var errText =
+            send_coerceErrorMessage_(e && e.message != null ? e.message : e) ||
+            i18n_t('send.error_generic');
           if (columns.statusColumn != null) {
             sheet
               .getRange(rowObj.rowNumber, Number(columns.statusColumn))
-              .setValue(i18n_format('general.error', e && e.message ? e.message : e));
+              .setValue(i18n_format('general.error', errText));
           }
           batchDetails.push({
             rowNumber: rowObj.rowNumber,
             ok: false,
-            errorMessage: e && e.message ? String(e.message) : String(e),
+            errorMessage: errText,
           });
         });
       }
@@ -527,6 +599,31 @@ function send_assertSmartCoreMapping_(columns, previewRows, defaultCarrierId) {
         'ربط الأعمدة غير صحيح: لا يمكن أن تكون «العنوان» و«الولاية» و«البلدية/المدينة» نفس العمود. قم بتصحيح الربط ثم أعد الإرسال.',
       );
     }
+  }
+
+  var rowsForAddressCheck = Array.isArray(previewRows) ? previewRows : [];
+  var suspiciousAddressRows = [];
+  var analyzedAddressRows = 0;
+  for (var j = 0; j < rowsForAddressCheck.length; j++) {
+    var row = rowsForAddressCheck[j] || {};
+    if (row.skipped || !row.order) {
+      continue;
+    }
+    var addr = row.order.address != null ? String(row.order.address).trim() : '';
+    if (!addr) {
+      continue;
+    }
+    analyzedAddressRows++;
+    if (send_looksLikeDeliveryModeValue_(addr)) {
+      suspiciousAddressRows.push(row.rowNumber);
+    }
+  }
+  if (
+    analyzedAddressRows > 0 &&
+    suspiciousAddressRows.length > 0 &&
+    suspiciousAddressRows.length === analyzedAddressRows
+  ) {
+    throw new Error(i18n_t('error.address_column_looks_like_delivery_type'));
   }
 }
 

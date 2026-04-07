@@ -211,6 +211,8 @@ var I18N_DICT_ = {
       "تعذر بدء الإرسال: جارٍ استخدام الملف (إرسال، مزامنة، أو مزامنة تلقائية). انتظر قليلاً (حتى دقيقتين للملفات الكبيرة) ثم أعد المحاولة دون النقر مرتين.",
     "error.sync_in_progress":
       "تعذر بدء المزامنة: عملية أخرى تستخدم الملف. انتظر حتى تنتهي ثم أعد المحاولة.",
+    "error.address_column_looks_like_delivery_type":
+      "ربط الأعمدة يبدو غير صحيح: قيمة «العنوان» تبدو كنوع توصيل (مثل منزل/مكتب) وليست عنواناً فعلياً. اربط «العنوان» بعمود العنوان الحقيقي، واربط «نوع التوصيل» و/أو «مكتب/نقطة الاستلام» في الحقول المخصصة.",
     // Send
     "send.button": "إرسال الطلبات",
     "send.sending": "⏳ إرسال...",
@@ -738,6 +740,8 @@ var I18N_DICT_ = {
       "Envoi impossible : le classeur est verrouillé (envoi, synchro ou synchro auto en cours). Patientez jusqu’à ~2 minutes sur les gros classeurs, puis réessayez sans double-clic.",
     "error.sync_in_progress":
       "Synchronisation impossible : une autre opération utilise le classeur. Patientez puis réessayez.",
+    "error.address_column_looks_like_delivery_type":
+      "Le mapping semble incorrect : la valeur du champ « adresse » ressemble à un mode de livraison (domicile / bureau) et non à une vraie adresse. Mappez « adresse » sur la vraie colonne d’adresse, puis utilisez les champs dédiés pour le type de livraison et/ou le point relais.",
     "send.button": "Envoyer les commandes",
     "send.sending": "⏳ Envoi...",
     "send.success": "{0} commande(s) envoyée(s)",
@@ -1260,6 +1264,8 @@ var I18N_DICT_ = {
       "Cannot start send: the spreadsheet is locked (another send, sync, or hourly auto-sync is running). Wait up to ~2 minutes on large workbooks, then try again without double-clicking.",
     "error.sync_in_progress":
       "Cannot start sync: another operation holds the spreadsheet lock. Wait and retry.",
+    "error.address_column_looks_like_delivery_type":
+      "The mapping looks wrong: the value in the `address` field looks like a delivery mode (home / pickup desk) instead of a real address. Map `address` to the real address column, then use the dedicated delivery-type and/or pickup-point fields.",
     "send.button": "Send Orders",
     "send.sending": "⏳ Sending...",
     "send.success": "{0} order(s) sent successfully",

@@ -325,7 +325,7 @@ function sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec) {
  *   selectedRowNumbers: Array<number>
  * }}
  */
-function order_previewSelection(rowSelectionSpec) {
+function order_previewSelection(rowSelectionSpec, options) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getActiveSheet();
   var spreadsheetId = ss.getId();
@@ -366,18 +366,32 @@ function order_previewSelection(rowSelectionSpec) {
 
   var now = isoNow_();
   var lastSheetRow = Math.max(sheet.getLastRow(), headerRow + 1);
-
-  // Read entire used range once for performance.
-  var lastCol = sheet.getLastColumn();
-  var values =
-    lastSheetRow >= headerRow + 1 && lastCol >= 1
-      ? sheet.getRange(headerRow, 1, lastSheetRow - headerRow + 1, lastCol).getDisplayValues()
-      : [];
-
-  var dupIndex = buildDuplicateIndex_(sheet, columns, defaultCarrierId, now, lastSheetRow, headerRow, values);
-
   var startRow = selectedRowNumbers[0];
   var endRow = selectedRowNumbers[selectedRowNumbers.length - 1];
+  var skipDuplicateScan = !!(options && options.skipDuplicateScan);
+
+  var lastCol = sheet.getLastColumn();
+  var valuesStartRow = headerRow;
+  var values = [];
+  if (lastCol >= 1) {
+    if (skipDuplicateScan) {
+      valuesStartRow = startRow;
+      values =
+        endRow >= startRow
+          ? sheet.getRange(startRow, 1, endRow - startRow + 1, lastCol).getDisplayValues()
+          : [];
+    } else {
+      // Preview button keeps the full-sheet duplicate scan; send path can opt out for speed.
+      values =
+        lastSheetRow >= headerRow + 1
+          ? sheet.getRange(headerRow, 1, lastSheetRow - headerRow + 1, lastCol).getDisplayValues()
+          : [];
+    }
+  }
+
+  var dupIndex = skipDuplicateScan
+    ? { orderId: {}, phoneProduct: {}, tracking: {} }
+    : buildDuplicateIndex_(sheet, columns, defaultCarrierId, now, lastSheetRow, headerRow, values);
 
   var rows = [];
   for (var si = 0; si < selectedRowNumbers.length; si++) {
@@ -405,7 +419,8 @@ function order_previewSelection(rowSelectionSpec) {
       defaultCarrierId,
       now,
       headerRow,
-      values
+      values,
+      valuesStartRow
     );
 
     if (isRowEmpty_(order)) {
@@ -458,6 +473,7 @@ function order_previewSelection(rowSelectionSpec) {
  * @param {string} nowIso
  * @param {number} headerRow
  * @param {Array<Array<string>>} values
+ * @param {number=} valuesStartRow
  * @return {InternalOrderLike}
  */
 function buildOrderFromRow_(
@@ -470,9 +486,14 @@ function buildOrderFromRow_(
   defaultCarrierId,
   nowIso,
   headerRow,
-  values
+  values,
+  valuesStartRow
 ) {
-  var rowIndex = rowNum - headerRow;
+  var anchorRow =
+    valuesStartRow != null && isFinite(Number(valuesStartRow))
+      ? Number(valuesStartRow)
+      : headerRow;
+  var rowIndex = rowNum - anchorRow;
   if (!values || rowIndex < 0 || rowIndex >= values.length) {
     values = [];
   }
@@ -832,7 +853,8 @@ function buildDuplicateIndex_(sheet, columns, defaultCarrierId, nowIso, lastRow,
       defaultCarrierId,
       nowIso,
       headerRow,
-      values
+      values,
+      headerRow
     );
     if (isRowEmpty_(order)) {
       continue;

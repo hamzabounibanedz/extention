@@ -511,6 +511,7 @@ function lists_isStatusListRule_(rule, statusLabels) {
  * @param {boolean} allowInvalid
  * @param {Array<string>} carrierLabels
  * @param {Array<string>} statusLabels
+ * @param {number=} maxApplyRows Optional cap for performance (e.g. mapping save).
  * @return {{
  *   appliedCarrier: boolean,
  *   appliedStatus: boolean,
@@ -525,7 +526,8 @@ function lists_applyCarrierAndStatusColumnValidationForSheet_(
   saved,
   allowInvalid,
   carrierLabels,
-  statusLabels
+  statusLabels,
+  maxApplyRows
 ) {
   if (!ss || !sheet || !saved) {
     return {
@@ -556,6 +558,10 @@ function lists_applyCarrierAndStatusColumnValidationForSheet_(
 
   var maxRows = sheet.getMaxRows();
   var rowCount = maxRows - headerRow;
+  var cap = Number(maxApplyRows);
+  if (Number.isFinite(cap) && cap >= 1) {
+    rowCount = Math.min(rowCount, Math.floor(cap));
+  }
   if (!Number.isFinite(rowCount) || rowCount < 1) {
     return {
       appliedCarrier: false,
