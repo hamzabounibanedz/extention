@@ -42,7 +42,7 @@ function cleanedCredentials_(credentials?: Record<string, string> | null): Adapt
 
 function normalizeText_(value: unknown): string {
   if (value == null) return '';
-  return String(value)
+  const normalized = String(value)
     .trim()
     .toLowerCase()
     .normalize('NFD')
@@ -58,6 +58,19 @@ function normalizeText_(value: unknown): string {
     .replace(/[''`ʼ']/g, '')
     .replace(/[\s_./-]+/g, ' ')
     .trim();
+  if (
+    !normalized ||
+    /^0+$/.test(normalized) ||
+    normalized === 'null' ||
+    normalized === 'undefined' ||
+    normalized === 'none' ||
+    normalized === 'aucun' ||
+    normalized === 'n a' ||
+    normalized === 'na'
+  ) {
+    return '';
+  }
+  return normalized;
 }
 
 /**
@@ -81,6 +94,7 @@ const ARABIC_TO_FRENCH_CITY_: Record<string, string> = {
   'تيارت': 'tiaret',
   'تيزي وزو': 'tizi ouzou',
   'الجزائر': 'alger', 'جزائر': 'alger',
+  'باب الزوار': 'bab ezzouar',
   'الجلفه': 'djelfa', 'جلفه': 'djelfa',
   'جيجل': 'jijel',
   'سطيف': 'setif',
@@ -299,6 +313,36 @@ function normalizeDzPhone_(raw: unknown): string | null {
   return null;
 }
 
+/**
+ * NOEST accepts 9-10 digit national numbers; keep them in local 0XXXXXXXXX form.
+ * This is intentionally looser than carrier-wide E.164 enforcement used by ZR/Yalidine.
+ */
+function normalizeNoestPhone_(raw: unknown): string | null {
+  let digits = digitsOnlyAscii_(raw);
+  if (!digits || digits.length < 9) return null;
+
+  for (let guard = 0; guard < 6; guard++) {
+    if (digits.startsWith('00213')) {
+      digits = digits.slice(5);
+    } else if (digits.startsWith('213') && digits.length >= 11) {
+      digits = digits.slice(3);
+    } else {
+      break;
+    }
+  }
+
+  while (digits.startsWith('0') && digits.length > 10) {
+    digits = digits.slice(1);
+  }
+  if (digits.length === 9) {
+    return `0${digits}`;
+  }
+  if (digits.length === 10 && digits.startsWith('0')) {
+    return digits;
+  }
+  return null;
+}
+
 function normalizeDeliveryType_(raw: unknown): 'home' | 'pickup-point' | null {
   const t = normalizeText_(raw);
   if (!t) return null;
@@ -428,10 +472,47 @@ function coerceCarrierApiDetail_(raw: unknown): string {
   return coerceUnknownErrorText_(raw);
 }
 
+/** Node `fetch` throws TypeError with message "fetch failed" with no body — expand for operators. */
+function expandLowLevelFetchError_(error: unknown): string {
+  const base = coerceUnknownErrorText_(error);
+  let causeText = '';
+  if (error instanceof Error && error.cause != null) {
+    causeText = coerceUnknownErrorText_(error.cause);
+  }
+  const combined = [base, causeText].filter(Boolean).join(' | ').trim();
+  const msg = error instanceof Error ? String(error.message || '') : '';
+  const probe = (combined || msg).toLowerCase();
+  if (
+    probe.includes('fetch failed') ||
+    probe === 'networkerror' ||
+    probe.includes('econnrefused') ||
+    probe.includes('enotfound') ||
+    probe.includes('etimedout') ||
+    probe.includes('timeout') ||
+    probe.includes('getaddrinfo') ||
+    probe.includes('certificate') ||
+    probe.includes('ssl') ||
+    probe.includes('tls')
+  ) {
+    const hint =
+      'The server could not complete HTTPS to the carrier API (network/DNS/firewall/TLS or carrier outage). Check backend outbound access and retry.';
+    if (combined && !/^fetch failed$/i.test(combined.trim())) {
+      return `${combined}. ${hint}`;
+    }
+    return hint;
+  }
+  return combined;
+}
+
 function trackingSearchBody_(carrier: string, trackingNumbers: string[]): Record<string, unknown> {
   if (carrier === 'yalidine') {
     return {
       trackingNumbers,
+    };
+  }
+  if (carrier === 'noest') {
+    return {
+      trackings: trackingNumbers,
     };
   }
   return {
@@ -523,6 +604,35 @@ type TerritoryResolution = {
   district: TerritoryRecord;
 };
 
+/**
+ * When the user puts a commune name in the wilaya column (common data-entry mistake),
+ * match against all communes in the carrier index with the same fuzzy threshold as per-wilaya matching.
+ */
+function inferCommuneGlobalFuzzy_(
+  index: TerritoryIndex,
+  nameNorm: string,
+): TerritoryResolution | { error: string } | null {
+  if (!nameNorm) return null;
+  let best: { district: TerritoryRecord; city: TerritoryRecord; score: number } | null = null;
+  for (const t of index.byId.values()) {
+    if (t.level !== 'commune' || !t.parentId) continue;
+    const city = index.byId.get(String(t.parentId));
+    if (!city || city.level !== 'wilaya') continue;
+    const sn = normalizeText_(t.name);
+    const score = similarity_(nameNorm, sn);
+    if (score > (best?.score ?? 0)) {
+      best = { district: t, city, score };
+    }
+  }
+  if (!best || best.score < 0.88) return null;
+  return {
+    cityTerritoryId: best.city.id,
+    districtTerritoryId: best.district.id,
+    city: best.city,
+    district: best.district,
+  };
+}
+
 function resolveTerritories_(
   index: TerritoryIndex,
   wilayaRaw: unknown,
@@ -561,7 +671,7 @@ function resolveTerritories_(
         ),
       );
       return {
-        error: `Ambiguous commune "${String(communeRaw)}". Candidate wilayas: ${parentNames.join(', ')}`,
+        error: `Ambiguous commune "${nameToMatch}". Candidate wilayas: ${parentNames.join(', ')}`,
       };
     }
     return null;
@@ -603,6 +713,30 @@ function resolveTerritories_(
       }
     }
   }
+  // Wilaya column sometimes contains a commune/district name (e.g. "باب الزوار") instead of wilaya.
+  if (!wilaya && wilayaNorm) {
+    const fromWilayaAsCommune = inferFromGlobalCommune(wilayaNorm);
+    if (fromWilayaAsCommune) {
+      return fromWilayaAsCommune;
+    }
+    const frWilayaAsCommune = tryArabicToFrench_(wilayaNorm);
+    if (frWilayaAsCommune) {
+      const translatedWilayaAsCommune = inferFromGlobalCommune(frWilayaAsCommune);
+      if (translatedWilayaAsCommune) {
+        return translatedWilayaAsCommune;
+      }
+    }
+    const fuzzyWilayaAsCommune = inferCommuneGlobalFuzzy_(index, wilayaNorm);
+    if (fuzzyWilayaAsCommune) {
+      return fuzzyWilayaAsCommune;
+    }
+    if (frWilayaAsCommune) {
+      const fuzzyFr = inferCommuneGlobalFuzzy_(index, frWilayaAsCommune);
+      if (fuzzyFr) {
+        return fuzzyFr;
+      }
+    }
+  }
   if (!wilaya && wilayaNorm) {
     let best: TerritoryRecord | null = null;
     let bestScore = 0;
@@ -622,7 +756,10 @@ function resolveTerritories_(
     }
   }
   if (!wilaya) {
-    return { error: `Unresolved wilaya "${String(wilayaRaw)}".` };
+    const detail = wilayaNorm
+      ? `Unresolved wilaya "${String(wilayaRaw)}".`
+      : `Could not match commune "${String(communeRaw)}" to ZR territories. Check commune spelling, add wilaya code (1–58), or remove placeholder values in the wilaya column.`;
+    return { error: detail };
   }
 
   const communeCandidates = index.communesByWilayaId.get(wilaya.id) || [];
@@ -852,12 +989,18 @@ export async function sendOrdersBulk(
   for (let i = 0; i < input.orders.length; i++) {
     const row = input.orders[i];
     const rowIndex = resolveOrderRowIndex_(row, i);
-    const phone = normalizeDzPhone_(row.phone1 ?? row.phone ?? row.customerPhone);
+    const phone =
+      carrier === 'noest'
+        ? normalizeNoestPhone_(row.phone1 ?? row.phone ?? row.customerPhone)
+        : normalizeDzPhone_(row.phone1 ?? row.phone ?? row.customerPhone);
     if (!phone) {
       localFailures.push({
         index: i,
         errorCode: 'INVALID_PHONE',
-        errorMessage: `Invalid phone for row ${rowIndex}. Expected +213XXXXXXXXX.`,
+        errorMessage:
+          carrier === 'noest'
+            ? `Invalid phone for row ${rowIndex}. Expected 9-10 digits.`
+            : `Invalid phone for row ${rowIndex}. Expected +213XXXXXXXXX.`,
       });
       continue;
     }
@@ -1066,6 +1209,33 @@ export async function sendOrdersBulk(
       };
     }
 
+    if (carrier === 'noest') {
+      const zipRaw = String(row.zipCode ?? row.zip_code ?? row.postalCode ?? '').trim();
+      const codeN = Number(String(row.codeWilaya ?? row.wilayaCode ?? '').replace(/[^\d]/g, ''));
+      const hasWilaya = Number.isFinite(codeN) && codeN >= 1 && codeN <= 58;
+      if (!zipRaw && !hasWilaya) {
+        localFailures.push({
+          index: i,
+          errorCode: 'NOEST_WILAYA_OR_ZIP',
+          errorMessage: `NOEST requires wilaya code (1–58) or zip_code for row ${rowIndex}.`,
+        });
+        continue;
+      }
+      if (zipRaw) {
+        parcel.zipCode = zipRaw;
+      }
+      if (hasWilaya) {
+        parcel.codeWilaya = codeN;
+      }
+      const noestType = row.noestTypeId ?? row.noest_type_id;
+      if (noestType != null && String(noestType).trim() !== '') {
+        const n = Number(String(noestType).replace(/[^\d]/g, ''));
+        if (Number.isFinite(n) && n >= 1 && n <= 3) {
+          parcel.noestTypeId = n;
+        }
+      }
+    }
+
     parcels.push(parcel);
     parcelRowIndexes.push(i);
   }
@@ -1086,13 +1256,34 @@ export async function sendOrdersBulk(
 
     if (hasBulkCreate && adapter.bulkCreateParcels) {
       let result: Awaited<ReturnType<NonNullable<typeof adapter.bulkCreateParcels>>> | null = null;
-      for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
-        result = await adapter.bulkCreateParcels({
-          parcels: chunkParcels,
-          credentials: creds,
-        });
-        if (result.httpStatus !== 429 || attempt === RETRY_MAX_ATTEMPTS) break;
-        await sleep_(Math.min(8000, RETRY_BASE_MS * 2 ** (attempt - 1)));
+      try {
+        for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+          result = await adapter.bulkCreateParcels({
+            parcels: chunkParcels,
+            credentials: creds,
+          });
+          if (result.httpStatus !== 429 || attempt === RETRY_MAX_ATTEMPTS) break;
+          await sleep_(Math.min(8000, RETRY_BASE_MS * 2 ** (attempt - 1)));
+        }
+      } catch (error) {
+        const message =
+          expandLowLevelFetchError_(error) ||
+          coerceUnknownErrorText_(error) ||
+          'Carrier request failed (network or unexpected error).';
+        for (let ci = 0; ci < chunkOriginalIndexes.length; ci++) {
+          const originalIndex = chunkOriginalIndexes[ci];
+          if (originalIndex == null) continue;
+          const parcel = chunkParcels[ci] as { externalId?: unknown } | undefined;
+          const extId =
+            parcel?.externalId != null ? String(parcel.externalId) : null;
+          failures.push({
+            index: originalIndex,
+            errorCode: 'NETWORK_ERROR',
+            errorMessage: message,
+            externalId: extId,
+          });
+        }
+        continue;
       }
       if (!result) continue;
 
@@ -1305,3 +1496,5 @@ export async function syncTrackingBulk(input: {
     errors,
   };
 }
+
+export { resolveTerritories_ as resolveTerritoriesForTests, normalizeText_ as normalizeTextForTests };

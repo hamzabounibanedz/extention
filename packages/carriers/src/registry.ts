@@ -1,8 +1,9 @@
 import type { CarrierAdapter } from './core/carrier-adapter.js';
+import { NoestAdapter } from './noest/adapter.js';
 import { YalidineAdapter } from './yalidine/adapter.js';
 import { ZrAdapter } from './zr/adapter.js';
 
-const adapters: CarrierAdapter[] = [new YalidineAdapter(), new ZrAdapter()];
+const adapters: CarrierAdapter[] = [new YalidineAdapter(), new ZrAdapter(), new NoestAdapter()];
 
 const byId = new Map<string, CarrierAdapter>(
   adapters.map((a) => [a.id.toLowerCase(), a]),

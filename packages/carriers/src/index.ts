@@ -17,6 +17,7 @@ export type {
   TrackingResult,
 } from './core/carrier-adapter.js';
 
+export { NoestAdapter } from './noest/index.js';
 export { YalidineAdapter } from './yalidine/index.js';
 export { ZrAdapter } from './zr/index.js';
 export {

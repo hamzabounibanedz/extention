@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "install:all": "npm install",
+    "pretest": "npm run build -w @delivery-tool/carriers",
     "test": "npm run test --workspaces --if-present",
     "test:admin-backend": "npm run test:admin -w @delivery-tool/backend",
     "build": "npm run build -w @delivery-tool/shared && npm run build -w @delivery-tool/carriers && npm run build -w @delivery-tool/backend && npm run build -w @delivery-tool/admin-dashboard",

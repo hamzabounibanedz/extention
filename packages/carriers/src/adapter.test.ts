@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { NoestAdapter } from './noest/adapter.js';
 import { YalidineAdapter } from './yalidine/adapter.js';
 import { ZrAdapter } from './zr/adapter.js';
 
@@ -18,6 +19,192 @@ async function withMockFetch_(
 }
 
 describe('carrier adapters', () => {
+  it('NOEST rejects send without token/guid', async () => {
+    const a = new NoestAdapter();
+    const r = await a.createShipment({
+      order: {} as never,
+      credentials: {},
+    });
+    assert.equal(r.ok, false);
+    assert.ok(String(r.errorMessage || '').toLowerCase().includes('credentials'));
+  });
+
+  it('NOEST strips Bearer prefix from api_token before Authorization header', async () => {
+    const a = new NoestAdapter();
+    let capturedHeaders: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedHeaders = init?.headers || {};
+        return new Response(
+          JSON.stringify({ success: true, passed: { 0: { success: true, tracking: 'T1' } }, failed: {} }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        await a.bulkCreateParcels({
+          credentials: { apiToken: 'Bearer abc-token-value', userGuid: 'GUID-1' },
+          parcels: [
+            {
+              externalId: 'REF00001',
+              customer: { name: 'Ahmed', phone: { number1: '0550123456' } },
+              address: 'Rue 1',
+              amount: 1000,
+              deliveryType: 'home',
+              orderedProducts: [{ productName: 'P1' }],
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+            },
+          ],
+        });
+      },
+    );
+    assert.equal(String(capturedHeaders?.Authorization || ''), 'Bearer abc-token-value');
+  });
+
+  it('NOEST bulk create sends expected payload + bearer auth', async () => {
+    const a = new NoestAdapter();
+    let capturedUrl = '';
+    let capturedHeaders: any = null;
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (url: any, init?: any) => {
+        capturedUrl = String(url);
+        capturedHeaders = init?.headers || {};
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            passed: {
+              0: { success: true, tracking: 'NOEST-TRK-1' },
+            },
+            failed: {},
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          parcels: [
+            {
+              externalId: 'REF-00001',
+              customer: { name: 'Ahmed', phone: { number1: '+213550000000' } },
+              address: 'Rue 1',
+              amount: 3500,
+              deliveryType: 'home',
+              orderedProducts: [{ productName: 'P1' }],
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+            },
+          ],
+        });
+        assert.equal(r.successCount, 1);
+        assert.equal(r.failureCount, 0);
+        assert.equal(r.successes[0]?.trackingNumber, 'NOEST-TRK-1');
+        assert.ok(String(r.successes[0]?.labelUrl || '').includes('/api/public/get/order/label'));
+      },
+    );
+    assert.ok(capturedUrl.includes('/api/public/create/orders'));
+    assert.equal(String(capturedHeaders?.Authorization || ''), 'Bearer TOK-1');
+    assert.equal(capturedBody?.user_guid, 'GUID-1');
+    assert.equal(Array.isArray(capturedBody?.orders), true);
+    assert.equal(capturedBody?.orders?.[0]?.wilaya_id, 16);
+    assert.equal(capturedBody?.orders?.[0]?.stop_desk, 0);
+    // phone normalized to 0xxxxxxxxx
+    assert.equal(String(capturedBody?.orders?.[0]?.phone || '').startsWith('0'), true);
+  });
+
+  it('NOEST searchParcels calls get/trackings/info with trackings array', async () => {
+    const a = new NoestAdapter();
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({
+            'TRK-1': {
+              OrderInfo: { montant: '3500.00', stop_desk: 0, created_at: '2026-04-06T10:00:00.000000Z' },
+              activity: [{ event_key: 'livre', date: '2026-04-07 11:00:00' }],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.searchParcels({
+          body: { trackings: ['TRK-1'] },
+          credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+        });
+        assert.equal(r.httpStatus, 200);
+        assert.equal(r.items.length, 1);
+        assert.equal(r.items[0]?.stateName, 'livre');
+      },
+    );
+    assert.deepEqual(capturedBody, { trackings: ['TRK-1'] });
+  });
+
+  it('NOEST maps type_id 2 when hasExchange and montant 0 for type_id 3', async () => {
+    const a = new NoestAdapter();
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({ success: true, passed: { 0: { success: true, tracking: 'T1' } }, failed: {} }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        await a.bulkCreateParcels({
+          credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          parcels: [
+            {
+              externalId: 'REF00001',
+              customer: { name: 'Ahmed', phone: { number1: '0550123456' } },
+              address: 'Rue 1',
+              amount: 5000,
+              deliveryType: 'home',
+              hasExchange: true,
+              orderedProducts: [{ productName: 'P1' }],
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+            },
+          ],
+        });
+      },
+    );
+    assert.equal(capturedBody?.orders?.[0]?.type_id, 2);
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({ success: true, passed: { 0: { success: true, tracking: 'T2' } }, failed: {} }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        await a.bulkCreateParcels({
+          credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          parcels: [
+            {
+              externalId: 'REF00002',
+              customer: { name: 'Ahmed', phone: { number1: '0550123456' } },
+              address: 'Rue 1',
+              amount: 9999,
+              deliveryType: 'home',
+              noestTypeId: 3,
+              orderedProducts: [{ productName: 'P1' }],
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+            },
+          ],
+        });
+      },
+    );
+    assert.equal(capturedBody?.orders?.[0]?.type_id, 3);
+    assert.equal(capturedBody?.orders?.[0]?.montant, 0);
+  });
+
   it('Yalidine rejects send without API ID/TOKEN', async () => {
     const a = new YalidineAdapter();
     const r = await a.createShipment({
@@ -169,6 +356,59 @@ describe('carrier adapters', () => {
         assert.equal(r.successCount, 0);
         assert.equal(r.failureCount, 1);
         assert.ok(String(r.failures[0]?.errorMessage || '').includes('Quota API'));
+      },
+    );
+  });
+
+  it('Yalidine bulk create accepts array-shaped success response (aligned with request order)', async () => {
+    const a = new YalidineAdapter();
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : [];
+        const orderId = body?.[0]?.order_id || 'ORDER-ARRAY-1';
+        return new Response(
+          JSON.stringify([
+            {
+              success: true,
+              order_id: orderId,
+              tracking: 'yal-ARRAY-OK',
+              import_id: 99,
+              label: 'https://guepex.app/label/yal-ARRAY-OK',
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { apiId: 'API-ID-1', apiToken: 'API-TOKEN-1' },
+          parcels: [
+            {
+              order_id: 'ORDER-ARRAY-1',
+              from_wilaya_name: 'Batna',
+              firstname: 'Ali',
+              familyname: 'Ben',
+              contact_phone: '0550123456',
+              address: 'Cite Kaidi',
+              to_commune_name: 'Bordj El Kiffan',
+              to_wilaya_name: 'Alger',
+              product_list: 'Machine a cafe',
+              price: 2400,
+              do_insurance: false,
+              declared_value: 2400,
+              height: 10,
+              width: 20,
+              length: 30,
+              weight: 6,
+              freeshipping: false,
+              is_stopdesk: false,
+              has_exchange: false,
+            },
+          ],
+        });
+        assert.equal(r.successCount, 1);
+        assert.equal(r.failureCount, 0);
+        assert.equal(r.successes[0]?.trackingNumber, 'yal-ARRAY-OK');
       },
     );
   });
