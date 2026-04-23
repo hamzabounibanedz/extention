@@ -141,6 +141,8 @@ var I18N_DICT_ = {
       "يتطلب ZR إدخال tenantId و secretKey معاً.",
     "error.yalidine_id_token_required":
       "يتطلب Yalidine إدخال API ID و API TOKEN معاً.",
+    "error.noest_token_guid_required":
+      "يتطلب NOEST إدخال رمز API (Bearer) و user_guid معاً.",
     "error.sheet_not_found": "تعذر العثور على الورقة.",
     "error.label_column_required":
       "اربط عمود رابط البوليصة أولاً من قسم «ربط أعمدة الورقة» في الشريط الجانبي.",
@@ -213,6 +215,10 @@ var I18N_DICT_ = {
       "تعذر بدء المزامنة: عملية أخرى تستخدم الملف. انتظر حتى تنتهي ثم أعد المحاولة.",
     "error.address_column_looks_like_delivery_type":
       "ربط الأعمدة يبدو غير صحيح: قيمة «العنوان» تبدو كنوع توصيل (مثل منزل/مكتب) وليست عنواناً فعلياً. اربط «العنوان» بعمود العنوان الحقيقي، واربط «نوع التوصيل» و/أو «مكتب/نقطة الاستلام» في الحقول المخصصة.",
+    "error.address_and_delivery_same_column":
+      "ربط الأعمدة غير صحيح: «العنوان» و«نوع التوصيل» يشيران إلى نفس العمود. افصل بينهما (عنوان الزبون في عمود، ونوع التوصيل في عمود آخر مثل LIVRASION).",
+    "error.address_column_looks_like_carrier":
+      "ربط الأعمدة يبدو غير صحيح: عمود «العنوان» يحتوي أسماء شركات التوصيل (مثل NOEST/ZR/Yalidine) وليس عناوين الزبائن. اربط «العنوان» بعمود عنوان الزبون الحقيقي.",
     // Send
     "send.button": "إرسال الطلبات",
     "send.sending": "⏳ إرسال...",
@@ -236,13 +242,15 @@ var I18N_DICT_ = {
     "val.cod_invalid": "مبلغ الدفع عند الاستلام غير صحيح",
     "val.name_required": "اسم العميل مطلوب",
     "val.stopdesk_required":
-      "عند اختيار التوصيل إلى المكتب أو نقطة الاستلام، يجب إدخال معرّف المكتب (Stopdesk) في العمود المربوط أو في بيانات النشاط.",
+      "عند التوصيل للمكتب/نقطة الاستلام: عمود «نوع التوصيل» (مثل LIVRASION) يحدّد المنزل أو المكتب فقط وليس رقم المكتب عند الناقل. أدخل رقم نقطة الاستلام في عمود مربوط، أو عيّن المكتب الافتراضي في «بيانات المرسل الافتراضية».",
     "val.stopdesk_required_zr":
-      "لشركة ZR: عند التوصيل إلى المكتب/نقطة الاستلام يجب تعبئة «معرّف المكتب / نقطة الاستلام» المربوط في الورقة.",
+      "لشركة ZR: عند التوصيل للمكتب/نقطة الاستلام أدخل معرّف المكتب في عمود مربوط، أو عيّن المكتب الافتراضي في «بيانات المرسل الافتراضية».",
     "val.commune_required_zr_home":
       "لشركة ZR (توصيل منزلي): البلدية مطلوبة في العمود المربوط قبل الإرسال.",
     "val.commune_required_yalidine":
       "لشركة Yalidine: البلدية/المدينة مطلوبة في العمود المربوط قبل الإرسال.",
+    "val.commune_required_noest":
+      "لشركة NOEST: البلدية/المدينة مطلوبة في العمود المربوط قبل الإرسال.",
     // Sync
     "sync.button": "مزامنة الآن",
     "sync.auto_enable": "تفعيل المزامنة التلقائية",
@@ -306,6 +314,8 @@ var I18N_DICT_ = {
     // Carrier creds
     "creds.yalidine_api_id": "معرف API Yalidine",
     "creds.yalidine_api_token": "Yalidine API TOKEN",
+    "creds.noest_api_token": "NOEST API token (Bearer)",
+    "creds.noest_user_guid": "NOEST user_guid",
     "creds.zr_id": "معرف ZR",
     "creds.zr_token": "رمز ZR",
     // General
@@ -348,7 +358,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "إعدادات متقدمة وتشخيص",
     "sidebar.section.carrier_keys": "اعتمادات شركات التوصيل",
     "sidebar.hint.carrier_keys":
-      "تُحفظ لكل حساب Google (ليست داخل الخلايا). Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. ثم احفظ واختبر الاتصال.",
+      "تُحفظ لكل حساب Google (ليست داخل الخلايا). Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. NOEST: API token + user_guid. ثم احفظ واختبر الاتصال.",
     "sidebar.label.carrier": "شركة التوصيل",
     "sidebar.label.api_token": "مفتاح / رمز API",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -365,9 +375,13 @@ var I18N_DICT_ = {
     "sidebar.ph.yalidine_api_id_saved": "API ID محفوظ (أدخل للاستبدال)",
     "sidebar.ph.yalidine_api_token_saved":
       "API TOKEN محفوظ (أدخل للاستبدال)",
+    "sidebar.ph.noest_api_token": "أدخل رمز API (Bearer)",
+    "sidebar.ph.noest_user_guid": "أدخل user_guid",
+    "sidebar.ph.noest_api_token_saved": "رمز API محفوظ (أدخل للاستبدال)",
+    "sidebar.ph.noest_user_guid_saved": "user_guid محفوظ (أدخل للاستبدال)",
     "sidebar.section.business": "بيانات المرسل الافتراضية",
     "sidebar.hint.business":
-      "تُملأ تلقائياً في الطلب عند غياب القيمة في الورقة (الاسم، الهاتف، العنوان، الولاية، إلخ).",
+      "تُملأ تلقائياً في الطلب عند غياب القيمة في الورقة (الاسم، الهاتف، العنوان، الولاية، إلخ). معرّف المكتب الافتراضي يُستخدم لجميع صفوف «التوصيل للمكتب» عندما لا يوجد عمود بنقطة الاستلام في الورقة.",
     "sidebar.label.biz_name": "الاسم",
     "sidebar.label.biz_phone": "الهاتف",
     "sidebar.label.biz_address": "العنوان",
@@ -376,7 +390,7 @@ var I18N_DICT_ = {
     "sidebar.label.biz_commune": "البلدية",
     "sidebar.label.biz_default_carrier": "الناقل الافتراضي",
     "sidebar.label.biz_stopdesk":
-      "معرّف المكتب / نقطة الاستلام (للتوصيل إلى المكتب عند ZR)",
+      "معرّف المكتب / نقطة الاستلام الافتراضي (NOEST / Yalidine / ZR عند التوصيل للمكتب ولا يوجد عمود في الورقة)",
     "sidebar.section.mapping": "ربط أعمدة الورقة",
     "sidebar.label.sheet": "الورقة",
     "sidebar.label.carrier_default": "شركة التوصيل",
@@ -458,7 +472,8 @@ var I18N_DICT_ = {
     "sidebar.map.cod": "مبلغ الدفع عند الاستلام",
     "sidebar.map.shippingFee": "رسوم الشحن",
     "sidebar.map.deliveryType": "نوع التوصيل (منزلي/مكتب أو نقطة استلام)",
-    "sidebar.map.stopDeskId": "معرّف المكتب / نقطة الاستلام (Stopdesk)",
+    "sidebar.map.stopDeskId":
+      "معرّف المكتب / نقطة الاستلام (اختياري إن وُجد عمود برقم المكتب؛ وإلا يُستخدم المكتب الافتراضي من المرسل)",
     "sidebar.map.status": "الحالة",
     "sidebar.map.carrierCol": "الناقل (عمود)",
     "sidebar.map.tracking": "رقم التتبع",
@@ -473,7 +488,7 @@ var I18N_DICT_ = {
       "مطلوب للإرسال: رقم الطلب، الهاتف، العنوان، الولاية، مبلغ التحصيل، واسم المستلم — اربط «الاسم الكامل» أو «الاسم» أو «اسم العائلة» (عمود واحد على الأقل يحتوي الاسم).",
     "sidebar.map.group_recommended": "أعمدة مُستحسَنة",
     "sidebar.map.group_recommended_hint":
-      "",
+      "عمود «نوع التوصيل» (مثل LIVRASION) يحدّد المنزل أو المكتب فقط. رقم نقطة الاستلام عند الناقل يكون في عمود منفصل أو في «بيانات المرسل الافتراضية» إذا كان المكتب واحداً لجميع الطلبات.",
     "sidebar.map.group_optional": "أعمدة اختيارية",
     "sidebar.map.group_optional_hint":
       "متقدمة: تتبع خارجي، روابط البوليصات، ملاحظات، وقوائم سوداء.",
@@ -664,6 +679,8 @@ var I18N_DICT_ = {
       "ZR exige de renseigner tenantId et secretKey ensemble.",
     "error.yalidine_id_token_required":
       "Yalidine exige de renseigner API ID et API TOKEN ensemble.",
+    "error.noest_token_guid_required":
+      "NOEST exige le jeton API (Bearer) et le user_guid ensemble.",
     "error.sheet_not_found": "Feuille introuvable.",
     "error.label_column_required":
       "Mappez d’abord la colonne URL étiquette (section Cartographie des colonnes).",
@@ -742,6 +759,10 @@ var I18N_DICT_ = {
       "Synchronisation impossible : une autre opération utilise le classeur. Patientez puis réessayez.",
     "error.address_column_looks_like_delivery_type":
       "Le mapping semble incorrect : la valeur du champ « adresse » ressemble à un mode de livraison (domicile / bureau) et non à une vraie adresse. Mappez « adresse » sur la vraie colonne d’adresse, puis utilisez les champs dédiés pour le type de livraison et/ou le point relais.",
+    "error.address_and_delivery_same_column":
+      "Mapping incorrect : « adresse » et « type de livraison » pointent vers la même colonne. Séparez-les (adresse client d’un côté, mode de livraison de l’autre, ex. LIVRASION).",
+    "error.address_column_looks_like_carrier":
+      "Le mapping semble incorrect : la colonne « adresse » contient des noms de transporteurs (NOEST/ZR/Yalidine) au lieu d’adresses clients. Mappez « adresse » sur la vraie colonne d’adresse client.",
     "send.button": "Envoyer les commandes",
     "send.sending": "⏳ Envoi...",
     "send.success": "{0} commande(s) envoyée(s)",
@@ -763,13 +784,15 @@ var I18N_DICT_ = {
     "val.cod_invalid": "Montant COD invalide",
     "val.name_required": "Nom du client requis",
     "val.stopdesk_required":
-      "Pour une livraison bureau/point relais, renseignez l’ID bureau (stop-desk) dans la colonne mappée ou les paramètres expéditeur.",
+      "Livraison bureau/point relais : la colonne « type de livraison » (ex. LIVRASION) indique seulement domicile ou bureau, pas l’ID bureau chez le transporteur. Renseignez l’ID dans une colonne dédiée, ou un bureau par défaut dans les paramètres expéditeur.",
     "val.stopdesk_required_zr":
-      "ZR : pour une livraison bureau/point relais, renseignez l’ID bureau (stop-desk) dans la colonne mappée.",
+      "ZR : livraison bureau/point relais — renseignez l’ID bureau dans une colonne dédiée, ou un bureau par défaut dans les paramètres expéditeur.",
     "val.commune_required_zr_home":
       "ZR (livraison à domicile) : la commune est requise dans la colonne mappée avant l’envoi.",
     "val.commune_required_yalidine":
       "Yalidine : la commune/ville est requise dans la colonne mappée avant l’envoi.",
+    "val.commune_required_noest":
+      "NOEST : la commune/ville est requise dans la colonne mappée avant l’envoi.",
     "sync.button": "Synchroniser maintenant",
     "sync.auto_enable": "Activer la sync auto",
     "sync.auto_disable": "Désactiver la sync auto",
@@ -828,6 +851,8 @@ var I18N_DICT_ = {
     "biz.parcel_height": "Hauteur (cm)",
     "creds.yalidine_api_id": "ID API Yalidine",
     "creds.yalidine_api_token": "Yalidine API TOKEN",
+    "creds.noest_api_token": "Jeton API NOEST (Bearer)",
+    "creds.noest_user_guid": "user_guid NOEST",
     "creds.zr_id": "ID ZR",
     "creds.zr_token": "Token ZR",
     "general.error": "Erreur: {0}",
@@ -869,7 +894,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "Diagnostic avancé",
     "sidebar.section.carrier_keys": "Identifiants transporteurs",
     "sidebar.hint.carrier_keys":
-      "Stockés par compte Google, pas dans les cellules. Yalidine : API ID + API TOKEN. ZR : tenantId + secretKey. Ensuite Enregistrer puis Tester la connexion.",
+      "Stockés par compte Google, pas dans les cellules. Yalidine : API ID + API TOKEN. ZR : tenantId + secretKey. NOEST : jeton API + user_guid. Ensuite Enregistrer puis Tester la connexion.",
     "sidebar.label.carrier": "Transporteur",
     "sidebar.label.api_token": "Clé / token API",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -888,9 +913,15 @@ var I18N_DICT_ = {
       "API ID enregistré (saisir pour remplacer)",
     "sidebar.ph.yalidine_api_token_saved":
       "API TOKEN enregistré (saisir pour remplacer)",
+    "sidebar.ph.noest_api_token": "Saisir le jeton API (Bearer)",
+    "sidebar.ph.noest_user_guid": "Saisir le user_guid",
+    "sidebar.ph.noest_api_token_saved":
+      "Jeton API enregistré (saisir pour remplacer)",
+    "sidebar.ph.noest_user_guid_saved":
+      "user_guid enregistré (saisir pour remplacer)",
     "sidebar.section.business": "Expéditeur par défaut",
     "sidebar.hint.business":
-      "Remplissent la commande quand la feuille n’a pas la valeur (nom, téléphone, adresse, wilaya, etc.).",
+      "Remplissent la commande quand la feuille n’a pas la valeur (nom, téléphone, adresse, wilaya, etc.). L’ID bureau par défaut s’applique aux lignes « livraison bureau » sans colonne stop-desk dans la feuille.",
     "sidebar.label.biz_name": "Nom",
     "sidebar.label.biz_phone": "Téléphone",
     "sidebar.label.biz_address": "Adresse",
@@ -899,7 +930,7 @@ var I18N_DICT_ = {
     "sidebar.label.biz_commune": "Commune",
     "sidebar.label.biz_default_carrier": "Transporteur par défaut",
     "sidebar.label.biz_stopdesk":
-      "ID bureau / stop-desk (livraison bureau, ex. ZR)",
+      "ID bureau / stop-desk par défaut (NOEST / Yalidine / ZR si pas de colonne sur la feuille)",
     "sidebar.section.mapping": "Cartographie des colonnes",
     "sidebar.label.sheet": "Feuille",
     "sidebar.label.carrier_default": "Transporteur",
@@ -982,7 +1013,8 @@ var I18N_DICT_ = {
     "sidebar.map.cod": "Montant COD",
     "sidebar.map.shippingFee": "Frais de livraison",
     "sidebar.map.deliveryType": "Type livraison (domicile/bureau ou point relais)",
-    "sidebar.map.stopDeskId": "ID bureau / stop-desk",
+    "sidebar.map.stopDeskId":
+      "ID bureau / stop-desk (optionnel si une colonne contient l’ID ; sinon bureau par défaut expéditeur)",
     "sidebar.map.status": "Statut",
     "sidebar.map.carrierCol": "Transporteur (colonne)",
     "sidebar.map.tracking": "N° suivi",
@@ -997,7 +1029,7 @@ var I18N_DICT_ = {
       "Obligatoire : ID commande, téléphone, adresse, wilaya, montant COD, et nom du destinataire — mappez le nom complet et/ou prénom et/ou nom (au moins une colonne avec le nom).",
     "sidebar.map.group_recommended": "Colonnes recommandées",
     "sidebar.map.group_recommended_hint":
-      "Commune, type de livraison, ID bureau pour stop-desk, colonnes statut et suivi pour la synchronisation.",
+      "Commune ; type de livraison (ex. LIVRASION) = domicile ou bureau seulement ; ID bureau sur une autre colonne ou bureau par défaut expéditeur ; statut et suivi pour la synchro.",
     "sidebar.map.group_optional": "Colonnes optionnelles",
     "sidebar.map.group_optional_hint":
       "Avancé : suivi externe, URLs étiquettes, notes, liste noire.",
@@ -1192,6 +1224,8 @@ var I18N_DICT_ = {
       "ZR requires both tenantId and secretKey.",
     "error.yalidine_id_token_required":
       "Yalidine requires both API ID and API TOKEN.",
+    "error.noest_token_guid_required":
+      "NOEST requires both API token (Bearer) and user_guid.",
     "error.sheet_not_found": "Sheet not found.",
     "error.label_column_required":
       "Map the Label URL column first (Column mapping section).",
@@ -1266,6 +1300,10 @@ var I18N_DICT_ = {
       "Cannot start sync: another operation holds the spreadsheet lock. Wait and retry.",
     "error.address_column_looks_like_delivery_type":
       "The mapping looks wrong: the value in the `address` field looks like a delivery mode (home / pickup desk) instead of a real address. Map `address` to the real address column, then use the dedicated delivery-type and/or pickup-point fields.",
+    "error.address_and_delivery_same_column":
+      "Invalid mapping: `address` and delivery type point to the same column. Split them (customer address in one column, delivery mode in another such as LIVRASION).",
+    "error.address_column_looks_like_carrier":
+      "The mapping looks wrong: the `address` column contains carrier names (NOEST/ZR/Yalidine) instead of customer addresses. Map `address` to the real customer-address column.",
     "send.button": "Send Orders",
     "send.sending": "⏳ Sending...",
     "send.success": "{0} order(s) sent successfully",
@@ -1287,13 +1325,15 @@ var I18N_DICT_ = {
     "val.cod_invalid": "Invalid COD amount",
     "val.name_required": "Customer name required",
     "val.stopdesk_required":
-      "For desk/pickup-point delivery, fill the mapped Office / stop-desk ID (or sender defaults).",
+      "Desk/pickup-point: the delivery-type column (e.g. LIVRASION) only says home vs desk, not the carrier’s office ID. Map a column with the stop-desk ID, or set a default office in sender/business settings.",
     "val.stopdesk_required_zr":
-      "ZR: for desk/pickup-point delivery, fill the mapped Office / stop-desk ID column.",
+      "ZR: for desk/pickup-point delivery, map an Office / stop-desk ID column, or set a default office in sender/business settings.",
     "val.commune_required_zr_home":
       "ZR (home delivery): commune is required in the mapped column before send.",
     "val.commune_required_yalidine":
       "Yalidine: commune/city is required in the mapped column before send.",
+    "val.commune_required_noest":
+      "NOEST: commune/city is required in the mapped column before send.",
     "sync.button": "Sync Now",
     "sync.auto_enable": "Enable Auto-Sync",
     "sync.auto_disable": "Disable Auto-Sync",
@@ -1351,6 +1391,8 @@ var I18N_DICT_ = {
     "biz.parcel_height": "Height (cm)",
     "creds.yalidine_api_id": "Yalidine API ID",
     "creds.yalidine_api_token": "Yalidine API TOKEN",
+    "creds.noest_api_token": "NOEST API token (Bearer)",
+    "creds.noest_user_guid": "NOEST user_guid",
     "creds.zr_id": "ZR ID",
     "creds.zr_token": "ZR Token",
     "general.error": "Error: {0}",
@@ -1392,7 +1434,7 @@ var I18N_DICT_ = {
     "sidebar.hint.advanced_title": "Advanced diagnostics",
     "sidebar.section.carrier_keys": "Carrier credentials",
     "sidebar.hint.carrier_keys":
-      "Stored per Google account, not in cells. Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. Then Save and Test connection.",
+      "Stored per Google account, not in cells. Yalidine: API ID + API TOKEN. ZR: tenantId + secretKey. NOEST: API token + user_guid. Then Save and Test connection.",
     "sidebar.label.carrier": "Carrier",
     "sidebar.label.api_token": "API key / token",
     "sidebar.label.zr_tenant_id": "ZR tenantId",
@@ -1409,9 +1451,13 @@ var I18N_DICT_ = {
     "sidebar.ph.yalidine_api_id_saved": "API ID saved (enter to replace)",
     "sidebar.ph.yalidine_api_token_saved":
       "API TOKEN saved (enter to replace)",
+    "sidebar.ph.noest_api_token": "Enter API token (Bearer)",
+    "sidebar.ph.noest_user_guid": "Enter user_guid",
+    "sidebar.ph.noest_api_token_saved": "API token saved (enter to replace)",
+    "sidebar.ph.noest_user_guid_saved": "user_guid saved (enter to replace)",
     "sidebar.section.business": "Default sender details",
     "sidebar.hint.business":
-      "Fill gaps when the sheet row is missing a value (name, phone, address, wilaya, etc.).",
+      "Fill gaps when the sheet row is missing a value (name, phone, address, wilaya, etc.). Default office/stop-desk ID is used for all “desk/pickup” rows when the sheet has no stop-desk column.",
     "sidebar.label.biz_name": "Name",
     "sidebar.label.biz_phone": "Phone",
     "sidebar.label.biz_address": "Address",
@@ -1420,7 +1466,7 @@ var I18N_DICT_ = {
     "sidebar.label.biz_commune": "Commune",
     "sidebar.label.biz_default_carrier": "Default carrier",
     "sidebar.label.biz_stopdesk":
-      "Office / stop-desk ID (desk delivery, e.g. ZR)",
+      "Default office / stop-desk ID (NOEST / Yalidine / ZR when the sheet has no column)",
     "sidebar.section.mapping": "Column mapping",
     "sidebar.label.sheet": "Sheet",
     "sidebar.label.carrier_default": "Carrier",
@@ -1503,7 +1549,8 @@ var I18N_DICT_ = {
     "sidebar.map.cod": "COD amount",
     "sidebar.map.shippingFee": "Shipping fee",
     "sidebar.map.deliveryType": "Delivery type (home/desk or pickup-point)",
-    "sidebar.map.stopDeskId": "Office / stop-desk ID",
+    "sidebar.map.stopDeskId":
+      "Office / stop-desk ID (optional if a column holds the ID; otherwise sender default hub)",
     "sidebar.map.status": "Status",
     "sidebar.map.carrierCol": "Carrier (column)",
     "sidebar.map.tracking": "Tracking number",
@@ -1518,7 +1565,7 @@ var I18N_DICT_ = {
       "Required: order ID, phone, address, wilaya, COD amount, and recipient name — map full name and/or first and/or last (at least one name column).",
     "sidebar.map.group_recommended": "Recommended fields",
     "sidebar.map.group_recommended_hint":
-      "Commune, delivery type, office ID for stop-desk, status and tracking columns for sync back from the carrier.",
+      "Commune; delivery type (e.g. LIVRASION) = home vs desk only; office/stop-desk ID on another column or sender default hub; status and tracking for carrier sync.",
     "sidebar.map.group_optional": "Optional fields",
     "sidebar.map.group_optional_hint":
       "Advanced: external tracking, label URLs, notes, and blacklist columns.",

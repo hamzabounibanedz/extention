@@ -3,11 +3,33 @@
  */
 
 /**
- * Creates the Delivery Tool entry under the add-ons menu.
- * Uses {@code createAddonMenu} for published add-ons. For a container-bound test script
- * without the add-on flow, use {@code createMenu} instead so the menu appears during dev.
+ * Menu labels must be safe in auth-less add-on lifecycle phases.
+ * If i18n storage access is unavailable, fall back to fixed English labels.
+ *
+ * @param {string} key
+ * @param {string} fallback
+ * @return {string}
  */
-function installDeliveryToolMenu_() {
+function menu_safeLabel_(key, fallback) {
+  try {
+    if (typeof i18n_t === 'function') {
+      var label = i18n_t(key);
+      if (label != null && String(label).trim() !== '') {
+        return String(label);
+      }
+    }
+  } catch (e) {
+    // Ignore add-on no-auth failures and use fallback labels.
+  }
+  return fallback;
+}
+
+/**
+ * Creates the Delivery Tool entry under Extensions (and the add-on side panel via manifest).
+ * {@code createAddonMenu} only works when the project is deployed as an Editor add-on (manifest addOns).
+ * If it throws, falls back to a top-level toolbar menu named "Delivery Tool" (not under Extensions).
+ */
+function installDeliveryToolMenu_(e) {
   var ui = SpreadsheetApp.getUi();
   var menu;
   try {
@@ -20,10 +42,19 @@ function installDeliveryToolMenu_() {
   }
   // Use i18n keys so labels follow the user language preference.
   menu
-    .addItem(i18n_t('menu.open_sidebar'), 'showDeliveryToolSidebar_')
-    .addItem(i18n_t('menu.setup'), 'showSetupDialog_')
-    .addItem(i18n_t('menu.sync'), 'sync_runFromMenu_')
-    .addItem(i18n_t('menu.help'), 'showHelpDialog_')
+    .addItem(
+      menu_safeLabel_('menu.open_sidebar', 'Open Sidebar'),
+      'showDeliveryToolSidebar_',
+    )
+    .addItem(
+      menu_safeLabel_('menu.setup', 'Setup And Column Mapping'),
+      'showSetupDialog_',
+    )
+    .addItem(
+      menu_safeLabel_('menu.sync', 'Sync Shipment Status'),
+      'sync_runFromMenu_',
+    )
+    .addItem(menu_safeLabel_('menu.help', 'Help'), 'showHelpDialog_')
     .addToUi();
 }
 

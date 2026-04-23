@@ -107,6 +107,84 @@ function carrierCreds_parseYalidineInput_(rawInput, existingRow) {
 }
 
 /**
+ * @param {Object<string, unknown>|null|undefined} row
+ * @return {string}
+ */
+function carrierCreds_getNoestApiToken_(row) {
+  return carrierCreds_pickFirst_(row, ["apiToken", "token", "apiKey"]);
+}
+
+/**
+ * @param {Object<string, unknown>|null|undefined} row
+ * @return {string}
+ */
+function carrierCreds_getNoestUserGuid_(row) {
+  return carrierCreds_pickFirst_(row, ["userGuid", "user_guid", "guid", "partnerGuid"]);
+}
+
+/**
+ * NOEST accepts:
+ * - apiToken|userGuid
+ * - apiToken:userGuid
+ * - JSON: {"apiToken":"...","userGuid":"..."}
+ * - token alone (userGuid reused from existing value)
+ *
+ * @param {string} rawInput
+ * @param {Object<string, unknown>|null|undefined} existingRow
+ * @return {{ apiToken: string, userGuid: string }}
+ */
+function carrierCreds_parseNoestInput_(rawInput, existingRow) {
+  var text = rawInput != null ? String(rawInput).trim() : "";
+  var existingTok = carrierCreds_getNoestApiToken_(existingRow);
+  var existingGuid = carrierCreds_getNoestUserGuid_(existingRow);
+  if (!text) {
+    return { apiToken: "", userGuid: "" };
+  }
+
+  if (text.charAt(0) === "{") {
+    try {
+      var parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object") {
+        var parsedTok = carrierCreds_pickFirst_(parsed, [
+          "apiToken",
+          "token",
+          "api_token",
+          "apiKey",
+        ]);
+        var parsedGuid = carrierCreds_pickFirst_(parsed, [
+          "userGuid",
+          "user_guid",
+          "guid",
+          "partnerGuid",
+        ]);
+        return {
+          apiToken: parsedTok || existingTok,
+          userGuid: parsedGuid || existingGuid,
+        };
+      }
+    } catch (e) {
+      // Fall back to other formats.
+    }
+  }
+
+  var sep = text.indexOf("|") >= 0 ? "|" : text.indexOf(":") >= 0 ? ":" : "";
+  if (sep) {
+    var parts = text.split(sep);
+    var tok = parts.length ? String(parts.shift() || "").trim() : "";
+    var guid = String(parts.join(sep) || "").trim();
+    return {
+      apiToken: tok || existingTok,
+      userGuid: guid || existingGuid,
+    };
+  }
+
+  return {
+    apiToken: text || existingTok,
+    userGuid: existingGuid,
+  };
+}
+
+/**
  * ZR accepts either:
  * - tenantId|secretKey
  * - tenantId:secretKey
@@ -218,6 +296,18 @@ function carrierCreds_getForCarrier_(carrierId) {
     }
     return out;
   }
+  if (id === "noest") {
+    var noestTok = carrierCreds_getNoestApiToken_(row);
+    var noestGuid = carrierCreds_getNoestUserGuid_(row);
+    if (noestTok && noestGuid) {
+      out.apiToken = noestTok;
+      out.token = noestTok;
+      out.apiKey = noestTok;
+      out.userGuid = noestGuid;
+      out.user_guid = noestGuid;
+    }
+    return out;
+  }
   var secret = carrierCreds_getZrSecret_(row);
   if (secret) {
     out.apiKey = secret;
@@ -261,13 +351,20 @@ function carrierCreds_getState() {
       row &&
       yaliId !== "" &&
       yaliToken !== "";
+    var hasNoestPair =
+      id === "noest" &&
+      row &&
+      carrierCreds_getNoestApiToken_(row) !== "" &&
+      carrierCreds_getNoestUserGuid_(row) !== "";
     var has =
       row &&
       typeof row === "object" &&
-      ((carrierCreds_getZrSecret_(row) !== "") ||
-        (row.token && String(row.token).trim() !== "") ||
-        hasZrPair ||
-        hasYalidinePair);
+      (hasZrPair ||
+        hasYalidinePair ||
+        hasNoestPair ||
+        (id !== "noest" &&
+          ((carrierCreds_getZrSecret_(row) !== "") ||
+            (row.token && String(row.token).trim() !== ""))));
     byCarrier[id] = { hasApiKey: !!has };
   }
   return { carriers: carriers, byCarrier: byCarrier };
@@ -292,6 +389,9 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
   var k = apiKey != null ? String(apiKey).trim() : "";
   if (!k) {
     if (map[id]) {
+      if (id === "noest") {
+        delete map[id];
+      } else {
       delete map[id].apiKey;
       delete map[id].apiToken;
       delete map[id].apiId;
@@ -316,6 +416,7 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
         if (id !== "yalidine" || (!hasYaliId && !hasYaliToken)) {
           delete map[id];
         }
+      }
       }
     }
   } else {
@@ -342,6 +443,16 @@ function carrierCreds_saveApiKey(carrierId, apiKey) {
       map[id].id = yaliParsed.apiId;
       map[id].token = yaliParsed.apiToken;
       map[id].apiKey = yaliParsed.apiToken;
+    } else if (id === "noest") {
+      var noestParsed = carrierCreds_parseNoestInput_(k, map[id]);
+      if (!noestParsed.apiToken || !noestParsed.userGuid) {
+        throw new Error(i18n_t("error.noest_token_guid_required"));
+      }
+      map[id].apiToken = noestParsed.apiToken;
+      map[id].userGuid = noestParsed.userGuid;
+      map[id].token = noestParsed.apiToken;
+      map[id].apiKey = noestParsed.apiToken;
+      map[id].user_guid = noestParsed.userGuid;
     } else {
       map[id].apiKey = k;
     }
@@ -559,6 +670,17 @@ function carrierCreds_testConnection(carrierId, draftKey) {
       creds.id = yaliParsed.apiId;
       creds.token = yaliParsed.apiToken;
       creds.apiKey = yaliParsed.apiToken;
+    } else if (id === "noest") {
+      var mapNoest = carrierCreds_parseMap_();
+      var noestDraft = carrierCreds_parseNoestInput_(draft, mapNoest[id]);
+      if (!noestDraft.apiToken || !noestDraft.userGuid) {
+        throw new Error(i18n_t("error.noest_token_guid_required"));
+      }
+      creds.apiToken = noestDraft.apiToken;
+      creds.token = noestDraft.apiToken;
+      creds.apiKey = noestDraft.apiToken;
+      creds.userGuid = noestDraft.userGuid;
+      creds.user_guid = noestDraft.userGuid;
     } else {
       creds.apiKey = draft;
     }
@@ -579,6 +701,15 @@ function carrierCreds_testConnection(carrierId, draftKey) {
       String(creds.apiToken).trim() === "")
   ) {
     throw new Error(i18n_t("error.yalidine_id_token_required"));
+  }
+  if (
+    id === "noest" &&
+    (!creds.apiToken ||
+      String(creds.apiToken).trim() === "" ||
+      !creds.userGuid ||
+      String(creds.userGuid).trim() === "")
+  ) {
+    throw new Error(i18n_t("error.noest_token_guid_required"));
   }
   try {
     return apiJsonPost_("/v1/carriers/" + encodeURIComponent(id) + "/test-connection", {
@@ -662,6 +793,78 @@ function carrierCreds_testYalidineConnection(apiId, apiToken) {
     throw new Error(i18n_t("error.yalidine_id_token_required"));
   }
   return apiJsonPost_("/v1/carriers/yalidine/test-connection", {
+    credentials: creds || {},
+  });
+}
+
+/**
+ * Save NOEST credentials (Bearer apiToken + userGuid).
+ * Pass both empty strings to clear saved NOEST credentials.
+ *
+ * @param {string} apiToken
+ * @param {string} userGuid
+ * @return {ReturnType<typeof carrierCreds_getState>}
+ */
+function carrierCreds_saveNoestCredentials(apiToken, userGuid) {
+  var id = "noest";
+  var tok = apiToken != null ? String(apiToken).trim() : "";
+  var guid = userGuid != null ? String(userGuid).trim() : "";
+  var map = carrierCreds_parseMap_();
+  if (!tok && !guid) {
+    if (map[id] && typeof map[id] === "object") {
+      delete map[id];
+    }
+  } else {
+    if (!tok || !guid) {
+      throw new Error(i18n_t("error.noest_token_guid_required"));
+    }
+    if (!map[id] || typeof map[id] !== "object") {
+      map[id] = {};
+    }
+    map[id].apiToken = tok;
+    map[id].userGuid = guid;
+    map[id].token = tok;
+    map[id].apiKey = tok;
+    map[id].user_guid = guid;
+  }
+  PropertiesService.getUserProperties().setProperty(
+    DT_CARRIER_CREDS_KEY_,
+    JSON.stringify(map),
+  );
+  return carrierCreds_getState();
+}
+
+/**
+ * Runs backend NOEST adapter testConnection with optional draft token/guid.
+ * If draft values are blank, falls back to saved NOEST credentials.
+ *
+ * @param {string=} apiToken
+ * @param {string=} userGuid
+ * @return {Object}
+ */
+function carrierCreds_testNoestConnection(apiToken, userGuid) {
+  var tokDraft = apiToken != null ? String(apiToken).trim() : "";
+  var guidDraft = userGuid != null ? String(userGuid).trim() : "";
+  var creds = carrierCreds_getForCarrier_("noest");
+  if (tokDraft || guidDraft) {
+    if (!tokDraft || !guidDraft) {
+      throw new Error(i18n_t("error.noest_token_guid_required"));
+    }
+    creds.apiToken = tokDraft;
+    creds.token = tokDraft;
+    creds.apiKey = tokDraft;
+    creds.userGuid = guidDraft;
+    creds.user_guid = guidDraft;
+  }
+  if (
+    !creds.apiToken ||
+    String(creds.apiToken).trim() === "" ||
+    !creds.userGuid ||
+    String(creds.userGuid).trim() === ""
+  ) {
+    throw new Error(i18n_t("error.noest_token_guid_required"));
+  }
+  return apiJsonPost_("/v1/carriers/noest/test-connection", {
     credentials: creds || {},
   });
 }
