@@ -64,6 +64,10 @@ var DeliveryToolStorage = (function () {
   var LICENSE_CACHE_KEY = PREFIX + 'license.cache';
   var BUSINESS_SETTINGS_KEY = PREFIX + 'business.settings';
 
+  function sidebarSheetPrefKey_(spreadsheetId) {
+    return PREFIX + 'sidebar.sheet.' + spreadsheetId;
+  }
+
   return {
     /**
      * @param {string} spreadsheetId
@@ -108,6 +112,57 @@ var DeliveryToolStorage = (function () {
       var props = documentProps_();
       props.deleteProperty(mappingKey_(spreadsheetId, sheetId));
       props.deleteProperty(legacyMappingKey_(spreadsheetId, sheetId));
+    },
+
+    /**
+     * Last worksheet the user chose in the sidebar mapping dropdown (numeric sheet id).
+     * Per Google account + spreadsheet (sidebar preference, not active tab).
+     * @param {string} spreadsheetId
+     * @return {number|null}
+     */
+    getSidebarSheetPreference: function (spreadsheetId) {
+      var key = sidebarSheetPrefKey_(spreadsheetId);
+      var up = userProps_();
+      var dp = documentProps_();
+      var raw = up.getProperty(key);
+      if (raw == null || String(raw).trim() === '') {
+        // Migrate legacy document-level preference to user scope on first read.
+        var legacyRaw = dp.getProperty(key);
+        if (legacyRaw != null && String(legacyRaw).trim() !== '') {
+          up.setProperty(key, legacyRaw);
+          dp.deleteProperty(key);
+          raw = legacyRaw;
+        }
+      }
+      if (raw == null || String(raw).trim() === '') {
+        return null;
+      }
+      var n = parseInt(String(raw).trim(), 10);
+      return Number.isFinite(n) && n >= 1 ? n : null;
+    },
+
+    /**
+     * @param {string} spreadsheetId
+     * @param {number|string|null|undefined} sheetId Pass null to clear
+     */
+    setSidebarSheetPreference: function (spreadsheetId, sheetId) {
+      var key = sidebarSheetPrefKey_(spreadsheetId);
+      var up = userProps_();
+      var dp = documentProps_();
+      if (sheetId == null || String(sheetId).trim() === '') {
+        up.deleteProperty(key);
+        dp.deleteProperty(key);
+        return;
+      }
+      var n = parseInt(String(sheetId).trim(), 10);
+      if (!Number.isFinite(n) || n < 1) {
+        up.deleteProperty(key);
+        dp.deleteProperty(key);
+        return;
+      }
+      up.setProperty(key, String(Math.floor(n)));
+      // Keep only per-user scope; remove legacy shared preference.
+      dp.deleteProperty(key);
     },
 
     /**

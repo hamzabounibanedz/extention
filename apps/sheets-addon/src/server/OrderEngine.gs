@@ -97,7 +97,7 @@ var ORDER_DELIVERY_HOME_TERMS_ = {
 var ORDER_DELIVERY_PICKUP_HINT_RE_ =
   /(^|\b)(pickup|pick up|stop ?desk|desk|office|bureau|relay|relais|agence|agency|point relais|point de retrait|point retrait)(\b|$)|نقطة\s*الاستلام|نقطة\s*استلام|مكتب/;
 var ORDER_DELIVERY_HOME_HINT_RE_ =
-  /(^|\b)(home|domicile|maison|house|residence|livraison|delivery)(\b|$)|منزل|البيت|بيت|منزلي/;
+  /(^|\b)(home|domicile|maison|house|residence|delivery)(\b|$)|منزل|البيت|بيت|منزلي/;
 var ORDER_WILAYA_LABEL_BY_CODE_CACHE_ = null;
 
 /**
@@ -120,6 +120,26 @@ function order_normalizeLocationText_(raw) {
     .replace(/[_./|,\-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Treat placeholder junk as missing location text so fallback inference can win.
+ * @param {*} raw
+ * @return {boolean}
+ */
+function order_isPlaceholderLocationText_(raw) {
+  var n = order_normalizeLocationText_(raw);
+  return (
+    !n ||
+    /^0+$/.test(n) ||
+    n === 'null' ||
+    n === 'undefined' ||
+    n === 'none' ||
+    n === 'aucun' ||
+    n === 'n a' ||
+    n === 'na' ||
+    n === '-'
+  );
 }
 
 /**
@@ -235,6 +255,20 @@ function parseRowSelectionSpec_(spec) {
  */
 function readLiveSelectionRows_(sheet) {
   var seen = {};
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var activeSheet =
+      ss && typeof ss.getActiveSheet === 'function' ? ss.getActiveSheet() : null;
+    if (
+      sheet &&
+      activeSheet &&
+      typeof sheet.getSheetId === 'function' &&
+      typeof activeSheet.getSheetId === 'function' &&
+      sheet.getSheetId() !== activeSheet.getSheetId()
+    ) {
+      return [];
+    }
+  } catch (eSheetGuard) {}
 
   function addRanges_(ranges) {
     if (!ranges || !ranges.length) {
@@ -326,8 +360,24 @@ function sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec) {
  * }}
  */
 function order_previewSelection(rowSelectionSpec, options) {
+  var opts = options && typeof options === 'object' ? options : {};
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getActiveSheet();
+  var requestedSheetId =
+    opts.sheetId != null && String(opts.sheetId).trim() !== ''
+      ? Number(opts.sheetId)
+      : NaN;
+  var sheet =
+    Number.isFinite(requestedSheetId) &&
+    requestedSheetId >= 1 &&
+    typeof getSheetById_ === 'function'
+      ? getSheetById_(ss, requestedSheetId)
+      : null;
+  if (!sheet) {
+    sheet = ss.getActiveSheet();
+  }
+  if (!sheet) {
+    throw new Error(i18n_t('error.sheet_not_found'));
+  }
   var spreadsheetId = ss.getId();
   var sheetId = sheet.getSheetId();
   var sheetName = sheet.getName();
@@ -363,12 +413,22 @@ function order_previewSelection(rowSelectionSpec, options) {
   if (!selectedRowNumbers.length) {
     throw new Error(i18n_t('error.select_rows'));
   }
+  var businessSettings =
+    typeof businessSettings_get === 'function'
+      ? businessSettings_get().value || businessSettings_getDefaults_()
+      : null;
+  if (
+    businessSettings &&
+    typeof businessSettings_normalizeHubFields_ === 'function'
+  ) {
+    businessSettings_normalizeHubFields_(businessSettings);
+  }
 
   var now = isoNow_();
   var lastSheetRow = Math.max(sheet.getLastRow(), headerRow + 1);
   var startRow = selectedRowNumbers[0];
   var endRow = selectedRowNumbers[selectedRowNumbers.length - 1];
-  var skipDuplicateScan = !!(options && options.skipDuplicateScan);
+  var skipDuplicateScan = !!opts.skipDuplicateScan;
 
   var lastCol = sheet.getLastColumn();
   var valuesStartRow = headerRow;
@@ -436,7 +496,8 @@ function order_previewSelection(rowSelectionSpec, options) {
       continue;
     }
 
-    var errors = validateOrder_(sheet, rowNum, order, columns);
+    order_applyDefaultStopDeskForPickup_(order, businessSettings);
+    var errors = validateOrder_(sheet, rowNum, order, columns, businessSettings);
     appendDuplicateErrors_(rowNum, order, dupIndex, errors);
     var warnings = blacklistWarningsForOrder_(order);
     rows.push({
@@ -517,6 +578,14 @@ function buildOrderFromRow_(
 
   var carrierFromColumn = fromValues(columns.carrierColumn);
   var carrier = carrierFromColumn != null && carrierFromColumn !== '' ? carrierFromColumn : defaultCarrierId;
+  var carrierIdLc =
+    typeof resolveCarrierAdapterId_ === 'function'
+      ? resolveCarrierAdapterId_(carrier || null, defaultCarrierId || null)
+      : carrier != null && String(carrier).trim() !== ''
+        ? String(carrier).trim().toLowerCase()
+        : defaultCarrierId != null
+          ? String(defaultCarrierId).trim().toLowerCase()
+          : '';
 
   // Keep nullable numeric fields for accurate emptiness detection.
   var qtyRaw = fromValues(columns.quantityColumn);
@@ -551,7 +620,22 @@ function buildOrderFromRow_(
   var commune = fromValues(columns.communeColumn) || '';
   var productName = fromValues(columns.productColumn) || '';
 
+  if (order_isPlaceholderLocationText_(wilaya)) {
+    wilaya = '';
+  }
+  if (order_isPlaceholderLocationText_(commune)) {
+    commune = '';
+  }
+  if (
+    isBlank_(address) &&
+    commune &&
+    (carrierIdLc === 'yalidine' || carrierIdLc === 'noest')
+  ) {
+    address = commune;
+  }
+
   var wilayaCode = null;
+  var resolvedWilayaFromText = null;
   var wilayaCodeRaw = fromValues(columns.wilayaCodeColumn);
   if (wilayaCodeRaw != null && wilayaCodeRaw !== '') {
     var wNum = parseInt(String(wilayaCodeRaw).replace(/\D/g, ''), 10);
@@ -570,7 +654,8 @@ function buildOrderFromRow_(
     }
   }
   if (wilayaCode == null) {
-    wilayaCode = wilaya_resolveCodeFromText_(wilaya);
+    resolvedWilayaFromText = wilaya_resolveCodeFromText_(wilaya);
+    wilayaCode = resolvedWilayaFromText;
   }
   if (wilayaCode == null && commune) {
     wilayaCode = wilaya_resolveCodeFromText_(commune);
@@ -587,18 +672,64 @@ function buildOrderFromRow_(
   if (canonicalWilaya) {
     var wilayaNorm = order_normalizeLocationText_(wilaya);
     var communeNorm = order_normalizeLocationText_(commune);
-    if (!wilayaNorm || (communeNorm && wilayaNorm === communeNorm)) {
+    if (
+      order_isPlaceholderLocationText_(wilaya) ||
+      !wilayaNorm ||
+      (communeNorm && wilayaNorm === communeNorm) ||
+      resolvedWilayaFromText == null ||
+      (Number.isFinite(resolvedWilayaFromText) &&
+        resolvedWilayaFromText >= 1 &&
+        resolvedWilayaFromText <= 58 &&
+        resolvedWilayaFromText !== wilayaCode)
+    ) {
       wilaya = canonicalWilaya;
     }
   }
 
-  var stopDeskId = null;
+  var stopDeskCol =
+    columns.stopDeskIdColumn != null ? Number(columns.stopDeskIdColumn) : NaN;
+  var deliveryCol =
+    columns.deliveryTypeColumn != null ? Number(columns.deliveryTypeColumn) : NaN;
+  var stopDeskSameAsDeliveryCol =
+    Number.isFinite(stopDeskCol) &&
+    stopDeskCol >= 1 &&
+    Number.isFinite(deliveryCol) &&
+    deliveryCol >= 1 &&
+    stopDeskCol === deliveryCol;
+
   var stopDeskRaw = fromValues(columns.stopDeskIdColumn);
+  var stopDeskId = null;
   if (stopDeskRaw != null && String(stopDeskRaw).trim() !== '') {
-    stopDeskId = String(stopDeskRaw).trim();
+    var stopDeskTrim = String(stopDeskRaw).trim();
+    if (stopDeskSameAsDeliveryCol) {
+      // Same cell as delivery type (e.g. W = «التوصيل للمكتب»): it encodes mode, not station_code.
+      if (
+        typeof send_looksLikeDeliveryModeValue_ === 'function' &&
+        send_looksLikeDeliveryModeValue_(stopDeskTrim)
+      ) {
+        stopDeskId = null;
+      } else {
+        stopDeskId = stopDeskTrim;
+      }
+    } else {
+      stopDeskId = stopDeskTrim;
+    }
   }
   var deliveryRaw = fromValues(columns.deliveryTypeColumn);
-  var deliveryType = order_parseDeliveryType_(deliveryRaw, stopDeskRaw);
+  if (sheet && headerRow && order_shouldUseAlternateDeliveryColumn_(deliveryRaw)) {
+    var altDel = order_readDeliveryFromAlternateColumn_(
+      sheet,
+      rowNum,
+      columns.deliveryTypeColumn,
+      headerRow,
+    );
+    if (altDel) {
+      deliveryRaw = altDel;
+    }
+  }
+  var stopDeskRawForParse =
+    stopDeskSameAsDeliveryCol ? '' : stopDeskRaw != null ? String(stopDeskRaw).trim() : '';
+  var deliveryType = order_parseDeliveryType_(deliveryRaw, stopDeskRawForParse);
 
   var blRaw = fromValues(columns.blacklistColumn);
   var blParsed = parseBoolean_(blRaw);
@@ -702,21 +833,82 @@ function isRowEmpty_(order) {
 }
 
 /**
+ * When the sheet has no stop-desk column, use sender default hub from business settings
+ * (same value as «معرّف المكتب» in بيانات المرسل الافتراضية). Row-mapped ID always wins.
+ * @param {InternalOrderLike} order
+ * @param {Object|null} businessSettings
+ */
+function order_applyDefaultStopDeskForPickup_(order, businessSettings) {
+  if (!order || typeof order !== 'object') {
+    return;
+  }
+  if (String(order.deliveryType || '').trim() !== 'pickup-point') {
+    return;
+  }
+  if (order.stopDeskId != null && String(order.stopDeskId).trim() !== '') {
+    return;
+  }
+  var bs = businessSettings && typeof businessSettings === 'object' ? businessSettings : null;
+  if (!bs) {
+    return;
+  }
+  if (typeof businessSettings_normalizeHubFields_ === 'function') {
+    businessSettings_normalizeHubFields_(bs);
+  }
+  var hub =
+    bs.defaultHubId != null ? String(bs.defaultHubId).trim() : '';
+  if (!hub && bs.stopDeskId != null) {
+    hub = String(bs.stopDeskId).trim();
+  }
+  if (hub) {
+    order.stopDeskId = hub;
+  }
+}
+
+/**
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
  * @param {number} rowNum
  * @param {InternalOrderLike} order
  * @param {Object} columns
+ * @param {Object=} businessSettings
  * @return {Array<string>}
  */
-function validateOrder_(sheet, rowNum, order, columns) {
+function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
   var errors = [];
   var carrierIdLc = String(order.carrier || '').trim().toLowerCase();
   var yalidineCommuneOnlyMode = carrierIdLc === 'yalidine' && !isBlank_(order.commune);
+  // ZR home flow can resolve territory from commune-only input server-side.
+  // Keep preview permissive here and let backend return a precise error when commune is ambiguous.
+  var zrCommuneOnlyMode =
+    carrierIdLc === 'zr' && order.deliveryType === 'home' && !isBlank_(order.commune);
 
   if (isBlank_(order.phone)) {
     errors.push(i18n_t('val.phone_required'));
   } else if (!isPlausiblePhone_(order.phone)) {
     errors.push(i18n_t('val.phone_invalid'));
+  }
+
+  var addrColN =
+    columns.addressColumn != null ? Number(columns.addressColumn) : NaN;
+  var dtColN =
+    columns.deliveryTypeColumn != null ? Number(columns.deliveryTypeColumn) : NaN;
+  if (
+    Number.isFinite(addrColN) &&
+    addrColN >= 1 &&
+    Number.isFinite(dtColN) &&
+    dtColN >= 1 &&
+    addrColN === dtColN
+  ) {
+    errors.push(i18n_t('error.address_and_delivery_same_column'));
+  }
+
+  var rawAddrCell = getColumnValue_(sheet, rowNum, columns.addressColumn);
+  if (
+    !isBlank_(rawAddrCell) &&
+    typeof send_looksLikeDeliveryModeValue_ === 'function' &&
+    send_looksLikeDeliveryModeValue_(rawAddrCell)
+  ) {
+    errors.push(i18n_t('error.address_column_looks_like_delivery_type'));
   }
 
   var carrierForAddrCheck = carrierIdLc;
@@ -728,15 +920,21 @@ function validateOrder_(sheet, rowNum, order, columns) {
     } else {
       errors.push(i18n_t('val.address_required'));
     }
+  } else if (
+    typeof send_looksLikeCarrierValue_ === 'function' &&
+    send_looksLikeCarrierValue_(order.address)
+  ) {
+    errors.push(i18n_t('error.address_column_looks_like_carrier'));
   }
 
   if (isBlank_(order.wilaya)) {
-    if (!yalidineCommuneOnlyMode) {
+    if (!yalidineCommuneOnlyMode && !zrCommuneOnlyMode) {
       errors.push(i18n_t('val.wilaya_required'));
     }
   } else {
     if (
       !yalidineCommuneOnlyMode &&
+      !zrCommuneOnlyMode &&
       (order.wilayaCode == null || order.wilayaCode < 1 || order.wilayaCode > 58)
     ) {
       // Guide users to either add a wilaya code column or include a numeric prefix like "16 — Alger".
@@ -755,7 +953,17 @@ function validateOrder_(sheet, rowNum, order, columns) {
     }
   }
 
-  if (order.deliveryType === 'pickup-point' && (!order.stopDeskId || order.stopDeskId.trim() === '')) {
+  var fallbackStopDeskId =
+    businessSettings && businessSettings.defaultHubId != null
+      ? String(businessSettings.defaultHubId).trim()
+      : businessSettings && businessSettings.stopDeskId != null
+        ? String(businessSettings.stopDeskId).trim()
+        : '';
+  if (
+    order.deliveryType === 'pickup-point' &&
+    (!order.stopDeskId || order.stopDeskId.trim() === '') &&
+    !fallbackStopDeskId
+  ) {
     var carrierLc = String(order.carrier || '').trim().toLowerCase();
     var isZr = carrierLc === 'zr';
     errors.push(i18n_t(isZr ? 'val.stopdesk_required_zr' : 'val.stopdesk_required'));
@@ -767,6 +975,9 @@ function validateOrder_(sheet, rowNum, order, columns) {
   }
   if (carrierIdLc === 'yalidine' && isBlank_(order.commune)) {
     errors.push(i18n_t('val.commune_required_yalidine'));
+  }
+  if (carrierIdLc === 'noest' && isBlank_(order.commune)) {
+    errors.push(i18n_t('val.commune_required_noest'));
   }
 
   if (order.externalShipmentId) {
@@ -1017,9 +1228,192 @@ function isBlank_(s) {
 }
 
 /**
+ * Many sheets use a column titled "LIVRASION" for shipment status (LIVREE, RETOUR, …), not domicile/bureau mode.
+ * When true, that cell must not win over another column that holds the real delivery mode.
  * @param {*} raw
- * @return {string}
+ * @return {boolean}
  */
+function order_valueLooksLikeShipmentStatusNotDeliveryMode_(raw) {
+  if (isBlank_(raw)) {
+    return false;
+  }
+  var s = String(raw).trim();
+  // Arabic phrases that are status / outcome, not "ship to office vs home" choice.
+  if (/[\u0600-\u06FF]/.test(s)) {
+    return /(مرتجع|مرتجعة|ملغى|ملغي|مؤكد|مؤكدة|منجز|تم\s*التسليم|قيد\s*التوصيل|في\s*الطريق|رفض|ملغاة)/.test(s);
+  }
+  var n = order_normalizeDeliveryText_(s);
+  if (!n) {
+    return false;
+  }
+  // Do not treat real mode keywords as status-only.
+  if (
+    /pickup|home|domicile|maison|house|residence|desk|bureau|relay|relais|point|agence|agency|office|stop|livraison|livrasion|delivery|domicil/.test(
+      n,
+    )
+  ) {
+    return false;
+  }
+  // French / Latin status tokens common in export sheets (not mode selectors).
+  return /^(retour|retours|livree|livré|livr[eé]s?|annul|annul[eé]e?s?|confirme|confirmee|conferme|confermee|expedi|expédi|expid[eé]|expidie|expider|expedition|inj(\s*\d+)?|unknown|inconnu|pending|rembours|rembourse|reporte|reporter|en\s*cours|en\s*transit|n\/a|na)$/i.test(
+    n.replace(/\s+/g, ' ').trim(),
+  );
+}
+
+/**
+ * Whether to scan other columns (headers like LIVRASION) for delivery mode.
+ * True when the mapped cell is empty, is a known placeholder (e.g. WooCommerce), or has no recognizable mode.
+ * @param {*} deliveryRaw
+ * @return {boolean}
+ */
+function order_shouldUseAlternateDeliveryColumn_(deliveryRaw) {
+  if (isBlank_(deliveryRaw)) {
+    return true;
+  }
+  if (order_valueLooksLikeShipmentStatusNotDeliveryMode_(deliveryRaw)) {
+    return true;
+  }
+  var n = order_normalizeDeliveryText_(deliveryRaw);
+  if (!n) {
+    return true;
+  }
+  // WooCommerce / e-commerce placeholders — treat as missing so LIVRASION column can win.
+  if (
+    /no\s+shipping\s+methods?\s+set|no\s+shipping\s+methods?|shipping\s+not\s+configured|not\s+set|n\/a|none\s+selected|aucun\s+mode\s+de\s+livraison|pas\s+de\s+livraison/.test(
+      n,
+    )
+  ) {
+    return true;
+  }
+  if (n.indexOf('للمكتب') !== -1 || n.indexOf('للمنزل') !== -1 || n.indexOf('المنزل') !== -1) {
+    return false;
+  }
+  if (ORDER_DELIVERY_PICKUP_TERMS_[n] || ORDER_DELIVERY_HOME_TERMS_[n]) {
+    return false;
+  }
+  if (ORDER_DELIVERY_PICKUP_HINT_RE_.test(n) || ORDER_DELIVERY_HOME_HINT_RE_.test(n)) {
+    return false;
+  }
+  if (
+    /pickup|home|domicile|maison|house|residence|office|desk|bureau|relais|relay|point|stop|agence|livraison|livrasion|delivery|التوصيل|منزل|مكتب|استلام|نقطة/.test(
+      n,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Prefer cells that clearly encode domicile vs bureau (e.g. column W: "التوصيل للمكتب") over
+ * weaker matches when several headers look like "LIVRASION".
+ * @param {string} v
+ * @return {number}
+ */
+function order_deliveryModeCandidateScore_(v) {
+  if (isBlank_(v)) {
+    return -100;
+  }
+  if (order_valueLooksLikeShipmentStatusNotDeliveryMode_(v)) {
+    return -100;
+  }
+  var s = String(v);
+  if (/للمكتب|للمنزل|التوصيل\s*للمكتب|التوصيل\s*للمنزل|المنزل/.test(s)) {
+    return 1000;
+  }
+  var n = order_normalizeDeliveryText_(v);
+  if (!n) {
+    return 0;
+  }
+  if (ORDER_DELIVERY_PICKUP_TERMS_[n] || ORDER_DELIVERY_HOME_TERMS_[n]) {
+    return 800;
+  }
+  if (ORDER_DELIVERY_PICKUP_HINT_RE_.test(n)) {
+    return 600;
+  }
+  if (ORDER_DELIVERY_HOME_HINT_RE_.test(n)) {
+    return 550;
+  }
+  if (/[\u0600-\u06FF]/.test(s)) {
+    return 200;
+  }
+  return 50;
+}
+
+/**
+ * When the mapped delivery column is empty or does not contain a recognizable mode
+ * (e.g. WooCommerce "No shipping methods set"), find another column whose header looks like
+ * delivery mode (e.g. "LIVRASION", "LIVRAISON", "lavraison", "l livrasion") — common when users map
+ * "DELIVERY MODE" but the sheet uses a separate livraison column (often column W).
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} rowNum
+ * @param {number|undefined|null} mappedDeliveryCol
+ * @param {number} headerRow
+ * @return {string|null}
+ */
+function order_readDeliveryFromAlternateColumn_(sheet, rowNum, mappedDeliveryCol, headerRow) {
+  if (!sheet || !rowNum || !headerRow) {
+    return null;
+  }
+  try {
+    var lastCol = sheet.getLastColumn();
+    if (!lastCol || lastCol < 1) {
+      return null;
+    }
+    var mc = mappedDeliveryCol != null ? Number(mappedDeliveryCol) : NaN;
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getDisplayValues()[0];
+    var candidates = [];
+    for (var c = 0; c < headers.length; c++) {
+      var colNum = c + 1;
+      if (Number.isFinite(mc) && colNum === mc) {
+        continue;
+      }
+      if (!order_headerLooksLikeDeliveryTypeColumn_(headers[c])) {
+        continue;
+      }
+      var v = sheet.getRange(rowNum, colNum).getDisplayValue();
+      if (v == null || String(v).trim() === '') {
+        continue;
+      }
+      var trimmed = String(v).trim();
+      if (order_valueLooksLikeShipmentStatusNotDeliveryMode_(trimmed)) {
+        continue;
+      }
+      candidates.push(trimmed);
+    }
+    if (!candidates.length) {
+      return null;
+    }
+    candidates.sort(function (a, b) {
+      return order_deliveryModeCandidateScore_(b) - order_deliveryModeCandidateScore_(a);
+    });
+    return candidates[0];
+  } catch (eAlt) {}
+  return null;
+}
+
+/**
+ * @param {*} headerText
+ * @return {boolean}
+ */
+function order_headerLooksLikeDeliveryTypeColumn_(headerText) {
+  var hn = String(headerText || '').toLowerCase();
+  if (!hn) {
+    return false;
+  }
+  if (
+    /societe|société|carrier|transporteur|company|شركة|شركه|ناقل|الشحن|expediteur|expéditeur|bon de livraison|adresse de livraison|adresse livraison/.test(
+      hn,
+    )
+  ) {
+    return false;
+  }
+  return /(l\s*livrasion|l\s*livraison|^livrasion$|^livrason$|^livraison$|livrasion|livrason|livracion|type\s*livraison|mode\s*livraison|type\s*livrasion|mode\s*livrasion|delivery\s*type|delivery\s*mode|delivry|نوع\s*التوصيل|طريقة\s*التوصيل|نمط\s*التوصيل)/.test(
+    hn,
+  );
+}
+
 function order_normalizeDeliveryText_(raw) {
   if (raw == null) {
     return '';
@@ -1200,7 +1594,7 @@ function isoNow_() {
  * Adapter ids registered in packages/carriers — keep in sync with setup_getContext carriers list.
  * @type {Array<string>}
  */
-var KNOWN_CARRIER_ADAPTER_IDS_ = ['yalidine', 'zr'];
+var KNOWN_CARRIER_ADAPTER_IDS_ = ['yalidine', 'zr', 'noest'];
 
 /**
  * @param {string|null|undefined} raw
@@ -1252,6 +1646,17 @@ function resolveCarrierAlias_(raw) {
   }
   if (/زد\s*ار|زدار/.test(s)) {
     return 'zr';
+  }
+
+  if (
+    token === 'noest' ||
+    token.indexOf('noest') === 0 ||
+    token.indexOf('nouest') === 0
+  ) {
+    return 'noest';
+  }
+  if (/نوست|نويست|ن\s*و\s*ست/.test(s)) {
+    return 'noest';
   }
   return null;
 }

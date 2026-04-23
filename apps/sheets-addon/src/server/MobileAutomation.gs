@@ -590,6 +590,22 @@ function mobile_hasCarrierCredentialsForAutoSend_(carrierId, cache) {
     var apiId = creds.apiId != null ? String(creds.apiId).trim() : '';
     var apiToken = creds.apiToken != null ? String(creds.apiToken).trim() : '';
     ok = !!(apiId && apiToken);
+  } else if (id === 'noest') {
+    var nt =
+      creds.apiToken != null && String(creds.apiToken).trim() !== ''
+        ? String(creds.apiToken).trim()
+        : creds.token != null
+          ? String(creds.token).trim()
+          : creds.apiKey != null
+            ? String(creds.apiKey).trim()
+            : '';
+    var ng =
+      creds.userGuid != null && String(creds.userGuid).trim() !== ''
+        ? String(creds.userGuid).trim()
+        : creds.user_guid != null
+          ? String(creds.user_guid).trim()
+          : '';
+    ok = !!(nt && ng);
   }
   if (cache) {
     cache[id] = ok;

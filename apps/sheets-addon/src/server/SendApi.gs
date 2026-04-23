@@ -221,6 +221,34 @@ function send_looksLikeDeliveryModeValue_(raw) {
 }
 
 /**
+ * Guard against mis-mapping where address column actually contains carrier names.
+ * @param {*} raw
+ * @return {boolean}
+ */
+function send_looksLikeCarrierValue_(raw) {
+  if (raw == null) {
+    return false;
+  }
+  var text = String(raw).trim();
+  if (!text || text.length > 50) {
+    return false;
+  }
+  if (typeof resolveCarrierAlias_ === 'function' && resolveCarrierAlias_(text)) {
+    return true;
+  }
+  var n = text.toLowerCase().replace(/[\s_\-./]+/g, '');
+  return (
+    n === 'zr' ||
+    n.indexOf('zrexpress') === 0 ||
+    n === 'yalidine' ||
+    n === 'yallidine' ||
+    n === 'noest' ||
+    n === 'nouest' ||
+    /نوست|زد\s*ار|زدار|ياليدين|يالدين|يالي?دين/.test(text)
+  );
+}
+
+/**
  * Batches send for selected rows, with checkpoint/resume and label URL collection.
  * @param {Object=} options
  * @return {{
@@ -247,7 +275,22 @@ function send_sendSelection(rowSelectionSpec, options) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var spreadsheetId = ss.getId();
 
-    var activeSheet = ss.getActiveSheet();
+    var requestedSheetId =
+      opts.sheetId != null && String(opts.sheetId).trim() !== ''
+        ? Number(opts.sheetId)
+        : NaN;
+    var activeSheet =
+      Number.isFinite(requestedSheetId) &&
+      requestedSheetId >= 1 &&
+      typeof getSheetById_ === 'function'
+        ? getSheetById_(ss, requestedSheetId)
+        : null;
+    if (!activeSheet) {
+      activeSheet = ss.getActiveSheet();
+    }
+    if (!activeSheet) {
+      throw new Error(i18n_t('error.sheet_not_found'));
+    }
     var sheetId = activeSheet.getSheetId();
 
     var mapping = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
@@ -266,6 +309,7 @@ function send_sendSelection(rowSelectionSpec, options) {
     rowSelectionSpec != null && String(rowSelectionSpec).trim() !== '';
   var preview = order_previewSelection(rowSelectionSpec, {
     skipDuplicateScan: fastPreviewMode,
+    sheetId: sheetId,
   });
   send_assertSmartCoreMapping_(
     columns,
@@ -321,20 +365,11 @@ function send_sendSelection(rowSelectionSpec, options) {
   }
 
   var businessSettings = businessSettings_get().value || businessSettings_getDefaults_();
-  // Compatibility bridge: older UI/settings store pickup desk as stopDeskId,
-  // while backend bulk flow expects defaultHubId for pickup-point fallback.
-  if (businessSettings) {
-    var bsStopDesk =
-      businessSettings.stopDeskId != null
-        ? String(businessSettings.stopDeskId).trim()
-        : '';
-    if (
-      bsStopDesk &&
-      (businessSettings.defaultHubId == null ||
-        String(businessSettings.defaultHubId).trim() === '')
-    ) {
-      businessSettings.defaultHubId = bsStopDesk;
-    }
+  if (
+    businessSettings &&
+    typeof businessSettings_normalizeHubFields_ === 'function'
+  ) {
+    businessSettings_normalizeHubFields_(businessSettings);
   }
   var sent = 0;
   var failed = 0;
@@ -660,6 +695,24 @@ function send_getCarrierCredentialsError_(carrierId, creds) {
     if (!apiId || !apiToken) {
       return i18n_t('error.yalidine_id_token_required');
     }
+  } else if (id === 'noest') {
+    var noestTok =
+      c.apiToken != null && String(c.apiToken).trim() !== ''
+        ? String(c.apiToken).trim()
+        : c.token != null
+          ? String(c.token).trim()
+          : c.apiKey != null
+            ? String(c.apiKey).trim()
+            : '';
+    var noestGuid =
+      c.userGuid != null && String(c.userGuid).trim() !== ''
+        ? String(c.userGuid).trim()
+        : c.user_guid != null
+          ? String(c.user_guid).trim()
+          : '';
+    if (!noestTok || !noestGuid) {
+      return i18n_t('error.noest_token_guid_required');
+    }
   }
   return '';
 }
@@ -733,6 +786,7 @@ function send_assertSmartCoreMapping_(columns, previewRows, defaultCarrierId) {
 
   var rowsForAddressCheck = Array.isArray(previewRows) ? previewRows : [];
   var suspiciousAddressRows = [];
+  var suspiciousCarrierAddressRows = [];
   var analyzedAddressRows = 0;
   for (var j = 0; j < rowsForAddressCheck.length; j++) {
     var row = rowsForAddressCheck[j] || {};
@@ -747,6 +801,16 @@ function send_assertSmartCoreMapping_(columns, previewRows, defaultCarrierId) {
     if (send_looksLikeDeliveryModeValue_(addr)) {
       suspiciousAddressRows.push(row.rowNumber);
     }
+    if (send_looksLikeCarrierValue_(addr)) {
+      suspiciousCarrierAddressRows.push(row.rowNumber);
+    }
+  }
+  if (
+    analyzedAddressRows > 0 &&
+    suspiciousCarrierAddressRows.length > 0 &&
+    suspiciousCarrierAddressRows.length === analyzedAddressRows
+  ) {
+    throw new Error(i18n_t('error.address_column_looks_like_carrier'));
   }
   if (
     analyzedAddressRows > 0 &&
@@ -771,7 +835,11 @@ function send_resolveDestinationWilayaText_(order) {
     }
   }
   var w = order && order.wilaya != null ? String(order.wilaya).trim() : '';
-  if (w) {
+  var wIsPlaceholder =
+    typeof order_isPlaceholderLocationText_ === 'function'
+      ? order_isPlaceholderLocationText_(w)
+      : /^0+$/.test(String(w || '').trim());
+  if (w && !wIsPlaceholder) {
     return w;
   }
   var commune = order && order.commune != null ? String(order.commune).trim() : '';
@@ -784,7 +852,15 @@ function send_resolveDestinationWilayaText_(order) {
       }
     }
   }
-  return commune;
+  if (
+    commune &&
+    !(typeof order_isPlaceholderLocationText_ === 'function'
+      ? order_isPlaceholderLocationText_(commune)
+      : /^0+$/.test(String(commune || '').trim()))
+  ) {
+    return commune;
+  }
+  return '';
 }
 
 /**
@@ -840,7 +916,26 @@ function send_buildBackendOrder_(order, rowNumber, businessSettings) {
         ? Number(order.codAmount) / Number(order.quantity)
         : null,
     note: order && order.notes ? String(order.notes) : null,
-    station: order && order.stopDeskId ? String(order.stopDeskId) : null,
+    station: (function () {
+      var rowDesk =
+        order && order.stopDeskId ? String(order.stopDeskId).trim() : '';
+      if (rowDesk) {
+        return rowDesk;
+      }
+      var isPickup =
+        order &&
+        order.deliveryType &&
+        String(order.deliveryType).trim() === 'pickup-point';
+      if (!isPickup || !bs) {
+        return null;
+      }
+      var hub =
+        bs.defaultHubId != null ? String(bs.defaultHubId).trim() : '';
+      if (!hub && bs.stopDeskId != null) {
+        hub = String(bs.stopDeskId).trim();
+      }
+      return hub || null;
+    })(),
     hasExchange: !!(order && order.hasExchange),
     freeShipping: !!(order && order.freeShipping),
     productToCollect:
@@ -857,14 +952,30 @@ function send_buildBackendOrder_(order, rowNumber, businessSettings) {
 }
 
 /**
- * Returns all non-empty mapped label URLs from the active sheet.
+ * Returns all non-empty mapped label URLs from the requested or active sheet.
  * Used by "Print all labels" to reopen every available label, not only last-send cache.
+ * @param {number|string=} sheetIdRaw
  * @return {{ items: Array<{ rowNumber: number, url: string }>, count: number }}
  */
-function send_getAllLabelUrls() {
+function send_getAllLabelUrls(sheetIdRaw) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getActiveSheet();
   var spreadsheetId = ss.getId();
+  var requestedSheetId =
+    sheetIdRaw != null && String(sheetIdRaw).trim() !== ''
+      ? Number(sheetIdRaw)
+      : NaN;
+  var sheet =
+    Number.isFinite(requestedSheetId) &&
+    requestedSheetId >= 1 &&
+    typeof getSheetById_ === 'function'
+      ? getSheetById_(ss, requestedSheetId)
+      : null;
+  if (!sheet) {
+    sheet = ss.getActiveSheet();
+  }
+  if (!sheet) {
+    throw new Error(i18n_t('error.sheet_not_found'));
+  }
   var sheetId = sheet.getSheetId();
 
   var saved;
