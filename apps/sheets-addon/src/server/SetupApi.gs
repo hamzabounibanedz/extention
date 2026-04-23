@@ -10,6 +10,8 @@ var SETUP_ALIAS_MAX_PER_FIELD_ = 20;
 var SETUP_DATE_SCAN_ROW_LIMIT_ = 120;
 var SETUP_DATE_SAMPLE_TARGET_ = 40;
 var SETUP_DATE_AUTODETECT_MIN_SCORE_ = 0.55;
+var SETUP_VALUE_SCAN_ROW_LIMIT_ = 80;
+var SETUP_VALUE_SAMPLE_TARGET_ = 24;
 var SETUP_CARRIERS_CACHE_KEY_ = "dt.v1.carriers.cache";
 var SETUP_CARRIERS_CACHE_TTL_MS_ = 10 * 60 * 1000;
 var SETUP_CARRIERS_FAIL_COOLDOWN_MS_ = 2 * 60 * 1000;
@@ -203,23 +205,42 @@ var SETUP_FIELD_SYNONYMS_ = {
     "to commune name",
     "to_commune_name",
     "commune destination",
+    "nom commune",
+    "nom de la commune",
     "district",
     "municipality",
+    "daira",
+    "daïra",
+    "daira name",
     "city",
+    "city name",
     "ville",
     "localite",
     "localité",
+    "locality",
+    "destination city",
     "baladia",
     "baladya",
     "baladiya",
     "baladiah",
     "baldia",
     "baladeya",
+    "badlaya",
+    "badalia",
+    "baldiya",
+    "baldya",
+    "laville",
+    "l ville",
     "بلدية",
     "بلديه",
     "مدينة",
     "البلدية",
     "البلديه",
+    "المدينة",
+    "المحلة",
+    "المنطقة",
+    "دائرة",
+    "الدائرة",
   ],
   productColumn: [
     "product",
@@ -256,6 +277,11 @@ var SETUP_FIELD_SYNONYMS_ = {
     "is stopdesk",
     "is_stopdesk",
     "delivery mode",
+    "l livrasion",
+    "l livraison",
+    "l livrason",
+    "LIVRASION",
+    "livrasion col",
     "type livraison",
     "type de livraison",
     "mode livraison",
@@ -308,6 +334,9 @@ var SETUP_FIELD_SYNONYMS_ = {
     "transporteur",
     "livreur",
     "delivery company",
+    "societe de livraison",
+    "société de livraison",
+    "societe livraison",
     "expediteur",
     "شركة التوصيل",
     "الناقل",
@@ -401,6 +430,7 @@ function setup_getCarriersFallback_() {
   return [
     { id: "yalidine", label: "Yalidine" },
     { id: "zr", label: "ZR" },
+    { id: "noest", label: "NOEST" },
   ];
 }
 
@@ -615,7 +645,8 @@ function setup_resolveCarriersWithMeta_() {
  *   spreadsheetId: string,
  *   sheets: Array<{ sheetId: number, sheetName: string }>,
  *   carriers: Array<{ id: string, label: string }>,
- *   carriersWarning: string|null
+ *   carriersWarning: string|null,
+ *   preferredSidebarSheetId: number|null
  * }}
  */
 function setup_getContext() {
@@ -625,12 +656,50 @@ function setup_getContext() {
     return { sheetId: sh.getSheetId(), sheetName: sh.getName() };
   });
   var carriersMeta = setup_resolveCarriersWithMeta_();
+  var preferred = null;
+  try {
+    var rawPref = DeliveryToolStorage.getSidebarSheetPreference(
+      spreadsheetId,
+    );
+    if (rawPref != null && Number.isFinite(rawPref) && rawPref >= 1) {
+      for (var si = 0; si < sheets.length; si++) {
+        if (sheets[si].sheetId === rawPref) {
+          preferred = rawPref;
+          break;
+        }
+      }
+    }
+  } catch (ePref) {
+    preferred = null;
+  }
   return {
     spreadsheetId: spreadsheetId,
     sheets: sheets,
     carriers: carriersMeta.carriers,
     carriersWarning: carriersMeta.warning,
+    preferredSidebarSheetId: preferred,
   };
+}
+
+/**
+ * Remember which worksheet the user selected in the sidebar (not the active tab).
+ * @param {number|string} sheetId
+ * @return {{ ok: boolean }}
+ */
+function setup_setSidebarSheetPreference(sheetId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var spreadsheetId = ss.getId();
+  var id = Number(sheetId);
+  if (!Number.isFinite(id) || id < 1) {
+    DeliveryToolStorage.setSidebarSheetPreference(spreadsheetId, null);
+    return { ok: true };
+  }
+  var sheet = getSheetById_(ss, id);
+  if (!sheet) {
+    throw new Error(i18n_t("error.sheet_not_found"));
+  }
+  DeliveryToolStorage.setSidebarSheetPreference(spreadsheetId, id);
+  return { ok: true };
 }
 
 /**
@@ -1123,6 +1192,17 @@ function setup_collectTermsForField_(fieldKey, spreadsheetId, sheetId) {
 }
 
 /**
+ * @param {string} headerNorm
+ * @return {boolean}
+ */
+function setup_headerLooksCommuneLike_(headerNorm) {
+  var hn = String(headerNorm || "");
+  return /commune|district|municipality|city|ville|daira|daïra|localite|locality|balad|badlay|baldia|بلدي|بلديه|مدينة|دائرة|منطقة|محلة/.test(
+    hn,
+  );
+}
+
+/**
  * @param {string} fieldKey
  * @param {string} headerNorm
  * @param {Array<string>} terms
@@ -1136,9 +1216,7 @@ function setup_scoreHeaderForField_(fieldKey, headerNorm, terms) {
     if (s > best) best = s;
   });
 
-  var looksCommune = /commune|district|municipality|city|ville|balad|بلدي|بلديه|مدينة/.test(
-    headerNorm,
-  );
+  var looksCommune = setup_headerLooksCommuneLike_(headerNorm);
   var looksWilaya = /wilaya|province|governorate|ولاية/.test(headerNorm);
   var looksAddress = /address|adresse|adr|عنوان|مكان/.test(headerNorm);
 
@@ -1192,9 +1270,612 @@ function setup_pickBestColumnForField_(
 }
 
 /**
- * Carrier-aware repair for commonly confused destination columns.
- * Keeps user choices when valid, fixes clear conflicts (duplicates / BALADIA ambiguity),
- * and auto-fills missing required fields with best candidates.
+ * @param {string} headerNorm
+ * @return {boolean}
+ */
+function setup_headerLooksCarrier_(headerNorm) {
+  var hn = String(headerNorm || "");
+  return /carrier|transporteur|livreur|delivery company|societe de livraison|societe livraison|expediteur|شركة التوصيل|شركة الشحن|الناقل/.test(
+    hn,
+  );
+}
+
+/**
+ * @param {string} headerNorm
+ * @return {boolean}
+ */
+function setup_headerLooksDeliveryType_(headerNorm) {
+  var hn = String(headerNorm || "");
+  return /delivery|livraison|livrasion|livrason|l\s*livrasion|l\s*livraison|livrasion|LIVRASION|stopdesk|pickup|relay|relais|bureau|office|point relais|نوع التوصيل|طريقة التوصيل|نوع التسليم|طريقة التسليم|نمط التوصيل|التوصيل/.test(
+    hn,
+  );
+}
+
+/**
+ * @param {*} raw
+ * @return {boolean}
+ */
+function setup_isPlaceholderValue_(raw) {
+  var t = setup_normalizeHeader_(raw);
+  return (
+    !t ||
+    /^0+$/.test(t) ||
+    t === "null" ||
+    t === "undefined" ||
+    t === "none" ||
+    t === "aucun" ||
+    t === "n a" ||
+    t === "na" ||
+    t === "-"
+  );
+}
+
+/**
+ * @param {*} raw
+ * @return {string}
+ */
+function setup_explicitDeliveryTypeToken_(raw) {
+  var normalized =
+    typeof order_normalizeDeliveryText_ === "function"
+      ? order_normalizeDeliveryText_(raw)
+      : setup_normalizeHeader_(raw);
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.indexOf("للمكتب") !== -1) {
+    return "pickup-point";
+  }
+  if (
+    normalized.indexOf("للمنزل") !== -1 ||
+    normalized.indexOf("المنزل") !== -1
+  ) {
+    return "home";
+  }
+  if (
+    typeof ORDER_DELIVERY_PICKUP_TERMS_ === "object" &&
+    ORDER_DELIVERY_PICKUP_TERMS_[normalized]
+  ) {
+    return "pickup-point";
+  }
+  if (
+    typeof ORDER_DELIVERY_HOME_TERMS_ === "object" &&
+    ORDER_DELIVERY_HOME_TERMS_[normalized]
+  ) {
+    return "home";
+  }
+  if (
+    typeof ORDER_DELIVERY_PICKUP_HINT_RE_ !== "undefined" &&
+    ORDER_DELIVERY_PICKUP_HINT_RE_ &&
+    ORDER_DELIVERY_PICKUP_HINT_RE_.test(normalized)
+  ) {
+    return "pickup-point";
+  }
+  if (
+    typeof ORDER_DELIVERY_HOME_HINT_RE_ !== "undefined" &&
+    ORDER_DELIVERY_HOME_HINT_RE_ &&
+    ORDER_DELIVERY_HOME_HINT_RE_.test(normalized)
+  ) {
+    return "home";
+  }
+  return "";
+}
+
+/**
+ * @param {*} raw
+ * @return {boolean}
+ */
+function setup_isCarrierLikeValue_(raw) {
+  if (raw == null || String(raw).trim() === "") {
+    return false;
+  }
+  if (typeof resolveCarrierAlias_ === "function" && resolveCarrierAlias_(raw)) {
+    return true;
+  }
+  var n = setup_normalizeHeader_(raw);
+  return (
+    n === "zr" ||
+    n === "zr express" ||
+    n === "yalidine" ||
+    n === "yallidine" ||
+    n === "noest" ||
+    n === "nouest" ||
+    n === "guepex" ||
+    n === "carrier" ||
+    n === "transporteur" ||
+    n === "livreur"
+  );
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} colIndex
+ * @param {number} headerRow
+ * @return {{
+ *   col: number,
+ *   header: string,
+ *   headerNorm: string,
+ *   seen: number,
+ *   deliveryHits: number,
+ *   carrierHits: number,
+ *   deliveryRatio: number,
+ *   carrierRatio: number
+ * }}
+ */
+function setup_analyzeSmartColumn_(sheet, colIndex, headerRow) {
+  var col = Number(colIndex);
+  var header = "";
+  try {
+    header =
+      col >= 1 && headerRow >= 1
+        ? String(sheet.getRange(headerRow, col, 1, 1).getDisplayValue() || "")
+        : "";
+  } catch (e) {
+    header = "";
+  }
+  var headerNorm = setup_normalizeHeader_(header);
+  if (!Number.isFinite(col) || col < 1) {
+    return {
+      col: col,
+      header: header,
+      headerNorm: headerNorm,
+      seen: 0,
+      deliveryHits: 0,
+      carrierHits: 0,
+      deliveryRatio: 0,
+      carrierRatio: 0,
+    };
+  }
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= headerRow) {
+    return {
+      col: col,
+      header: header,
+      headerNorm: headerNorm,
+      seen: 0,
+      deliveryHits: 0,
+      carrierHits: 0,
+      deliveryRatio: 0,
+      carrierRatio: 0,
+    };
+  }
+  var scanRows = Math.min(SETUP_VALUE_SCAN_ROW_LIMIT_, lastRow - headerRow);
+  var values = sheet.getRange(headerRow + 1, col, scanRows, 1).getDisplayValues();
+  var seen = 0;
+  var deliveryHits = 0;
+  var carrierHits = 0;
+  for (var i = 0; i < values.length; i++) {
+    var shown = values[i] && values[i][0];
+    if (setup_isPlaceholderValue_(shown)) {
+      continue;
+    }
+    seen++;
+    if (setup_explicitDeliveryTypeToken_(shown)) {
+      deliveryHits++;
+    }
+    if (setup_isCarrierLikeValue_(shown)) {
+      carrierHits++;
+    }
+    if (seen >= SETUP_VALUE_SAMPLE_TARGET_) {
+      break;
+    }
+  }
+  return {
+    col: col,
+    header: header,
+    headerNorm: headerNorm,
+    seen: seen,
+    deliveryHits: deliveryHits,
+    carrierHits: carrierHits,
+    deliveryRatio: seen > 0 ? Number((deliveryHits / seen).toFixed(3)) : 0,
+    carrierRatio: seen > 0 ? Number((carrierHits / seen).toFixed(3)) : 0,
+  };
+}
+
+/**
+ * @param {string} fieldKey
+ * @param {{ headerNorm: string, seen: number, deliveryRatio: number, carrierRatio: number }} analysis
+ * @param {Array<string>} terms
+ * @return {number}
+ */
+function setup_scoreSmartColumnForField_(fieldKey, analysis, terms) {
+  var a = analysis || {};
+  var headerNorm = String(a.headerNorm || "");
+  var headerScore = setup_scoreHeaderForField_(fieldKey, headerNorm, terms || []);
+  var seen = Number(a.seen || 0);
+  var deliveryRatio = Number(a.deliveryRatio || 0);
+  var carrierRatio = Number(a.carrierRatio || 0);
+  var score = headerScore;
+
+  if (fieldKey === "deliveryTypeColumn") {
+    if (seen >= 4) {
+      score = headerScore * 0.55 + deliveryRatio * 0.45;
+      if (deliveryRatio === 0 && headerScore >= 0.88) {
+        score = Math.min(score, 0.54);
+      }
+    } else {
+      score = Math.max(headerScore, deliveryRatio);
+    }
+    if (setup_headerLooksDeliveryType_(headerNorm) && deliveryRatio >= 0.45) {
+      score = Math.max(score, 0.95);
+    } else if (deliveryRatio >= 0.75) {
+      score = Math.max(score, 0.9);
+    }
+  } else if (fieldKey === "carrierColumn") {
+    if (seen >= 4) {
+      score = headerScore * 0.55 + carrierRatio * 0.45;
+      if (carrierRatio === 0 && headerScore >= 0.88) {
+        score = Math.min(score, 0.52);
+      }
+    } else {
+      score = Math.max(headerScore, carrierRatio);
+    }
+    if (setup_headerLooksCarrier_(headerNorm) && carrierRatio >= 0.45) {
+      score = Math.max(score, 0.94);
+    } else if (setup_headerLooksCarrier_(headerNorm)) {
+      score = Math.max(score, 0.9);
+    } else if (carrierRatio >= 0.75) {
+      score = Math.max(score, 0.88);
+    }
+  } else if (fieldKey === "addressColumn") {
+    if (setup_headerLooksCarrier_(headerNorm) || carrierRatio >= 0.6) {
+      score = Math.max(0, score - 0.75);
+    }
+    if (setup_headerLooksDeliveryType_(headerNorm) || deliveryRatio >= 0.6) {
+      score = Math.max(0, score - 0.65);
+    }
+  }
+
+  return Number(Math.max(0, Math.min(1, score)).toFixed(3));
+}
+
+/**
+ * @param {string} fieldKey
+ * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
+ * @param {Array<string>} terms
+ * @param {Object<number, boolean>} blockedCols
+ * @param {number} minScore
+ * @param {Object<number, Object>} analysisByCol
+ * @return {{ col: number, score: number }|null}
+ */
+function setup_pickBestSmartColumnForField_(
+  fieldKey,
+  columnsMeta,
+  terms,
+  blockedCols,
+  minScore,
+  analysisByCol,
+) {
+  var bestCol = null;
+  var bestScore = 0;
+  (columnsMeta || []).forEach(function (c) {
+    var col = Number(c && c.index);
+    if (!Number.isFinite(col) || col < 1) return;
+    if (blockedCols && blockedCols[col]) return;
+    var analysis = analysisByCol && analysisByCol[col] ? analysisByCol[col] : null;
+    if (!analysis) return;
+    var score = setup_scoreSmartColumnForField_(fieldKey, analysis, terms || []);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCol = col;
+    }
+  });
+  if (bestCol == null || bestScore < (Number(minScore) || SETUP_AUTODETECT_MIN_SCORE_)) {
+    return null;
+  }
+  return { col: bestCol, score: Number(bestScore.toFixed(3)) };
+}
+
+/**
+ * @param {string} fieldKey
+ * @return {number}
+ */
+function setup_smartFieldMinScore_(fieldKey) {
+  if (fieldKey === "deliveryTypeColumn" || fieldKey === "carrierColumn") {
+    return 0.55;
+  }
+  return SETUP_AUTODETECT_MIN_SCORE_;
+}
+
+/**
+ * @param {string} fieldKey
+ * @return {number}
+ */
+function setup_smartFieldReplaceMargin_(fieldKey) {
+  if (fieldKey === "deliveryTypeColumn") {
+    return 0.12;
+  }
+  if (fieldKey === "addressColumn") {
+    return 0.1;
+  }
+  return 0.08;
+}
+
+/**
+ * True when the mapped address column is clearly a carrier / shipping-company field
+ * or its cells are mostly carrier names (e.g. NOEST), not street addresses.
+ *
+ * @param {number} addrCol
+ * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
+ * @param {Object<number, Object>} analysisByCol
+ * @return {boolean}
+ */
+function setup_addressColumnLooksLikeCarrierSlot_(
+  addrCol,
+  columnsMeta,
+  analysisByCol,
+) {
+  var col = Number(addrCol);
+  if (!Number.isFinite(col) || col < 1) {
+    return false;
+  }
+  var headerNorm = "";
+  for (var i = 0; i < (columnsMeta || []).length; i++) {
+    if (Number(columnsMeta[i].index) === col) {
+      headerNorm = setup_normalizeHeader_(columnsMeta[i].header || "");
+      break;
+    }
+  }
+  if (setup_headerLooksCarrier_(headerNorm)) {
+    return true;
+  }
+  var a = analysisByCol && analysisByCol[col] ? analysisByCol[col] : null;
+  if (!a || Number(a.seen || 0) < 3) {
+    return false;
+  }
+  var cr = Number(a.carrierRatio || 0);
+  var dr = Number(a.deliveryRatio || 0);
+  return cr >= 0.28 && dr <= 0.14;
+}
+
+/**
+ * When address is bound to a carrier column and no good replacement exists, clear it
+ * so saves do not persist a broken mapping. Otherwise pick a better column.
+ *
+ * @param {Object<string, number>} out
+ * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
+ * @param {Object<string, Array<string>>} termsByField
+ * @param {Object<number, Object>} analysisByCol
+ * @param {Object<string, number>} confidenceByField
+ */
+function setup_stripCarrierColumnFromAddress_(
+  out,
+  columnsMeta,
+  termsByField,
+  analysisByCol,
+  confidenceByField,
+) {
+  var addrCol = Number(out && out.addressColumn);
+  if (!Number.isFinite(addrCol) || addrCol < 1) {
+    return;
+  }
+  if (
+    !setup_addressColumnLooksLikeCarrierSlot_(
+      addrCol,
+      columnsMeta,
+      analysisByCol,
+    )
+  ) {
+    return;
+  }
+  var terms = (termsByField && termsByField.addressColumn) || [];
+  var blocked = {};
+  Object.keys(out || {}).forEach(function (key) {
+    if (key === "addressColumn") {
+      return;
+    }
+    var n = Number(out[key]);
+    if (Number.isFinite(n) && n >= 1) {
+      blocked[n] = true;
+    }
+  });
+  var picked = setup_pickBestSmartColumnForField_(
+    "addressColumn",
+    columnsMeta,
+    terms,
+    blocked,
+    0.4,
+    analysisByCol,
+  );
+  if (picked && picked.col !== addrCol) {
+    out.addressColumn = picked.col;
+    confidenceByField.addressColumn = picked.score;
+    return;
+  }
+  var pickedHdr = setup_pickBestColumnForField_(
+    "addressColumn",
+    columnsMeta,
+    terms,
+    blocked,
+    0.4,
+  );
+  if (pickedHdr && pickedHdr.col !== addrCol) {
+    out.addressColumn = pickedHdr.col;
+    confidenceByField.addressColumn = pickedHdr.score;
+    return;
+  }
+  out.addressColumn = null;
+  delete confidenceByField.addressColumn;
+}
+
+/**
+ * If the mapped delivery-type column has almost no home/office tokens but another
+ * column does (e.g. WooCommerce "DELIVERY MODE" vs Arabic LIVRASION), switch.
+ *
+ * @param {Object<string, number>} out
+ * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
+ * @param {Object<string, Array<string>>} termsByField
+ * @param {Object<number, Object>} analysisByCol
+ * @param {Object<string, number>} confidenceByField
+ */
+function setup_upgradeDeliveryTypeIfWeakSignal_(
+  out,
+  columnsMeta,
+  termsByField,
+  analysisByCol,
+  confidenceByField,
+) {
+  var dtCol = Number(out && out.deliveryTypeColumn);
+  if (!Number.isFinite(dtCol) || dtCol < 1) {
+    return;
+  }
+  var cur = analysisByCol && analysisByCol[dtCol] ? analysisByCol[dtCol] : null;
+  if (!cur || Number(cur.seen || 0) < 4) {
+    return;
+  }
+  var curDr = Number(cur.deliveryRatio || 0);
+  if (curDr >= 0.2) {
+    return;
+  }
+  var terms = (termsByField && termsByField.deliveryTypeColumn) || [];
+  var blocked = {};
+  Object.keys(out || {}).forEach(function (key) {
+    if (key === "deliveryTypeColumn") {
+      return;
+    }
+    var n = Number(out[key]);
+    if (Number.isFinite(n) && n >= 1) {
+      blocked[n] = true;
+    }
+  });
+  var bestCol = null;
+  var bestRatio = 0;
+  var bestScore = 0;
+  (columnsMeta || []).forEach(function (c) {
+    var col = Number(c && c.index);
+    if (!Number.isFinite(col) || col < 1 || blocked[col]) {
+      return;
+    }
+    var a = analysisByCol && analysisByCol[col] ? analysisByCol[col] : null;
+    if (!a || Number(a.seen || 0) < 4) {
+      return;
+    }
+    var dr = Number(a.deliveryRatio || 0);
+    if (dr < 0.32) {
+      return;
+    }
+    var sc = setup_scoreSmartColumnForField_(
+      "deliveryTypeColumn",
+      a,
+      terms,
+    );
+    if (dr > bestRatio || (dr === bestRatio && sc > bestScore)) {
+      bestRatio = dr;
+      bestScore = sc;
+      bestCol = col;
+    }
+  });
+  if (
+    bestCol != null &&
+    bestCol !== dtCol &&
+    bestRatio >= curDr + 0.18 &&
+    bestRatio >= 0.32
+  ) {
+    out.deliveryTypeColumn = bestCol;
+    confidenceByField.deliveryTypeColumn = Math.max(
+      confidenceByField.deliveryTypeColumn || 0,
+      bestScore,
+    );
+  }
+}
+
+/**
+ * Yalidine can operate from a single BALADIA-like destination column.
+ * If commune is the only trustworthy location field, reuse it for address and
+ * wilaya instead of forcing unrelated columns from the same tab.
+ *
+ * @param {string} carrierId
+ * @param {Object<string, number>} out
+ * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
+ * @param {Object<string, Array<string>>} termsByField
+ * @param {Object<number, Object>} analysisByCol
+ * @param {Object<string, number>} confidenceByField
+ */
+function setup_allowCommuneColumnFallback_(
+  carrierId,
+  out,
+  columnsMeta,
+  termsByField,
+  analysisByCol,
+  confidenceByField,
+) {
+  if (carrierId !== "yalidine") {
+    return;
+  }
+  var communeCol = Number(out && out.communeColumn);
+  if (!Number.isFinite(communeCol) || communeCol < 1) {
+    return;
+  }
+
+  function headerNormForCol_(col) {
+    var n = Number(col);
+    if (!Number.isFinite(n) || n < 1) {
+      return "";
+    }
+    for (var i = 0; i < (columnsMeta || []).length; i++) {
+      if (Number(columnsMeta[i].index) === n) {
+        return setup_normalizeHeader_(columnsMeta[i].header || "");
+      }
+    }
+    return "";
+  }
+
+  var communeHeaderNorm = headerNormForCol_(communeCol);
+  if (!communeHeaderNorm || !setup_headerLooksCommuneLike_(communeHeaderNorm)) {
+    return;
+  }
+
+  function fieldLooksWeak_(fieldKey, rawCol) {
+    var col = Number(rawCol);
+    if (!Number.isFinite(col) || col < 1) {
+      return true;
+    }
+    if (col === communeCol) {
+      return false;
+    }
+    var headerNorm = headerNormForCol_(col);
+    if (!headerNorm) {
+      return true;
+    }
+    if (fieldKey === "addressColumn") {
+      if (
+        setup_addressColumnLooksLikeCarrierSlot_(
+          col,
+          columnsMeta,
+          analysisByCol,
+        ) ||
+        setup_headerLooksDeliveryType_(headerNorm)
+      ) {
+        return true;
+      }
+    }
+    var score = setup_scoreHeaderForField_(
+      fieldKey,
+      headerNorm,
+      (termsByField && termsByField[fieldKey]) || [],
+    );
+    return score < 0.45;
+  }
+
+  if (fieldLooksWeak_("addressColumn", out.addressColumn)) {
+    out.addressColumn = communeCol;
+    confidenceByField.addressColumn = Math.max(
+      confidenceByField.addressColumn || 0,
+      0.46,
+    );
+  }
+  if (fieldLooksWeak_("wilayaColumn", out.wilayaColumn)) {
+    out.wilayaColumn = communeCol;
+    confidenceByField.wilayaColumn = Math.max(
+      confidenceByField.wilayaColumn || 0,
+      0.46,
+    );
+  }
+}
+
+/**
+ * Carrier-aware repair for commonly confused columns.
+ * Keeps user choices when valid, fixes clear conflicts, and upgrades weak
+ * header-only guesses using sampled cell values (delivery/carrier-like columns).
  *
  * @param {string} spreadsheetId
  * @param {number} sheetId
@@ -1239,7 +1920,35 @@ function setup_repairColumnsForCarrier_(
       spreadsheetId,
       sheetId,
     ),
+    deliveryTypeColumn: setup_collectTermsForField_(
+      "deliveryTypeColumn",
+      spreadsheetId,
+      sheetId,
+    ),
+    carrierColumn: setup_collectTermsForField_(
+      "carrierColumn",
+      spreadsheetId,
+      sheetId,
+    ),
   };
+  var analysisByCol = {};
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = getSheetById_(ss, Number(sheetId));
+    var headerRow =
+      headerPayload && Number(headerPayload.headerRow) >= 1
+        ? Number(headerPayload.headerRow)
+        : 1;
+    if (sheet) {
+      columnsMeta.forEach(function (c) {
+        var col = Number(c && c.index);
+        if (!Number.isFinite(col) || col < 1 || analysisByCol[col]) return;
+        analysisByCol[col] = setup_analyzeSmartColumn_(sheet, col, headerRow);
+      });
+    }
+  } catch (eSmartCols) {
+    analysisByCol = {};
+  }
   var confidenceByField = {};
   var core = ["addressColumn", "wilayaColumn", "communeColumn"];
   var fieldPriority = {
@@ -1286,7 +1995,6 @@ function setup_repairColumnsForCarrier_(
   });
 
   // BALADIA / commune-like headers should map to commune first.
-  var communeLikeRe = /commune|district|municipality|city|ville|balad|بلدي|بلديه|مدينة/;
   if (
     (!out.communeColumn || Number(out.communeColumn) < 1) &&
     ((out.wilayaColumn && Number(out.wilayaColumn) >= 1) ||
@@ -1304,7 +2012,7 @@ function setup_repairColumnsForCarrier_(
           break;
         }
       }
-      if (hn && communeLikeRe.test(hn)) {
+      if (hn && setup_headerLooksCommuneLike_(hn)) {
         out.communeColumn = colNum;
         delete out[fk];
         confidenceByField.communeColumn = Math.max(
@@ -1316,7 +2024,8 @@ function setup_repairColumnsForCarrier_(
     }
   }
 
-  var requireCommune = carrierId === "yalidine" || carrierId === "zr";
+  var requireCommune =
+    carrierId === "yalidine" || carrierId === "zr" || carrierId === "noest";
   var usedCore = {};
   core.forEach(function (f) {
     var c = Number(out[f]);
@@ -1341,6 +2050,97 @@ function setup_repairColumnsForCarrier_(
     confidenceByField[f] = picked.score;
     usedCore[picked.col] = true;
   });
+
+  ["addressColumn", "deliveryTypeColumn", "carrierColumn"].forEach(function (f) {
+    var minScore = setup_smartFieldMinScore_(f);
+    var blocked = {};
+    Object.keys(out).forEach(function (key) {
+      if (key === f) return;
+      var n = Number(out[key]);
+      if (Number.isFinite(n) && n >= 1) {
+        blocked[n] = true;
+      }
+    });
+
+    var currentCol = Number(out[f]);
+    var currentScore = -1;
+    if (Number.isFinite(currentCol) && currentCol >= 1) {
+      var currentAnalysis = analysisByCol[currentCol] || null;
+      if (currentAnalysis) {
+        currentScore = setup_scoreSmartColumnForField_(
+          f,
+          currentAnalysis,
+          termsByField[f] || [],
+        );
+      } else {
+        currentScore = 0;
+      }
+    }
+
+    var picked = setup_pickBestSmartColumnForField_(
+      f,
+      columnsMeta,
+      termsByField[f] || [],
+      blocked,
+      minScore,
+      analysisByCol,
+    );
+    if (!picked) return;
+
+    if (!Number.isFinite(currentCol) || currentCol < 1) {
+      out[f] = picked.col;
+      confidenceByField[f] = picked.score;
+      return;
+    }
+    if (picked.col === currentCol) {
+      confidenceByField[f] = Math.max(confidenceByField[f] || 0, picked.score);
+      return;
+    }
+
+    var replaceMargin = setup_smartFieldReplaceMargin_(f);
+    if (
+      currentScore < minScore ||
+      picked.score >= currentScore + replaceMargin
+    ) {
+      out[f] = picked.col;
+      confidenceByField[f] = picked.score;
+    }
+  });
+
+  try {
+    setup_stripCarrierColumnFromAddress_(
+      out,
+      columnsMeta,
+      termsByField,
+      analysisByCol,
+      confidenceByField,
+    );
+  } catch (eStripAddr) {
+    // Best-effort repair only.
+  }
+  try {
+    setup_upgradeDeliveryTypeIfWeakSignal_(
+      out,
+      columnsMeta,
+      termsByField,
+      analysisByCol,
+      confidenceByField,
+    );
+  } catch (eUpgradeDt) {
+    // Best-effort repair only.
+  }
+  try {
+    setup_allowCommuneColumnFallback_(
+      carrierId,
+      out,
+      columnsMeta,
+      termsByField,
+      analysisByCol,
+      confidenceByField,
+    );
+  } catch (eCommuneFallback) {
+    // Best-effort repair only.
+  }
 
   return {
     columns: out,
@@ -1770,13 +2570,14 @@ function setup_loadMapping(sheetId) {
 
 /**
  * Lightweight state used by the setup dialog checklist.
+ * @param {number|string=} sheetIdRaw Optional sheet id to inspect instead of active/preferred
  * @return {{
  *   backendConfigured: boolean,
  *   mappingReady: boolean,
  *   testSent: boolean
  * }}
  */
-function setup_getChecklistState() {
+function setup_getChecklistState(sheetIdRaw) {
   var backendConfigured = false;
   var mappingReady = false;
   var testSent = false;
@@ -1800,7 +2601,22 @@ function setup_getChecklistState() {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var spreadsheetId = ss.getId();
-    var sheet = ss.getActiveSheet();
+    var explicitSheetId = Number(sheetIdRaw);
+    var sheet =
+      Number.isFinite(explicitSheetId) && explicitSheetId >= 1
+        ? getSheetById_(ss, explicitSheetId)
+        : null;
+    if (!sheet) {
+      var preferredSheetId = DeliveryToolStorage.getSidebarSheetPreference(
+        spreadsheetId,
+      );
+      if (preferredSheetId != null) {
+        sheet = getSheetById_(ss, preferredSheetId);
+      }
+    }
+    if (!sheet) {
+      sheet = ss.getActiveSheet();
+    }
     var sheetId = sheet.getSheetId();
     var mappingJson = DeliveryToolStorage.getMappingJson(
       spreadsheetId,
@@ -1820,7 +2636,11 @@ function setup_getChecklistState() {
         "wilayaColumn",
         "codColumn",
       ];
-      if (carrierId === "yalidine" || carrierId === "zr") {
+      if (
+        carrierId === "yalidine" ||
+        carrierId === "zr" ||
+        carrierId === "noest"
+      ) {
         required.push("communeColumn");
       }
       var allPresent = true;
@@ -1858,6 +2678,7 @@ function setup_getChecklistState() {
         var addrCol = Number(cols.addressColumn);
         var wilCol = Number(cols.wilayaColumn);
         var comCol = Number(cols.communeColumn);
+        var allowSingleCommuneFallback = carrierId === "yalidine";
         if (
           Number.isFinite(addrCol) &&
           addrCol >= 1 &&
@@ -1866,7 +2687,8 @@ function setup_getChecklistState() {
           Number.isFinite(comCol) &&
           comCol >= 1 &&
           addrCol === wilCol &&
-          wilCol === comCol
+          wilCol === comCol &&
+          !allowSingleCommuneFallback
         ) {
           allPresent = false;
         }
@@ -1907,6 +2729,80 @@ function setup_getChecklistState() {
 }
 
 /**
+ * @param {Object<string, *>} columnsRaw
+ * @return {Object<string, number>}
+ */
+function setup_normalizeMappedColumns_(columnsRaw) {
+  var out = {};
+  Object.keys(columnsRaw || {}).forEach(function (k) {
+    var n = Number(columnsRaw[k]);
+    if (Number.isFinite(n) && n >= 1) {
+      out[k] = Math.floor(n);
+    }
+  });
+  return out;
+}
+
+/**
+ * Merge user-explicit mapping with smart suggestions.
+ * Explicit user choices are preserved by default; smart suggestions fill blanks.
+ * High-confidence smart corrections are allowed for known error-prone fields.
+ *
+ * @param {Object<string, number>} explicitColumns
+ * @param {Object<string, *>} smartColumns
+ * @param {Object<string, number>=} confidenceByField
+ * @return {Object<string, number>}
+ */
+function setup_mergeExplicitAndSmartColumns_(
+  explicitColumns,
+  smartColumns,
+  confidenceByField,
+) {
+  var out = setup_normalizeMappedColumns_(explicitColumns || {});
+  var conf =
+    confidenceByField && typeof confidenceByField === "object"
+      ? confidenceByField
+      : {};
+  var smart = smartColumns && typeof smartColumns === "object" ? smartColumns : {};
+  var SMART_OVERRIDE_MIN = 0.88;
+  var smartOverrideFields = {
+    addressColumn: true,
+    deliveryTypeColumn: true,
+    carrierColumn: true,
+  };
+
+  Object.keys(smart).forEach(function (k) {
+    var suggestedRaw = smart[k];
+    if (suggestedRaw === null) {
+      delete out[k];
+      return;
+    }
+    var suggested = Number(suggestedRaw);
+    if (!Number.isFinite(suggested) || suggested < 1) {
+      return;
+    }
+    suggested = Math.floor(suggested);
+    var current = Number(out[k]);
+    if (!Number.isFinite(current) || current < 1) {
+      out[k] = suggested;
+      return;
+    }
+    if (current === suggested) {
+      return;
+    }
+    var score = Number(conf[k]);
+    if (
+      smartOverrideFields[k] &&
+      Number.isFinite(score) &&
+      score >= SMART_OVERRIDE_MIN
+    ) {
+      out[k] = suggested;
+    }
+  });
+  return out;
+}
+
+/**
  * @param {Object} mapping SavedSheetMapping-like object from the client
  * @return {Object} Normalized payload that was stored
  */
@@ -1931,6 +2827,8 @@ function setup_saveMapping(mapping) {
     }
     columns = mapping.columns;
   }
+  var explicitColumns = setup_normalizeMappedColumns_(columns);
+  columns = explicitColumns;
   var carrierRaw =
     mapping.defaultCarrier != null &&
     String(mapping.defaultCarrier).trim() !== ""
@@ -1957,7 +2855,11 @@ function setup_saveMapping(mapping) {
       columns,
     );
     if (smart && smart.columns && typeof smart.columns === "object") {
-      columns = smart.columns;
+      columns = setup_mergeExplicitAndSmartColumns_(
+        explicitColumns,
+        smart.columns,
+        smart.confidenceByField,
+      );
     }
   } catch (eSmart) {
     // Best-effort only: explicit save must still work if smart heuristics fail.

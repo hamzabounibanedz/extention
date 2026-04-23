@@ -219,8 +219,10 @@ function sync_runCore_(
 /**
  * Sync tracking for the current selection or a manual row override.
  * @param {string=} rowSelectionSpec
+ * @param {{ sheetId?: number|string }=} options
  */
-function sync_syncSelection(rowSelectionSpec) {
+function sync_syncSelection(rowSelectionSpec, options) {
+  var opts = options && typeof options === 'object' ? options : {};
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(SYNC_DOC_LOCK_WAIT_MS_)) {
     throw new Error(i18n_t('error.sync_in_progress'));
@@ -229,8 +231,23 @@ function sync_syncSelection(rowSelectionSpec) {
   license_assertOperationsAllowed_();
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getActiveSheet();
   var spreadsheetId = ss.getId();
+  var requestedSheetId =
+    opts.sheetId != null && String(opts.sheetId).trim() !== ''
+      ? Number(opts.sheetId)
+      : NaN;
+  var sheet =
+    Number.isFinite(requestedSheetId) &&
+    requestedSheetId >= 1 &&
+    typeof getSheetById_ === 'function'
+      ? getSheetById_(ss, requestedSheetId)
+      : null;
+  if (!sheet) {
+    sheet = ss.getActiveSheet();
+  }
+  if (!sheet) {
+    throw new Error(i18n_t('error.sheet_not_found'));
+  }
   var sheetId = sheet.getSheetId();
 
   var mappingJson = DeliveryToolStorage.getMappingJson(spreadsheetId, sheetId);
@@ -289,16 +306,35 @@ function sync_syncSelection(rowSelectionSpec) {
 }
 
 /**
- * Document-level sync timestamps for the active spreadsheet (sidebar).
+ * Document-level sync timestamps for the requested or active sheet.
+ * @param {number|string=} sheetIdRaw
  * @return {{
  *   lastSyncAttemptIso: string|null,
  *   lastSyncSuccessIso: string|null
  * }}
  */
-function sync_getMeta() {
+function sync_getMeta(sheetIdRaw) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var spreadsheetId = ss.getId();
-  var sheet = ss.getActiveSheet();
+  var requestedSheetId =
+    sheetIdRaw != null && String(sheetIdRaw).trim() !== ''
+      ? Number(sheetIdRaw)
+      : NaN;
+  var sheet =
+    Number.isFinite(requestedSheetId) &&
+    requestedSheetId >= 1 &&
+    typeof getSheetById_ === 'function'
+      ? getSheetById_(ss, requestedSheetId)
+      : null;
+  if (!sheet) {
+    sheet = ss.getActiveSheet();
+  }
+  if (!sheet) {
+    return {
+      lastSyncAttemptIso: null,
+      lastSyncSuccessIso: null,
+    };
+  }
   var sheetId = sheet.getSheetId();
   return {
     lastSyncAttemptIso: DeliveryToolStorage.getLastSyncAttemptIso(spreadsheetId, sheetId),

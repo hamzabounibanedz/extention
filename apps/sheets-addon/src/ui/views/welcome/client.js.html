@@ -153,6 +153,8 @@
       carriers: [],
       carrierCredByCarrier: {},
       currentSheetId: null,
+      /** Last worksheet chosen in sidebar (from document prefs), not the active tab. */
+      preferredSidebarSheetId: null,
       headerPayload: null,
       mapping: null,
       feeRules: null,
@@ -241,6 +243,7 @@
       carrierCredCarrier: null,
       carrierCredSingleWrap: null,
       carrierCredZrWrap: null,
+      carrierCredNoestWrap: null,
       carrierCredKey: null,
       carrierCredTenant: null,
       carrierCredSecret: null,
@@ -431,7 +434,11 @@
       ];
       // Carrier-aware required field:
       // Yalidine needs commune/city for all parcels; ZR home also depends on commune.
-      if (carrierId === "yalidine" || carrierId === "zr") {
+      if (
+        carrierId === "yalidine" ||
+        carrierId === "zr" ||
+        carrierId === "noest"
+      ) {
         required.push("communeColumn");
       }
       for (var i = 0; i < required.length; i++) {
@@ -459,7 +466,7 @@
         addr === wil &&
         wil === com
       ) {
-        return false;
+        return carrierId === "yalidine";
       }
       return true;
     }
@@ -1736,7 +1743,10 @@
     }
 
     function loadSyncMeta() {
-      return runServer("sync_getMeta")
+      return runServer(
+        "sync_getMeta",
+        state.currentSheetId != null ? state.currentSheetId : null,
+      )
         .then(function (meta) {
           renderSyncMeta(meta || {});
         })
@@ -2125,12 +2135,33 @@
         opt.textContent = sh.sheetName;
         sel.appendChild(opt);
       });
-      if (state.currentSheetId != null) {
-        sel.value = String(state.currentSheetId);
-      } else if (state.sheets.length) {
+      var want =
+        state.preferredSidebarSheetId != null
+          ? state.preferredSidebarSheetId
+          : state.currentSheetId;
+      if (want != null) {
+        sel.value = String(want);
+        if (sel.selectedIndex >= 0) {
+          state.currentSheetId = parseInt(sel.value, 10);
+          return;
+        }
+      }
+      if (state.sheets.length) {
         state.currentSheetId = state.sheets[0].sheetId;
         sel.value = String(state.currentSheetId);
       }
+    }
+
+    function rememberSidebarSheetPreference_() {
+      if (state.spreadsheetId == null || state.currentSheetId == null) {
+        return Promise.resolve();
+      }
+      return runServer(
+        "setup_setSidebarSheetPreference",
+        state.currentSheetId,
+      ).catch(function () {
+        return null;
+      });
     }
 
     function wilayaMapToText(map) {
@@ -2328,9 +2359,14 @@
         el.bizDefaultCarrier.value = value.defaultCarrier
           ? String(value.defaultCarrier)
           : "";
-      if (el.bizStopDeskId)
-        el.bizStopDeskId.value =
-          value.stopDeskId != null ? String(value.stopDeskId) : "";
+      if (el.bizStopDeskId) {
+        var sd =
+          value.stopDeskId != null ? String(value.stopDeskId).trim() : "";
+        if (!sd && value.defaultHubId != null) {
+          sd = String(value.defaultHubId).trim();
+        }
+        el.bizStopDeskId.value = sd;
+      }
     }
 
     function loadBusinessSettings() {
@@ -2443,6 +2479,14 @@
       );
     }
 
+    function isNoestCarrier_(carrierId) {
+      return (
+        String(carrierId || "")
+          .trim()
+          .toLowerCase() === "noest"
+      );
+    }
+
     function carrierCredHasSaved_(carrierId) {
       var id = String(carrierId || "").trim();
       if (!id) return false;
@@ -2477,6 +2521,16 @@
           ? t("sidebar.ph.yalidine_api_token_saved")
           : t("sidebar.ph.yalidine_api_token");
       }
+      if (el.carrierCredNoestToken) {
+        el.carrierCredNoestToken.placeholder = hasSaved
+          ? t("sidebar.ph.noest_api_token_saved")
+          : t("sidebar.ph.noest_api_token");
+      }
+      if (el.carrierCredNoestGuid) {
+        el.carrierCredNoestGuid.placeholder = hasSaved
+          ? t("sidebar.ph.noest_user_guid_saved")
+          : t("sidebar.ph.noest_user_guid");
+      }
     }
 
     function clearCarrierCredDraftInputs_() {
@@ -2495,6 +2549,12 @@
       if (el.carrierCredYalidineToken) {
         el.carrierCredYalidineToken.value = "";
       }
+      if (el.carrierCredNoestToken) {
+        el.carrierCredNoestToken.value = "";
+      }
+      if (el.carrierCredNoestGuid) {
+        el.carrierCredNoestGuid.value = "";
+      }
       renderCarrierCredPlaceholders_();
     }
 
@@ -2502,14 +2562,18 @@
       var cid = el.carrierCredCarrier ? el.carrierCredCarrier.value : "";
       var zr = isZrCarrier_(cid);
       var yali = isYalidineCarrier_(cid);
+      var noest = isNoestCarrier_(cid);
       if (el.carrierCredSingleWrap) {
-        el.carrierCredSingleWrap.hidden = zr || yali;
+        el.carrierCredSingleWrap.hidden = zr || yali || noest;
       }
       if (el.carrierCredYalidineWrap) {
         el.carrierCredYalidineWrap.hidden = !yali;
       }
       if (el.carrierCredZrWrap) {
         el.carrierCredZrWrap.hidden = !zr;
+      }
+      if (el.carrierCredNoestWrap) {
+        el.carrierCredNoestWrap.hidden = !noest;
       }
       renderCarrierCredPlaceholders_();
     }
@@ -2545,6 +2609,7 @@
       }
       var zr = isZrCarrier_(cid);
       var yali = isYalidineCarrier_(cid);
+      var noest = isNoestCarrier_(cid);
       var key = el.carrierCredKey
         ? String(el.carrierCredKey.value || "").trim()
         : "";
@@ -2560,12 +2625,22 @@
       var yaliToken = el.carrierCredYalidineToken
         ? String(el.carrierCredYalidineToken.value || "").trim()
         : "";
+      var noestTok = el.carrierCredNoestToken
+        ? String(el.carrierCredNoestToken.value || "").trim()
+        : "";
+      var noestGuid = el.carrierCredNoestGuid
+        ? String(el.carrierCredNoestGuid.value || "").trim()
+        : "";
       if (zr && ((tenant && !secret) || (!tenant && secret))) {
         setCarrierCredStatus(t("error.zr_tenant_secret_required"), "err");
         return;
       }
       if (yali && ((yaliId && !yaliToken) || (!yaliId && yaliToken))) {
         setCarrierCredStatus(t("error.yalidine_id_token_required"), "err");
+        return;
+      }
+      if (noest && ((noestTok && !noestGuid) || (!noestTok && noestGuid))) {
+        setCarrierCredStatus(t("error.noest_token_guid_required"), "err");
         return;
       }
       setBusy(true);
@@ -2579,7 +2654,13 @@
               yaliId,
               yaliToken,
             )
-          : runServer("carrierCreds_saveApiKey", cid, key);
+          : noest
+            ? runServer(
+                "carrierCreds_saveNoestCredentials",
+                noestTok,
+                noestGuid,
+              )
+            : runServer("carrierCreds_saveApiKey", cid, key);
       saveReq
         .then(function (st) {
           populateCarrierCredSelect(st.byCarrier || {});
@@ -2589,7 +2670,9 @@
             ? !!(tenant || secret)
             : yali
               ? !!(yaliId || yaliToken)
-              : !!key;
+              : noest
+                ? !!(noestTok || noestGuid)
+                : !!key;
           setCarrierCredStatus(
             hasCred
               ? t("sidebar.msg.carrier_saved")
@@ -2614,6 +2697,7 @@
       }
       var zr = isZrCarrier_(cid);
       var yali = isYalidineCarrier_(cid);
+      var noest = isNoestCarrier_(cid);
       var keyDraft = el.carrierCredKey
         ? String(el.carrierCredKey.value || "").trim()
         : "";
@@ -2629,6 +2713,12 @@
       var yaliTokenDraft = el.carrierCredYalidineToken
         ? String(el.carrierCredYalidineToken.value || "").trim()
         : "";
+      var noestTokDraft = el.carrierCredNoestToken
+        ? String(el.carrierCredNoestToken.value || "").trim()
+        : "";
+      var noestGuidDraft = el.carrierCredNoestGuid
+        ? String(el.carrierCredNoestGuid.value || "").trim()
+        : "";
       if (
         zr &&
         ((tenantDraft && !secretDraft) || (!tenantDraft && secretDraft))
@@ -2643,6 +2733,14 @@
         setCarrierCredStatus(t("error.yalidine_id_token_required"), "err");
         return;
       }
+      if (
+        noest &&
+        ((noestTokDraft && !noestGuidDraft) ||
+          (!noestTokDraft && noestGuidDraft))
+      ) {
+        setCarrierCredStatus(t("error.noest_token_guid_required"), "err");
+        return;
+      }
       setBusy(true);
       setSectionBusy("dt-carrier-creds", true);
       setCarrierCredStatus(t("sidebar.msg.testing_carrier_cred"), null);
@@ -2654,7 +2752,13 @@
               yaliIdDraft,
               yaliTokenDraft,
             )
-          : runServer("carrierCreds_testConnection", cid, keyDraft);
+          : noest
+            ? runServer(
+                "carrierCreds_testNoestConnection",
+                noestTokDraft,
+                noestGuidDraft,
+              )
+            : runServer("carrierCreds_testConnection", cid, keyDraft);
       testReq
         .then(function (res) {
           var ok = !!(res && res.ok);
@@ -2804,7 +2908,7 @@
           return;
         }
         var n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
-        if (!isNaN(n)) {
+        if (!isNaN(n) && n >= 1) {
           sel.value = String(n);
         } else {
           sel.value = "";
@@ -2868,11 +2972,62 @@
         suggested.columns &&
         typeof suggested.columns === "object"
       ) {
+        var conf =
+          suggested.confidenceByField &&
+          typeof suggested.confidenceByField === "object"
+            ? suggested.confidenceByField
+            : {};
+        var SMART_OVERRIDE_MIN = 0.88;
+        var smartOverrideFields = {
+          addressColumn: true,
+          deliveryTypeColumn: true,
+          carrierColumn: true,
+        };
         Object.keys(suggested.columns).forEach(function (k) {
-          if (out.columns[k] == null || out.columns[k] === "") {
-            out.columns[k] = suggested.columns[k];
+          var sugRaw = suggested.columns[k];
+          if (sugRaw === null) {
+            delete out.columns[k];
+            return;
+          }
+          var sugN =
+            typeof sugRaw === "number"
+              ? sugRaw
+              : parseInt(String(sugRaw), 10);
+          if (isNaN(sugN) || sugN < 1) {
+            return;
+          }
+          var curRaw = out.columns[k];
+          var curN =
+            curRaw != null && curRaw !== ""
+              ? typeof curRaw === "number"
+                ? curRaw
+                : parseInt(String(curRaw), 10)
+              : NaN;
+          var empty = isNaN(curN) || curN < 1;
+          if (empty) {
+            out.columns[k] = sugN;
+            return;
+          }
+          if (sugN === curN) {
+            return;
+          }
+          var score = conf[k];
+          if (
+            smartOverrideFields[k] &&
+            typeof score === "number" &&
+            score >= SMART_OVERRIDE_MIN
+          ) {
+            out.columns[k] = sugN;
           }
         });
+      }
+      if (
+        (out.defaultCarrier == null || String(out.defaultCarrier).trim() === "") &&
+        suggested &&
+        suggested.defaultCarrier != null &&
+        String(suggested.defaultCarrier).trim() !== ""
+      ) {
+        out.defaultCarrier = String(suggested.defaultCarrier);
       }
       return out;
     }
@@ -3015,7 +3170,9 @@
       setOrdersStatus(t("sidebar.msg.analyzing"), null);
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
-      runServerAfterEditorFocus_("order_previewSelection", rowSelectionSpec)
+      runServerAfterEditorFocus_("order_previewSelection", rowSelectionSpec, {
+        sheetId: state.currentSheetId,
+      })
         .then(function (result) {
           var n = result.rows ? result.rows.length : 0;
           var ok = 0;
@@ -3090,7 +3247,9 @@
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.sending"), null);
       clearStructuredOutput(el.ordersOut);
-      runServerAfterEditorFocus_("send_sendSelection", rowSelectionSpec)
+      runServerAfterEditorFocus_("send_sendSelection", rowSelectionSpec, {
+        sheetId: state.currentSheetId,
+      })
         .then(function (result) {
           // Cache label URLs for printing buttons.
           state.lastLabelUrls =
@@ -3135,7 +3294,9 @@
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.syncing"), null);
       clearStructuredOutput(el.ordersOut);
-      runServerAfterEditorFocus_("sync_syncSelection", rowSelectionSpec)
+      runServerAfterEditorFocus_("sync_syncSelection", rowSelectionSpec, {
+        sheetId: state.currentSheetId,
+      })
         .then(function (result) {
           var a = result.attempted || 0;
           var s = result.succeeded || 0;
@@ -3189,7 +3350,10 @@
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.loading_labels"), null);
-      runServer("send_getAllLabelUrls")
+      runServer(
+        "send_getAllLabelUrls",
+        state.currentSheetId != null ? state.currentSheetId : null,
+      )
         .then(function (res) {
           var items = res && Array.isArray(res.items) ? res.items : [];
           renderStructuredOutput(
@@ -3248,9 +3412,11 @@
       runServer("setup_saveMapping", payload)
         .then(function (saved) {
           state.mapping = saved;
+          applyMappingToFields();
           state.mappingReady = mappingHasRequiredColumns_(state.mapping);
           refreshFlowReadiness_();
           setStatus(t("sidebar.msg.mapping_saved"), "ok");
+          return rememberSidebarSheetPreference_();
         })
         .catch(function (err) {
           setStatus(err.message || String(err), "err");
@@ -3350,11 +3516,14 @@
         el.carrierCredSingleWrap = $("dt-carrier-cred-single-wrap");
         el.carrierCredYalidineWrap = $("dt-carrier-cred-yalidine-wrap");
         el.carrierCredZrWrap = $("dt-carrier-cred-zr-wrap");
+        el.carrierCredNoestWrap = $("dt-carrier-cred-noest-wrap");
         el.carrierCredKey = $("dt-carrier-cred-key");
         el.carrierCredYalidineId = $("dt-carrier-cred-yalidine-id");
         el.carrierCredYalidineToken = $("dt-carrier-cred-yalidine-token");
         el.carrierCredTenant = $("dt-carrier-cred-zr-tenant");
         el.carrierCredSecret = $("dt-carrier-cred-zr-secret");
+        el.carrierCredNoestToken = $("dt-carrier-cred-noest-token");
+        el.carrierCredNoestGuid = $("dt-carrier-cred-noest-guid");
         el.carrierCredSave = $("dt-carrier-cred-save");
         el.carrierCredTest = $("dt-carrier-cred-test");
         el.carrierCredStatus = $("dt-carrier-cred-status");
@@ -3395,6 +3564,17 @@
             state.spreadsheetId = ctx.spreadsheetId;
             state.sheets = ctx.sheets || [];
             state.carriers = ctx.carriers || [];
+            state.preferredSidebarSheetId = null;
+            if (
+              ctx &&
+              ctx.preferredSidebarSheetId != null &&
+              String(ctx.preferredSidebarSheetId).trim() !== ""
+            ) {
+              var pref = parseInt(String(ctx.preferredSidebarSheetId), 10);
+              if (!isNaN(pref) && pref >= 1) {
+                state.preferredSidebarSheetId = pref;
+              }
+            }
             state.carriersWarning =
               ctx && ctx.carriersWarning != null
                 ? String(ctx.carriersWarning)
@@ -3455,7 +3635,9 @@
         if (el.sheet) {
           el.sheet.addEventListener("change", function () {
             state.currentSheetId = parseInt(el.sheet.value, 10);
+            rememberSidebarSheetPreference_();
             loadHeadersAndMapping();
+            loadSyncMeta();
           });
         }
         var headerRowInput = el.headerRow;
