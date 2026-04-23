@@ -397,29 +397,102 @@ function extractTrackingFromSearchBody_(body: Record<string, unknown>): string[]
   return Array.from(new Set(out));
 }
 
+/**
+ * Guepex may return per-order results as:
+ * - `{ [order_id]: { success, ... } }`
+ * - `[ { ... }, ... ]` aligned with request order
+ * - `{ data: [...] }` / `{ results: [...] }` / `{ data: { [order_id]: ... } }`
+ */
+function resolveYalidineParcelResult_(
+  json: unknown,
+  orderId: string,
+  index: number,
+): Record<string, unknown> | null {
+  if (json == null) return null;
+  if (Array.isArray(json)) {
+    const row = json[index];
+    return row && typeof row === 'object' && !Array.isArray(row) ? (row as Record<string, unknown>) : null;
+  }
+  if (typeof json !== 'object') return null;
+  const root = json as Record<string, unknown>;
+  const oid = String(orderId || '').trim();
+  if (oid && root[oid] && typeof root[oid] === 'object' && !Array.isArray(root[oid])) {
+    return root[oid] as Record<string, unknown>;
+  }
+  if (oid) {
+    const lower = oid.toLowerCase();
+    for (const k of Object.keys(root)) {
+      if (String(k).trim().toLowerCase() === lower) {
+        const v = root[k];
+        if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
+      }
+    }
+  }
+  const data = root.data;
+  if (Array.isArray(data)) {
+    const row = data[index];
+    if (row && typeof row === 'object' && !Array.isArray(row)) return row as Record<string, unknown>;
+  }
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    if (oid && d[oid] && typeof d[oid] === 'object' && !Array.isArray(d[oid])) {
+      return d[oid] as Record<string, unknown>;
+    }
+    if (oid) {
+      const lower = oid.toLowerCase();
+      for (const k of Object.keys(d)) {
+        if (String(k).trim().toLowerCase() === lower) {
+          const v = d[k];
+          if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
+        }
+      }
+    }
+  }
+  const results = root.results;
+  if (Array.isArray(results)) {
+    const row = results[index];
+    if (row && typeof row === 'object' && !Array.isArray(row)) return row as Record<string, unknown>;
+  }
+  return null;
+}
+
+function yalidineUnmatchedResponseHint_(json: unknown, orderId: string): string {
+  if (typeof json === 'string') {
+    const t = json.replace(/\s+/g, ' ').trim();
+    return t.length > 220 ? `${t.slice(0, 217)}...` : t;
+  }
+  if (json && typeof json === 'object') {
+    const keys = Object.keys(json as Record<string, unknown>).filter((k) => k !== 'links');
+    const head = keys.slice(0, 12).join(', ');
+    return head ? `response keys: ${head}` : 'empty JSON object';
+  }
+  return '';
+}
+
 function parseSingleCreateResult_(
   status: number,
   json: unknown,
   orderId: string,
+  index: number,
 ): { success: BulkCreateSuccess | null; failure: BulkCreateFailure | null } {
   const payload = asRecord_(json);
-  const item =
-    payload[orderId] && typeof payload[orderId] === 'object'
-      ? (payload[orderId] as Record<string, unknown>)
-      : null;
+  const item = resolveYalidineParcelResult_(json, orderId, index);
   if (!item) {
+    const hint = yalidineUnmatchedResponseHint_(json, orderId);
     const message =
       coerceYalidineErrorText_(json, '') ||
       coerceYalidineErrorText_(payload.message, '') ||
       coerceYalidineErrorText_(payload.error, '') ||
       coerceYalidineErrorText_(payload.title, '') ||
-      `Yalidine create failed (${status})`;
+      (hint
+        ? `Yalidine: could not read parcel result for order_id "${orderId}". ${hint}`
+        : `Yalidine create failed (${status})`);
     return {
       success: null,
       failure: {
         index: 0,
         errorCode: status === 429 ? 'RATE_LIMITED' : 'REQUEST_FAILED',
-        errorMessage: message,
+        errorMessage: message || `Yalidine create failed (${status})`,
         externalId: orderId || null,
       },
     };
@@ -862,7 +935,7 @@ export class YalidineAdapter implements CarrierAdapter {
         const localIndex = sendIndexMap[i];
         const parcel = sendParcels[i];
         const orderId = String(parcel.order_id ?? '').trim();
-        const parsed = parseSingleCreateResult_(res.status, res.json ?? res.text, orderId);
+        const parsed = parseSingleCreateResult_(res.status, res.json ?? res.text, orderId, i);
         if (parsed.success) {
           successes.push({
             ...parsed.success,

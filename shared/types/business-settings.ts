@@ -15,6 +15,8 @@ export interface BusinessSettings {
   defaultCarrier: string;
   /** Optional pickup point id when deliveryType=pickup-point (legacy: stopdesk). */
   stopDeskId: string | null;
+  /** Same as stopDeskId when persisted for backend pickup fallback; kept in sync in the add-on. */
+  defaultHubId: string | null;
   // Required by carrier adapters (e.g. Yalidine) for parcel + sender details.
   senderWilaya: string;
   senderWilayaCode: number;
