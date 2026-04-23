@@ -10,5 +10,16 @@
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.scriptapp",
     "https://www.googleapis.com/auth/script.storage"
-  ]
+  ],
+  "addOns": {
+    "common": {
+      "name": "Delivery Tool",
+      "logoUrl": "https://www.gstatic.com/images/branding/product/1x/sheets_48dp.png",
+      "useLocaleFromApp": true,
+      "homepageTrigger": {
+        "runFunction": "addon_onHomepage"
+      }
+    },
+    "sheets": {}
+  }
 }
