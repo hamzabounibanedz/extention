@@ -192,8 +192,12 @@
       ordersPrintLabels: null,
       ordersPrintAll: null,
       rowSelection: null,
+      sendCarrierMode: null,
+      sendCarrierOverrideWrap: null,
+      sendCarrierOverride: null,
       backendConfig: null,
       licenseAdvanced: null,
+      licenseCodePanel: null,
       apiUrl: null,
       apiUrlSave: null,
       apiKey: null,
@@ -201,6 +205,7 @@
       syncMeta: null,
       licenseCode: null,
       licenseRefresh: null,
+      licenseRefreshPublic: null,
       licenseClear: null,
       licenseSummary: null,
       licenseStatus: null,
@@ -519,6 +524,7 @@
     function applyUiMode_() {
       setHidden_(el.backendConfig, !state.allowBackendConfig);
       setHidden_(el.licenseAdvanced, !state.showTechnicalDetails);
+      setHidden_(el.licenseCodePanel, state.uiMode === "prod");
 
       if (state.showTechnicalDetails) {
         return;
@@ -575,6 +581,7 @@
       if (
         token === "active" ||
         token === "trial" ||
+        token === "pending_activation" ||
         token === "expired" ||
         token === "revoked" ||
         token === "unknown"
@@ -747,6 +754,8 @@
       if (el.ordersSync) el.ordersSync.disabled = !!busy;
       if (el.ordersPrintLabels) el.ordersPrintLabels.disabled = !!busy;
       if (el.ordersPrintAll) el.ordersPrintAll.disabled = !!busy;
+      if (el.sendCarrierMode) el.sendCarrierMode.disabled = !!busy;
+      if (el.sendCarrierOverride) el.sendCarrierOverride.disabled = !!busy;
       if (el.autoSyncToggle) el.autoSyncToggle.disabled = !!busy;
     }
 
@@ -757,6 +766,7 @@
       if (el.apiKey) el.apiKey.disabled = !!busy;
       if (el.licenseCode) el.licenseCode.disabled = !!busy;
       if (el.licenseRefresh) el.licenseRefresh.disabled = !!busy;
+      if (el.licenseRefreshPublic) el.licenseRefreshPublic.disabled = !!busy;
       if (el.licenseClear) el.licenseClear.disabled = !!busy;
     }
 
@@ -1469,6 +1479,7 @@
       var title = el.licenseTitle;
       var body = el.licenseBody;
       var activateBtn = el.licenseActivateCta;
+      var refreshBtn = el.licenseRefreshPublic;
       var contactLink = el.licenseContactCta;
 
       if (badge) {
@@ -1477,6 +1488,8 @@
           badgeClass = "dt-license-badge dt-license-badge--trial";
         } else if (status === "active") {
           badgeClass = "dt-license-badge dt-license-badge--active";
+        } else if (status === "pending_activation") {
+          badgeClass = "dt-license-badge dt-license-badge--trial";
         } else if (status === "expired") {
           badgeClass = "dt-license-badge dt-license-badge--expired";
         } else if (status === "loading") {
@@ -1490,6 +1503,8 @@
               ? t("trial.badge_label")
               : status === "active"
                 ? t("license.badge_active")
+                : status === "pending_activation"
+                  ? t("license.badge_pending")
                 : status === "expired"
                   ? t("license.badge_expired")
                   : t("license.badge_unknown");
@@ -1501,13 +1516,22 @@
         body.textContent = strings.body || "";
       }
       if (activateBtn) {
-        activateBtn.textContent =
-          strings.activateLabel || t("license.have_code");
-        activateBtn.onclick = function () {
-          if (el.licenseCode) {
-            el.licenseCode.focus();
-          }
-        };
+        if (state.uiMode === "prod" || status === "pending_activation") {
+          activateBtn.style.display = "none";
+          activateBtn.onclick = null;
+        } else {
+          activateBtn.style.display = "";
+          activateBtn.textContent =
+            strings.activateLabel || t("license.have_code");
+          activateBtn.onclick = function () {
+            if (el.licenseCode) {
+              el.licenseCode.focus();
+            }
+          };
+        }
+      }
+      if (refreshBtn) {
+        refreshBtn.hidden = state.uiMode !== "prod";
       }
       if (contactLink) {
         var link =
@@ -1529,6 +1553,7 @@
         .toLowerCase();
       if (!token) return t("license.badge_unknown");
       if (token === "active") return t("license.badge_active");
+      if (token === "pending_activation") return t("license.badge_pending");
       if (token === "trial") return t("trial.badge_label");
       if (token === "expired") return t("license.badge_expired");
       if (token === "unknown") return t("license.badge_unknown");
@@ -1612,7 +1637,7 @@
 
     // escapeHtml_ removed: license summary renders with textContent only.
 
-    function loadLicenseSidebar() {
+    function loadLicenseSidebar(forceRefresh) {
       renderLicenseBanner({
         status: "loading",
         strings: {
@@ -1623,7 +1648,7 @@
         },
         whatsappLink: "",
       });
-      return runServer("license_getSidebarState")
+      return runServer("license_getSidebarState", { forceRefresh: !!forceRefresh })
         .then(function (st) {
           if (el.apiUrl) el.apiUrl.value = st.apiBaseUrl || "";
           if (el.apiKey) {
@@ -1987,10 +2012,10 @@
             // First activate the code, then reload the full sidebar state so the
             // UI always reflects the fresh license record (including expiry date).
             p = runServer("license_activate", code).then(function () {
-              return loadLicenseSidebar();
+              return loadLicenseSidebar(true);
             });
           } else {
-            p = loadLicenseSidebar();
+            p = loadLicenseSidebar(true);
           }
           return p.then(function (st) {
             var statusLabel =
@@ -2008,6 +2033,13 @@
               }
             }
             setLicenseStatus(msg, ok ? "ok" : "err");
+            if (ok && (!state.sheets || !state.sheets.length)) {
+              window.setTimeout(function () {
+                try {
+                  window.location.reload();
+                } catch (eReload) {}
+              }, 300);
+            }
             if (!ok) {
               throw new Error(msg || "license_check_failed");
             }
@@ -2271,6 +2303,7 @@
 
     function populateCarrierSelect() {
       var sel = el.carrier;
+      if (!sel) return;
       sel.innerHTML = "";
       var empty = document.createElement("option");
       empty.value = "";
@@ -2282,6 +2315,48 @@
         opt.textContent = c.label;
         sel.appendChild(opt);
       });
+      populateSendCarrierOverrideSelect_();
+    }
+
+    function populateSendCarrierOverrideSelect_() {
+      var sel = el.sendCarrierOverride;
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = "";
+      state.carriers.forEach(function (c) {
+        var opt = document.createElement("option");
+        opt.value = c.id;
+        opt.textContent = c.label;
+        sel.appendChild(opt);
+      });
+      if (prev && sel.querySelector('option[value="' + prev + '"]')) {
+        sel.value = prev;
+      } else if (state.mapping && state.mapping.defaultCarrier) {
+        var def = String(state.mapping.defaultCarrier || "").trim();
+        if (def && sel.querySelector('option[value="' + def + '"]')) {
+          sel.value = def;
+        }
+      }
+      updateSendCarrierModeUi_();
+    }
+
+    function updateSendCarrierModeUi_() {
+      var mode = el.sendCarrierMode ? String(el.sendCarrierMode.value || "row") : "row";
+      setHidden_(el.sendCarrierOverrideWrap, mode !== "override");
+    }
+
+    function getSendOptions_() {
+      var mode = el.sendCarrierMode ? String(el.sendCarrierMode.value || "row") : "row";
+      var out = {
+        sheetId: state.currentSheetId,
+        carrierMode: mode === "override" ? "override" : "row",
+      };
+      if (out.carrierMode === "override") {
+        out.carrierOverride = el.sendCarrierOverride
+          ? String(el.sendCarrierOverride.value || "").trim()
+          : "";
+      }
+      return out;
     }
 
     function setCarrierCredStatus(msg, kind) {
@@ -3068,6 +3143,7 @@
           state.mapping = mapping;
           function finalizeMappingLoad_() {
             state.mappingReady = mappingHasRequiredColumns_(state.mapping);
+            populateSendCarrierOverrideSelect_();
             refreshFlowReadiness_();
             setStatus(
               state.carriersWarning || t("sidebar.msg.ready"),
@@ -3170,9 +3246,7 @@
       setOrdersStatus(t("sidebar.msg.analyzing"), null);
       setOrdersBusy(true);
       setSectionBusy("dt-orders", true);
-      runServerAfterEditorFocus_("order_previewSelection", rowSelectionSpec, {
-        sheetId: state.currentSheetId,
-      })
+      runServerAfterEditorFocus_("order_previewSelection", rowSelectionSpec, getSendOptions_())
         .then(function (result) {
           var n = result.rows ? result.rows.length : 0;
           var ok = 0;
@@ -3247,9 +3321,7 @@
       setSectionBusy("dt-orders", true);
       setOrdersStatus(t("sidebar.msg.sending"), null);
       clearStructuredOutput(el.ordersOut);
-      runServerAfterEditorFocus_("send_sendSelection", rowSelectionSpec, {
-        sheetId: state.currentSheetId,
-      })
+      runServerAfterEditorFocus_("send_sendSelection", rowSelectionSpec, getSendOptions_())
         .then(function (result) {
           // Cache label URLs for printing buttons.
           state.lastLabelUrls =
@@ -3462,8 +3534,12 @@
         el.ordersPrintLabels = $("dt-orders-print-labels");
         el.ordersPrintAll = $("dt-orders-print-all");
         el.rowSelection = $("dt-row-selection");
+        el.sendCarrierMode = $("dt-send-carrier-mode");
+        el.sendCarrierOverrideWrap = $("dt-send-carrier-override-wrap");
+        el.sendCarrierOverride = $("dt-send-carrier-override");
         el.backendConfig = $("dt-backend-config");
         el.licenseAdvanced = $("dt-license-advanced");
+        el.licenseCodePanel = $("dt-license-code-panel");
         el.autoSyncStatus = $("dt-auto-sync-status");
         el.autoSyncToggle = $("dt-auto-sync-toggle");
         el.apiUrl = $("dt-api-url");
@@ -3473,6 +3549,7 @@
         el.syncMeta = $("dt-sync-meta");
         el.licenseCode = $("dt-license-code");
         el.licenseRefresh = $("dt-license-refresh");
+        el.licenseRefreshPublic = $("dt-license-refresh-public");
         el.licenseClear = $("dt-license-clear");
         el.licenseSummary = $("dt-license-summary");
         el.licenseStatus = $("dt-license-status");
@@ -3673,6 +3750,9 @@
         if (el.ordersSend) {
           el.ordersSend.addEventListener("click", sendSelection);
         }
+        if (el.sendCarrierMode) {
+          el.sendCarrierMode.addEventListener("change", updateSendCarrierModeUi_);
+        }
         if (el.ordersSync) {
           el.ordersSync.addEventListener("click", syncSelection);
         }
@@ -3698,6 +3778,9 @@
         }
         if (el.licenseRefresh) {
           el.licenseRefresh.addEventListener("click", refreshLicense);
+        }
+        if (el.licenseRefreshPublic) {
+          el.licenseRefreshPublic.addEventListener("click", refreshLicense);
         }
         if (el.licenseClear) {
           el.licenseClear.addEventListener("click", clearLicenseCache);

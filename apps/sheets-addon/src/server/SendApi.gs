@@ -273,6 +273,9 @@ function send_sendSelection(rowSelectionSpec, options) {
     });
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === 'function') {
+      ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+    }
     var spreadsheetId = ss.getId();
 
     var requestedSheetId =
@@ -310,6 +313,8 @@ function send_sendSelection(rowSelectionSpec, options) {
   var preview = order_previewSelection(rowSelectionSpec, {
     skipDuplicateScan: fastPreviewMode,
     sheetId: sheetId,
+    carrierMode: opts.carrierMode === 'override' ? 'override' : 'row',
+    carrierOverride: opts.carrierOverride || null,
   });
   send_assertSmartCoreMapping_(
     columns,
@@ -352,6 +357,11 @@ function send_sendSelection(rowSelectionSpec, options) {
         preview.selectedRowNumbers && preview.selectedRowNumbers.length
           ? preview.selectedRowNumbers.join(',')
           : preview.startRow + ':' + preview.endRow;
+      rowSig +=
+        '|carrier=' +
+        (opts.carrierMode === 'override'
+          ? 'override:' + String(opts.carrierOverride || '').trim()
+          : 'row');
       var checkpointMatches =
         cp.spreadsheetId === spreadsheetId &&
         cp.sheetId === sheetId &&
@@ -392,9 +402,13 @@ function send_sendSelection(rowSelectionSpec, options) {
           startRow: preview.startRow,
           endRow: preview.endRow,
           rowSig:
-            preview.selectedRowNumbers && preview.selectedRowNumbers.length
+            (preview.selectedRowNumbers && preview.selectedRowNumbers.length
               ? preview.selectedRowNumbers.join(',')
-              : preview.startRow + ':' + preview.endRow,
+              : preview.startRow + ':' + preview.endRow) +
+            '|carrier=' +
+            (opts.carrierMode === 'override'
+              ? 'override:' + String(opts.carrierOverride || '').trim()
+              : 'row'),
           nextIndex: i,
         }),
       );
@@ -547,6 +561,9 @@ function send_sendSelection(rowSelectionSpec, options) {
           if (isNaN(idx) || idx < 0 || idx >= carrierRows.length) return;
           handled[idx] = true;
           var rowObj = carrierRows[idx];
+          var externalId = f.externalId != null ? String(f.externalId) : null;
+          var trackingNumber = f.trackingNumber != null ? String(f.trackingNumber) : null;
+          var labelUrl = f.labelUrl != null ? String(f.labelUrl) : null;
           var failureFallback =
             f && f.errorCode != null
               ? 'Carrier request failed (' + String(f.errorCode) + ').'
@@ -557,6 +574,16 @@ function send_sendSelection(rowSelectionSpec, options) {
               : f,
             failureFallback,
           );
+          if (columns.externalShipmentIdColumn != null && externalId) {
+            sheet.getRange(rowObj.rowNumber, Number(columns.externalShipmentIdColumn)).setValue(externalId);
+          }
+          if (columns.trackingColumn != null && trackingNumber) {
+            sheet.getRange(rowObj.rowNumber, Number(columns.trackingColumn)).setValue(trackingNumber);
+          }
+          if (columns.labelUrlColumn != null && labelUrl) {
+            sheet.getRange(rowObj.rowNumber, Number(columns.labelUrlColumn)).setValue(labelUrl);
+            labelUrls.push({ rowNumber: rowObj.rowNumber, url: labelUrl });
+          }
           if (columns.statusColumn != null) {
             sheet.getRange(rowObj.rowNumber, Number(columns.statusColumn)).setValue(i18n_format('general.error', errMsg));
           }

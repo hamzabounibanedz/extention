@@ -458,6 +458,116 @@ function parseBulkCreateResponse_(
   return { successes, failures };
 }
 
+function shouldAutoValidateNoest_(businessSettings?: Record<string, unknown> | null): boolean {
+  if (!businessSettings || typeof businessSettings !== 'object') return true;
+  const raw = businessSettings.autoValidateNoest;
+  if (raw == null) return true;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  const t = String(raw).trim().toLowerCase();
+  if (!t) return true;
+  return !(t === 'false' || t === '0' || t === 'no' || t === 'non');
+}
+
+function isAlreadyValidatedMessage_(value: unknown): boolean {
+  const text = coerceNoestErrorText_(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return text.includes('deja valide') || text.includes('already validated');
+}
+
+function noestValidationFailureForSuccess_(
+  success: BulkCreateSuccess,
+  message: unknown,
+  code: string,
+  creds: NoestCredentials,
+): BulkCreateFailure {
+  const tracking = success.trackingNumber ? String(success.trackingNumber).trim() : '';
+  return {
+    index: success.index,
+    errorCode: code,
+    errorMessage:
+      coerceNoestErrorText_(message) ||
+      'NOEST order was created but validation failed. Tracking was saved; do not resend as a new order.',
+    externalId: success.externalId ?? success.parcelId ?? null,
+    trackingNumber: tracking || null,
+    labelUrl: success.labelUrl ?? (tracking ? buildUrl_(creds, 'api/public/get/order/label', { tracking }) : null),
+  };
+}
+
+async function validateNoestSuccesses_(
+  creds: NoestCredentials,
+  successes: BulkCreateSuccess[],
+): Promise<{ successes: BulkCreateSuccess[]; failures: BulkCreateFailure[]; raw: unknown; httpStatus: number | null }> {
+  const withTracking = successes.filter((s) => s.trackingNumber && String(s.trackingNumber).trim() !== '');
+  if (!withTracking.length) {
+    return { successes, failures: [], raw: null, httpStatus: null };
+  }
+  const trackings = withTracking.map((s) => String(s.trackingNumber).trim());
+  const res = await jsonRequest_(buildUrl_(creds, 'api/public/valid/orders'), {
+    method: 'POST',
+    headers: baseHeaders_(creds),
+    body: {
+      user_guid: creds.userGuid,
+      trackings,
+    },
+  });
+  const payload = asRecord_(res.json ?? res.text);
+  const passed = asRecord_(payload.passed);
+  const failed = asRecord_(payload.failed);
+  const failedByTracking = new Map<string, unknown>();
+  const passedByTracking = new Set<string>();
+
+  for (const [tracking, value] of Object.entries(passed)) {
+    if (value === true || String(value).toLowerCase() === 'true' || asRecord_(value).success === true) {
+      passedByTracking.add(String(tracking));
+    }
+  }
+  for (const [tracking, value] of Object.entries(failed)) {
+    failedByTracking.set(String(tracking), value);
+  }
+
+  const validationFailures: BulkCreateFailure[] = [];
+  const validationFailureIndexes = new Set<number>();
+
+  if (res.status < 200 || res.status >= 300) {
+    const message =
+      coerceNoestErrorText_(res.json) ||
+      coerceNoestErrorText_(res.text) ||
+      `NOEST validation failed (${res.status})`;
+    for (const success of withTracking) {
+      validationFailures.push(noestValidationFailureForSuccess_(success, message, 'VALIDATION_FAILED', creds));
+      validationFailureIndexes.add(success.index);
+    }
+  } else {
+    const hasDetailedResult = passedByTracking.size > 0 || failedByTracking.size > 0;
+    if (hasDetailedResult) {
+      for (const success of withTracking) {
+        const tracking = String(success.trackingNumber || '').trim();
+        const failedValue =
+          failedByTracking.get(tracking) ??
+          failedByTracking.get(tracking.toUpperCase()) ??
+          failedByTracking.get(tracking.toLowerCase());
+        if (failedValue == null || isAlreadyValidatedMessage_(failedValue)) {
+          continue;
+        }
+        validationFailures.push(
+          noestValidationFailureForSuccess_(success, failedValue, 'VALIDATION_FAILED', creds),
+        );
+        validationFailureIndexes.add(success.index);
+      }
+    }
+  }
+
+  return {
+    successes: successes.filter((s) => !validationFailureIndexes.has(s.index)),
+    failures: validationFailures,
+    raw: res.json ?? res.text,
+    httpStatus: res.status,
+  };
+}
+
 export class NoestAdapter implements CarrierAdapter {
   readonly id = 'noest';
   readonly displayName = 'NOEST';
@@ -496,6 +606,7 @@ export class NoestAdapter implements CarrierAdapter {
     const bulk = await this.bulkCreateParcels({
       parcels: [parcel],
       credentials: input.credentials,
+      businessSettings: input.businessSettings ?? null,
     });
     if (bulk.successes.length) {
       const first = bulk.successes[0];
@@ -668,6 +779,7 @@ export class NoestAdapter implements CarrierAdapter {
     const failures: BulkCreateFailure[] = [...preValidationFailures];
     let httpStatus = 400;
     let raw: unknown = null;
+    let validationRaw: unknown = null;
 
     if (sendOrders.length) {
       const res = await jsonRequest_(buildUrl_(creds, 'api/public/create/orders'), {
@@ -683,6 +795,20 @@ export class NoestAdapter implements CarrierAdapter {
       const parsed = parseBulkCreateResponse_(res.status, res.json ?? res.text, sendIndexMap, sendOrders, creds);
       successes.push(...parsed.successes);
       failures.push(...parsed.failures);
+      if (successes.length && shouldAutoValidateNoest_(input.businessSettings)) {
+        const validation = await validateNoestSuccesses_(creds, successes);
+        successes.splice(0, successes.length, ...validation.successes);
+        failures.push(...validation.failures);
+        validationRaw = validation.raw;
+        if (
+          validation.httpStatus != null &&
+          validation.httpStatus !== 429 &&
+          httpStatus >= 200 &&
+          httpStatus < 300
+        ) {
+          httpStatus = validation.httpStatus;
+        }
+      }
     }
 
     failures.sort((a, b) => a.index - b.index);
@@ -693,7 +819,7 @@ export class NoestAdapter implements CarrierAdapter {
       failureCount: failures.length,
       successes,
       failures,
-      raw,
+      raw: validationRaw != null ? { create: raw, validation: validationRaw } : raw,
     };
   }
 

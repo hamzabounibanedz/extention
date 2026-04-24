@@ -17,6 +17,7 @@ function env_(over: Partial<Env>): Env {
     licensePepper: undefined,
     apiKey: undefined,
     activationCodes: ['DEV-KEY-A'],
+    trialEnabled: true,
     trialDays: 7,
     licenseSigningSecret: undefined,
     jwtSecret: undefined,
@@ -48,6 +49,15 @@ describe('resolveLicenseInMemory', () => {
   it('returns trial when no code', () => {
     const r = resolveLicenseInMemory(env_({}), {});
     assert.equal(r.licenseStatus, 'trial');
+  });
+
+  it('returns pending activation when trials are disabled', () => {
+    const r = resolveLicenseInMemory(env_({ trialEnabled: false }), {
+      clientEmail: 'user@example.com',
+    });
+    assert.equal(r.licenseStatus, 'pending_activation');
+    assert.equal(r.customerEmail, 'user@example.com');
+    assert.equal(r.trialEnd, null);
   });
 });
 

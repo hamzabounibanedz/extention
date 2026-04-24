@@ -9,6 +9,8 @@ export type Env = {
   apiKey: string | undefined;
   /** Optional dev-only activation codes for no-DB local evaluation. */
   activationCodes: string[];
+  /** When false, unknown emails stay pending until an admin activates them. */
+  trialEnabled: boolean;
   trialDays: number;
   /** Signing secret for shipment access tokens. */
   licenseSigningSecret: string | undefined;
@@ -46,6 +48,20 @@ function parseTrialDailyShipmentLimit_(raw: string | undefined): number {
   return Math.min(1_000_000, Math.floor(n));
 }
 
+function parseBool_(raw: string | undefined, fallback: boolean): boolean {
+  if (raw == null || String(raw).trim() === '') {
+    return fallback;
+  }
+  const v = String(raw).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on', 'enabled'].includes(v)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'n', 'off', 'disabled'].includes(v)) {
+    return false;
+  }
+  return fallback;
+}
+
 function parseActivationCodes_(raw: string | undefined): string[] {
   if (!raw) {
     return [];
@@ -73,6 +89,7 @@ export function loadEnv(): Env {
   const signingLegacy = (process.env.LICENSE_SIGNING_SECRET ?? '').trim();
   const signing = jwtSecret || signingLegacy;
   const adminSecret = (process.env.ADMIN_SECRET ?? '').trim();
+  const licenseMode = (process.env.LICENSE_MODE ?? '').trim().toLowerCase();
   const corsOrigin = (process.env.CORS_ORIGIN ?? '').trim();
   const zrWebhookSecret = (process.env.ZR_WEBHOOK_SECRET ?? '').trim();
   const yalidineWebhookSecret = (
@@ -90,6 +107,12 @@ export function loadEnv(): Env {
     jwtSecret: signing || undefined,
     apiKey: rawKey || undefined,
     activationCodes: parseActivationCodes_(process.env.ACTIVATION_CODES),
+    trialEnabled:
+      licenseMode === 'admin_approval' || licenseMode === 'manual'
+        ? false
+        : licenseMode === 'trial'
+          ? true
+          : parseBool_(process.env.TRIAL_ENABLED, nodeEnv !== 'production'),
     trialDays: parseTrialDays_(process.env.TRIAL_DAYS, 7),
     trialDailyShipmentLimit: parseTrialDailyShipmentLimit_(process.env.TRIAL_DAILY_SHIPMENT_LIMIT),
     adminSecret: adminSecret || undefined,

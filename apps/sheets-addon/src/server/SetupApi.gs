@@ -650,7 +650,14 @@ function setup_resolveCarriersWithMeta_() {
  * }}
  */
 function setup_getContext() {
+  if (typeof license_assertOperationsAllowed_ === "function") {
+    license_assertOperationsAllowed_();
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ownership =
+    typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === "function"
+      ? ownership_assertCurrentSpreadsheetOwnedByActiveUser_()
+      : null;
   var spreadsheetId = ss.getId();
   var sheets = ss.getSheets().map(function (sh) {
     return { sheetId: sh.getSheetId(), sheetName: sh.getName() };
@@ -678,6 +685,7 @@ function setup_getContext() {
     carriers: carriersMeta.carriers,
     carriersWarning: carriersMeta.warning,
     preferredSidebarSheetId: preferred,
+    ownership: ownership,
   };
 }
 
@@ -715,7 +723,13 @@ function setup_setSidebarSheetPreference(sheetId) {
  */
 function setup_getHeaders(sheetId, headerRowRaw) {
   var id = Number(sheetId);
+  if (typeof license_assertOperationsAllowed_ === "function") {
+    license_assertOperationsAllowed_();
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === "function") {
+    ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+  }
   var sheet = getSheetById_(ss, id);
   if (!sheet) {
     throw new Error(i18n_t("error.sheet_not_found"));
@@ -2810,7 +2824,13 @@ function setup_saveMapping(mapping) {
   if (!mapping || typeof mapping !== "object") {
     throw new Error(i18n_t("error.invalid_data"));
   }
+  if (typeof license_assertOperationsAllowed_ === "function") {
+    license_assertOperationsAllowed_();
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === "function") {
+    ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+  }
   var spreadsheetId = ss.getId();
   if (mapping.spreadsheetId !== spreadsheetId) {
     throw new Error(i18n_t("error.wrong_spreadsheet"));

@@ -13,6 +13,7 @@ function envStub(over: Partial<Env> = {}): Env {
     licensePepper: undefined,
     apiKey: undefined,
     activationCodes: ['DLV-TEST-KEY'],
+    trialEnabled: true,
     trialDays: 7,
     licenseSigningSecret: undefined,
     jwtSecret: undefined,
@@ -47,4 +48,3 @@ describe('license integration-style behaviour (local, no DB)', () => {
     assert.equal(r.licenseStatus, 'expired');
   });
 });
-

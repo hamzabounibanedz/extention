@@ -37,6 +37,18 @@ function normalizeActivationCode_(raw: string | null | undefined): string {
   return String(raw ?? '').trim().toUpperCase();
 }
 
+function pendingActivationRecord_(email?: string | null): LicenseRecord {
+  return {
+    licenseKey: null,
+    licenseStatus: 'pending_activation',
+    trialStart: null,
+    trialEnd: null,
+    subscriptionEnd: null,
+    customerEmail: email?.trim().toLowerCase() || null,
+    planName: 'pending_activation',
+  };
+}
+
 export function resolveLicenseInMemory(
   env: AppEnv,
   input: { activationCode?: string | null; clientEmail?: string | null },
@@ -54,6 +66,10 @@ export function resolveLicenseInMemory(
       customerEmail: input.clientEmail?.trim().toLowerCase() || null,
       planName: 'yearly',
     });
+  }
+
+  if (!env.trialEnabled) {
+    return pendingActivationRecord_(input.clientEmail);
   }
 
   const trialStart = new Date();
@@ -179,6 +195,10 @@ export async function resolveLicenseWithPool(
       [userEmailHmac],
     );
     return licenseRecordFromDbRow_(lic, email);
+  }
+
+  if (!env.trialEnabled) {
+    return pendingActivationRecord_(email);
   }
 
   const trialRes = await pool.query<{ created_at: Date; expires_at: Date }>(

@@ -63,11 +63,14 @@ export type BulkCreateFailure = {
   errorCode?: string | null;
   errorMessage: string;
   externalId?: string | null;
+  trackingNumber?: string | null;
+  labelUrl?: string | null;
 };
 
 export type BulkCreateParcelsInput = {
   parcels: Array<Record<string, unknown>>;
   credentials?: AdapterCredentials;
+  businessSettings?: Record<string, unknown> | null;
 };
 
 export type BulkCreateParcelsResult = {

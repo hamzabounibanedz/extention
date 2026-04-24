@@ -43,6 +43,7 @@ describe('carrier adapters', () => {
       async () => {
         await a.bulkCreateParcels({
           credentials: { apiToken: 'Bearer abc-token-value', userGuid: 'GUID-1' },
+          businessSettings: { autoValidateNoest: false },
           parcels: [
             {
               externalId: 'REF00001',
@@ -85,6 +86,7 @@ describe('carrier adapters', () => {
       async () => {
         const r = await a.bulkCreateParcels({
           credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          businessSettings: { autoValidateNoest: false },
           parcels: [
             {
               externalId: 'REF-00001',
@@ -112,6 +114,57 @@ describe('carrier adapters', () => {
     assert.equal(capturedBody?.orders?.[0]?.stop_desk, 0);
     // phone normalized to 0xxxxxxxxx
     assert.equal(String(capturedBody?.orders?.[0]?.phone || '').startsWith('0'), true);
+  });
+
+  it('NOEST bulk create validates created tracking numbers by default', async () => {
+    const a = new NoestAdapter();
+    const urls: string[] = [];
+    const bodies: any[] = [];
+    await withMockFetch_(
+      async (url: any, init?: any) => {
+        urls.push(String(url));
+        bodies.push(init?.body ? JSON.parse(String(init.body)) : null);
+        if (String(url).includes('/api/public/valid/orders')) {
+          return new Response(
+            JSON.stringify({ success: true, passed: { 'NOEST-TRK-1': true }, failed: {} }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            passed: { 0: { success: true, tracking: 'NOEST-TRK-1' } },
+            failed: {},
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await a.bulkCreateParcels({
+          credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          parcels: [
+            {
+              externalId: 'REF-00001',
+              customer: { name: 'Ahmed', phone: { number1: '0550000000' } },
+              address: 'Rue 1',
+              amount: 3500,
+              deliveryType: 'home',
+              orderedProducts: [{ productName: 'P1' }],
+              wilayaId: 16,
+              commune: 'Bab Ezzouar',
+            },
+          ],
+        });
+        assert.equal(r.successCount, 1);
+        assert.equal(r.failureCount, 0);
+      },
+    );
+    assert.ok(urls.some((u) => u.includes('/api/public/create/orders')));
+    assert.ok(urls.some((u) => u.includes('/api/public/valid/orders')));
+    assert.deepEqual(bodies[bodies.length - 1], {
+      user_guid: 'GUID-1',
+      trackings: ['NOEST-TRK-1'],
+    });
   });
 
   it('NOEST searchParcels calls get/trackings/info with trackings array', async () => {
@@ -157,6 +210,7 @@ describe('carrier adapters', () => {
       async () => {
         await a.bulkCreateParcels({
           credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          businessSettings: { autoValidateNoest: false },
           parcels: [
             {
               externalId: 'REF00001',
@@ -185,6 +239,7 @@ describe('carrier adapters', () => {
       async () => {
         await a.bulkCreateParcels({
           credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
+          businessSettings: { autoValidateNoest: false },
           parcels: [
             {
               externalId: 'REF00002',

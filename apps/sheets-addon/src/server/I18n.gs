@@ -115,6 +115,9 @@ var I18N_DICT_ = {
     "trial.badge_label": "تجريبي",
     // License
     "license.active": "الاشتراك نشط",
+    "license.pending_title": "الحساب بانتظار التفعيل",
+    "license.pending_body":
+      "هذا البريد لم يتم تفعيله بعد. افتح الإضافة بنفس حساب Google الذي أعطيته للإدارة، أو تواصل معنا لتفعيل الحساب.",
     "license.expired_title": "انتهى الاشتراك",
     "license.expired_body": "لتجديد اشتراكك، تواصل معنا عبر واتساب",
     "license.have_code": "لديّ كود تفعيل",
@@ -127,6 +130,7 @@ var I18N_DICT_ = {
     "license.expires_on": "ينتهي بتاريخ {0}",
     "license.renew_whatsapp": "تجديد الاشتراك عبر واتساب",
     "license.badge_active": "نشط",
+    "license.badge_pending": "بانتظار التفعيل",
     "license.badge_expired": "منتهي",
     "license.badge_unknown": "غير معروف",
     "error.mapping_invalid":
@@ -144,6 +148,12 @@ var I18N_DICT_ = {
     "error.noest_token_guid_required":
       "يتطلب NOEST إدخال رمز API (Bearer) و user_guid معاً.",
     "error.sheet_not_found": "تعذر العثور على الورقة.",
+    "error.shared_sheet_not_supported":
+      "هذا الملف غير مدعوم لأنه مشترك أو داخل مساحة مشتركة. أنشئ Google Sheet من نفس حساب Google المفعّل ثم أعد الإعداد.",
+    "error.sheet_owner_unavailable":
+      "تعذر التحقق من مالك ملف Google Sheet. أعد فتح الإضافة ووافق على صلاحية Drive ثم حاول مرة أخرى.",
+    "error.sheet_owner_mismatch":
+      "هذا الجدول مملوك للحساب {0}، بينما الإضافة مفتوحة بالحساب {1}. استخدم جدولاً أنشأه نفس الحساب المفعّل.",
     "error.label_column_required":
       "اربط عمود رابط البوليصة أولاً من قسم «ربط أعمدة الورقة» في الشريط الجانبي.",
     "error.label_column_invalid": "عمود رابط البوليصة غير صالح.",
@@ -350,6 +360,7 @@ var I18N_DICT_ = {
       "يُخزَّن لكل حساب Google. اتركه فارغاً إن لم يطلب الخادم مفتاحاً.",
     "sidebar.label.activation_code_optional": "كود التفعيل (اختياري)",
     "sidebar.btn.verify_activate": "تحقق / تفعيل",
+    "sidebar.btn.refresh_license": "تحديث الحساب",
     "sidebar.btn.forget_cache": "مسح الذاكرة المؤقتة",
     "sidebar.hint.license_send":
       "مع عنوان خادم صحيح، الإرسال والمزامنة يتطلبان ترخيصاً سارياً. فحص الصفوف المحددة يبقى متاحاً.",
@@ -397,6 +408,10 @@ var I18N_DICT_ = {
     "sidebar.label.header_row_optional": "صف العناوين (اختياري)",
     "sidebar.section.row_selection": "تحديد الصفوف",
     "sidebar.label.row_selection_optional": "الصفوف (اختياري)",
+    "sidebar.label.send_carrier_mode": "توجيه شركة التوصيل",
+    "sidebar.option.carrier_from_row": "استخدم شركة التوصيل من كل صف",
+    "sidebar.option.carrier_override": "أرسل كل الصفوف المحددة إلى شركة واحدة",
+    "sidebar.label.send_carrier_override": "إرسال إلى شركة",
     "sidebar.hint.row_selection":
       "بديل موثوق عندما لا يلتقط Google Sheets التحديد المتعدد من الشريط الجانبي. اكتب أرقام الصفوف أو النطاقات مثل 40,42,50-55. عند تعبئته يُستخدم في الفحص والإرسال والمزامنة وحساب الرسوم.",
     "sidebar.ph.row_selection": "مثال: 40,42,50-55",
@@ -652,6 +667,9 @@ var I18N_DICT_ = {
     "trial.contact_whatsapp": "Contacter sur WhatsApp",
     "trial.badge_label": "Essai",
     "license.active": "Abonnement actif",
+    "license.pending_title": "Compte en attente d'activation",
+    "license.pending_body":
+      "Cet email Google n'est pas encore active. Ouvrez l'add-on avec le compte transmis a l'admin, ou contactez-nous pour l'activer.",
     "license.expired_title": "Abonnement expiré",
     "license.expired_body": "Pour renouveler, contactez-nous sur WhatsApp",
     "license.have_code": "J'ai un code d'activation",
@@ -664,6 +682,7 @@ var I18N_DICT_ = {
     "license.expires_on": "Expire le {0}",
     "license.renew_whatsapp": "Renouveler sur WhatsApp",
     "license.badge_active": "Actif",
+    "license.badge_pending": "En attente",
     "license.badge_expired": "Expiré",
     "license.badge_unknown": "Inconnu",
     "error.mapping_invalid":
@@ -682,6 +701,12 @@ var I18N_DICT_ = {
     "error.noest_token_guid_required":
       "NOEST exige le jeton API (Bearer) et le user_guid ensemble.",
     "error.sheet_not_found": "Feuille introuvable.",
+    "error.shared_sheet_not_supported":
+      "Ce fichier n'est pas pris en charge car il est partage ou dans un espace partage. Creez une Google Sheet avec le meme compte Google active, puis refaites la configuration.",
+    "error.sheet_owner_unavailable":
+      "Impossible de verifier le proprietaire de la Google Sheet. Rouvrez l'add-on, autorisez l'acces Drive, puis reessayez.",
+    "error.sheet_owner_mismatch":
+      "Cette feuille appartient au compte {0}, mais l'add-on est ouvert avec {1}. Utilisez une feuille creee par le meme compte active.",
     "error.label_column_required":
       "Mappez d’abord la colonne URL étiquette (section Cartographie des colonnes).",
     "error.label_column_invalid": "Colonne URL étiquette invalide.",
@@ -886,6 +911,7 @@ var I18N_DICT_ = {
       "Stockée par compte Google (UserProperties). Laissez vide si le serveur n'exige pas de clé.",
     "sidebar.label.activation_code_optional": "Code d'activation (optionnel)",
     "sidebar.btn.verify_activate": "Vérifier / activer",
+    "sidebar.btn.refresh_license": "Actualiser le compte",
     "sidebar.btn.forget_cache": "Oublier le cache",
     "sidebar.hint.license_send":
       "Avec une URL backend configurée, l'envoi et la synchronisation exigent une licence à jour. L'analyse de la sélection reste disponible.",
@@ -937,6 +963,10 @@ var I18N_DICT_ = {
     "sidebar.label.header_row_optional": "Ligne d’en-tête (optionnel)",
     "sidebar.section.row_selection": "Sélection des lignes",
     "sidebar.label.row_selection_optional": "Lignes (optionnel)",
+    "sidebar.label.send_carrier_mode": "Routage transporteur",
+    "sidebar.option.carrier_from_row": "Utiliser le transporteur de chaque ligne",
+    "sidebar.option.carrier_override": "Envoyer toutes les lignes vers un transporteur",
+    "sidebar.label.send_carrier_override": "Envoyer au transporteur",
     "sidebar.hint.row_selection":
       "Solution fiable quand Google Sheets ne transmet pas la multi-sélection depuis la barre latérale. Saisissez des numéros de lignes ou plages comme 40,42,50-55. Si ce champ est rempli, il sera utilisé pour l’analyse, l’envoi, la synchro et l’application des frais.",
     "sidebar.ph.row_selection": "Ex. : 40,42,50-55",
@@ -1198,6 +1228,9 @@ var I18N_DICT_ = {
     "trial.contact_whatsapp": "Contact on WhatsApp",
     "trial.badge_label": "Trial",
     "license.active": "Subscription active",
+    "license.pending_title": "Account pending activation",
+    "license.pending_body":
+      "This Google email is not activated yet. Open the add-on with the Google account you gave the admin, or contact us to activate it.",
     "license.expired_title": "Subscription expired",
     "license.expired_body": "To renew, contact us on WhatsApp",
     "license.have_code": "I have an activation code",
@@ -1210,6 +1243,7 @@ var I18N_DICT_ = {
     "license.expires_on": "Expires on {0}",
     "license.renew_whatsapp": "Renew on WhatsApp",
     "license.badge_active": "Active",
+    "license.badge_pending": "Pending",
     "license.badge_expired": "Expired",
     "license.badge_unknown": "Unknown",
     "error.mapping_invalid":
@@ -1227,6 +1261,12 @@ var I18N_DICT_ = {
     "error.noest_token_guid_required":
       "NOEST requires both API token (Bearer) and user_guid.",
     "error.sheet_not_found": "Sheet not found.",
+    "error.shared_sheet_not_supported":
+      "This file is not supported because it is shared or stored in a shared drive. Create the Google Sheet from the activated Google account, then configure again.",
+    "error.sheet_owner_unavailable":
+      "Could not verify the Google Sheet owner. Reopen the add-on, approve the Drive permission, then try again.",
+    "error.sheet_owner_mismatch":
+      "This spreadsheet is owned by {0}, but the add-on is opened as {1}. Use a sheet created by the same activated account.",
     "error.label_column_required":
       "Map the Label URL column first (Column mapping section).",
     "error.label_column_invalid": "Invalid Label URL column.",
@@ -1426,6 +1466,7 @@ var I18N_DICT_ = {
       "Stored per Google account. Leave empty if the server does not require a key.",
     "sidebar.label.activation_code_optional": "Activation code (optional)",
     "sidebar.btn.verify_activate": "Verify / activate",
+    "sidebar.btn.refresh_license": "Refresh account",
     "sidebar.btn.forget_cache": "Clear cache",
     "sidebar.hint.license_send":
       "With a configured backend URL, send and sync require a current license. Selection analysis stays available.",
@@ -1473,6 +1514,10 @@ var I18N_DICT_ = {
     "sidebar.label.header_row_optional": "Header row (optional)",
     "sidebar.section.row_selection": "Row selection",
     "sidebar.label.row_selection_optional": "Rows (optional)",
+    "sidebar.label.send_carrier_mode": "Carrier routing",
+    "sidebar.option.carrier_from_row": "Use carrier from each row",
+    "sidebar.option.carrier_override": "Send all selected rows to one carrier",
+    "sidebar.label.send_carrier_override": "Send to carrier",
     "sidebar.hint.row_selection":
       "Reliable fallback when Google Sheets does not preserve multi-select from the sidebar. Enter row numbers or ranges like 40,42,50-55. When filled, this is used for analyze, send, sync, and fee apply.",
     "sidebar.ph.row_selection": "Example: 40,42,50-55",

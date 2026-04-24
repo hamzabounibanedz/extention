@@ -399,6 +399,7 @@
         color: var(--dt-success);
       }
       .dt-pill--trial,
+      .dt-pill--pending_activation,
       .dt-pill--warn {
         background: var(--dt-warning-muted);
         border-color: rgba(234, 134, 0, 0.45);
@@ -891,6 +892,14 @@
           <p id="dt-license-body" class="dt-license-body"></p>
           <div class="dt-license-ctas">
             <button type="button" id="dt-license-activate-cta"></button>
+            <button
+              type="button"
+              id="dt-license-refresh-public"
+              hidden
+              data-i18n="sidebar.btn.refresh_license"
+            >
+              Refresh account
+            </button>
             <a
               href="#"
               id="dt-license-contact-cta"
@@ -942,35 +951,37 @@
           </button>
         </div>
       </div>
-      <label
-        for="dt-license-code"
-        data-i18n="sidebar.label.activation_code_optional"
-        >Code</label
-      >
-      <input
-        type="text"
-        id="dt-license-code"
-        class="dt-ltr"
-        autocomplete="off"
-        spellcheck="false"
-        data-i18n-placeholder="license.enter_code"
-      />
-      <div class="dt-actions">
-        <button
-          type="button"
-          class="dt-primary"
-          id="dt-license-refresh"
-          data-i18n="sidebar.btn.verify_activate"
+      <div id="dt-license-code-panel">
+        <label
+          for="dt-license-code"
+          data-i18n="sidebar.label.activation_code_optional"
+          >Code</label
         >
-          Verify
-        </button>
-        <button
-          type="button"
-          id="dt-license-clear"
-          data-i18n="sidebar.btn.forget_cache"
-        >
-          Clear cache
-        </button>
+        <input
+          type="text"
+          id="dt-license-code"
+          class="dt-ltr"
+          autocomplete="off"
+          spellcheck="false"
+          data-i18n-placeholder="license.enter_code"
+        />
+        <div class="dt-actions">
+          <button
+            type="button"
+            class="dt-primary"
+            id="dt-license-refresh"
+            data-i18n="sidebar.btn.verify_activate"
+          >
+            Verify
+          </button>
+          <button
+            type="button"
+            id="dt-license-clear"
+            data-i18n="sidebar.btn.forget_cache"
+          >
+            Clear cache
+          </button>
+        </div>
       </div>
       <p id="dt-license-status-inline" class="dt-substatus" role="status"></p>
       <details id="dt-license-advanced">
@@ -1267,6 +1278,26 @@
         autocomplete="off"
         spellcheck="false"
       />
+      <label for="dt-send-carrier-mode" data-i18n="sidebar.label.send_carrier_mode">
+        Carrier routing
+      </label>
+      <select id="dt-send-carrier-mode">
+        <option value="row" data-i18n="sidebar.option.carrier_from_row">
+          Use carrier from each row
+        </option>
+        <option value="override" data-i18n="sidebar.option.carrier_override">
+          Send all selected rows to one carrier
+        </option>
+      </select>
+      <div id="dt-send-carrier-override-wrap" hidden>
+        <label
+          for="dt-send-carrier-override"
+          data-i18n="sidebar.label.send_carrier_override"
+        >
+          Send to carrier
+        </label>
+        <select id="dt-send-carrier-override"></select>
+      </div>
       <div class="dt-actions">
         <button
           type="button"

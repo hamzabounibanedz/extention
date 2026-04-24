@@ -124,5 +124,6 @@ function businessSettings_getDefaults_() {
     defaultParcelLength: 20,
     defaultParcelWidth: 15,
     defaultParcelHeight: 10,
+    autoValidateNoest: true,
   };
 }

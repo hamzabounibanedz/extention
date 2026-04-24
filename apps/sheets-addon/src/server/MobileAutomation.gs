@@ -552,7 +552,9 @@ function mobile_collectRowsToAutoSend_(
       seen[rows[j]] = true;
     }
   }
-  return unique;
+  // Mobile Sheets cannot display the sidebar bulk controls. Keep trigger sends
+  // intentionally single-row; desktop sidebar remains the supported bulk path.
+  return unique.length ? [unique[0]] : [];
 }
 
 /**

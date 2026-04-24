@@ -15,6 +15,18 @@ const issueBodySchema = {
   additionalProperties: false,
 } as const;
 
+function normalizeAdminEmail_(raw: unknown): string {
+  return String(raw ?? '').trim().toLowerCase();
+}
+
+function normalizeDurationDays_(raw: unknown): number {
+  const durationDays = Number(raw ?? 365);
+  if (!Number.isFinite(durationDays) || durationDays < 1 || durationDays > 3650) {
+    return NaN;
+  }
+  return Math.floor(durationDays);
+}
+
 export async function registerAdminRoutes(
   app: FastifyInstance,
   env: Env,
@@ -25,6 +37,149 @@ export async function registerAdminRoutes(
   }
 
   app.post<{ Body: { durationDays?: number; notes?: string; googleEmail?: string } }>(
+    '/admin/v1/licenses/activate-email',
+    {
+      schema: {
+        body: issueBodySchema,
+      },
+    },
+    async (request, reply) => {
+      const durationDays = normalizeDurationDays_(request.body?.durationDays);
+      if (!Number.isFinite(durationDays)) {
+        return reply.code(400).send({ error: 'invalid_duration_days', code: 'INVALID_DURATION_DAYS' });
+      }
+      const normalizedGoogleEmail = normalizeAdminEmail_(request.body?.googleEmail);
+      if (!normalizedGoogleEmail || !normalizedGoogleEmail.includes('@')) {
+        return reply.code(400).send({ error: 'invalid_google_email', code: 'INVALID_GOOGLE_EMAIL' });
+      }
+      if (!env.licensePepper) {
+        return reply
+          .code(500)
+          .send({ error: 'license_pepper_required', code: 'LICENSE_PEPPER_REQUIRED' });
+      }
+
+      const activatedBy = hashClientIdentity(normalizedGoogleEmail, env.licensePepper);
+      const { row } = await insertAdminLicenseCode(pool, {
+        durationDays,
+        notes: request.body?.notes ?? null,
+        activatedBy,
+      });
+      const record = await activateLicenseByEmail(pool, { email: normalizedGoogleEmail }, env);
+      return reply.code(201).send({
+        id: row.id,
+        googleEmail: normalizedGoogleEmail,
+        createdAt: new Date(row.created_at).toISOString(),
+        durationDays: row.duration_days,
+        notes: row.notes,
+        activatedAt: record.licenseStatus === 'active' ? new Date().toISOString() : null,
+        revoked: false,
+        status: record.licenseStatus === 'active' ? 'active' : record.licenseStatus,
+        subscriptionEnd: record.subscriptionEnd,
+      });
+    },
+  );
+
+  app.get<{ Querystring: { limit?: string; search?: string } }>(
+    '/admin/v1/email-activations',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'string' },
+            search: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const lim = request.query.limit != null ? Number(request.query.limit) : 50;
+      const safeLimit = Number.isFinite(lim) ? Math.min(500, Math.max(1, Math.floor(lim))) : 50;
+      const searchRaw =
+        request.query.search != null ? String(request.query.search).trim().toLowerCase() : '';
+      const whereParts: string[] = [];
+      const params: unknown[] = [];
+      if (searchRaw) {
+        if (!env.licensePepper) {
+          return reply
+            .code(500)
+            .send({ error: 'license_pepper_required', code: 'LICENSE_PEPPER_REQUIRED' });
+        }
+        const activatedBy = hashClientIdentity(searchRaw, env.licensePepper);
+        params.push(activatedBy, searchRaw);
+        whereParts.push(
+          `(c.activated_by = $${params.length - 1}
+             OR (l.google_email IS NOT NULL AND POSITION($${params.length} IN LOWER(l.google_email)) > 0))`,
+        );
+      }
+      params.push(safeLimit);
+
+      const result = await pool.query<{
+        id: string;
+        created_at: Date;
+        duration_days: number;
+        notes: string | null;
+        code_revoked: boolean;
+        code_revoked_at: Date | null;
+        activated_at: Date | null;
+        google_email: string | null;
+        license_revoked: boolean | null;
+        license_revoked_at: Date | null;
+        expires_at: Date | null;
+      }>(
+        `SELECT
+           c.id,
+           c.created_at,
+           c.duration_days,
+           c.notes,
+           c.revoked AS code_revoked,
+           c.revoked_at AS code_revoked_at,
+           c.activated_at,
+           l.google_email,
+           l.revoked AS license_revoked,
+           l.revoked_at AS license_revoked_at,
+           l.expires_at
+         FROM dt_admin_license_code c
+         LEFT JOIN dt_license l ON l.code_id = c.id
+         ${whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''}
+         ORDER BY c.created_at DESC
+         LIMIT $${params.length}`,
+        params,
+      );
+      const now = Date.now();
+      return reply.send({
+        items: result.rows.map((row) => {
+          const expiresAt = row.expires_at ? new Date(row.expires_at).toISOString() : null;
+          const revoked = !!row.code_revoked || !!row.license_revoked;
+          const status = revoked
+            ? 'revoked'
+            : expiresAt && Date.parse(expiresAt) <= now
+              ? 'expired'
+              : row.activated_at
+                ? 'active'
+                : 'pending';
+          return {
+            id: row.id,
+            googleEmail: row.google_email,
+            createdAt: new Date(row.created_at).toISOString(),
+            durationDays: row.duration_days,
+            notes: row.notes,
+            activatedAt: row.activated_at ? new Date(row.activated_at).toISOString() : null,
+            revoked,
+            revokedAt: row.license_revoked_at
+              ? new Date(row.license_revoked_at).toISOString()
+              : row.code_revoked_at
+                ? new Date(row.code_revoked_at).toISOString()
+                : null,
+            subscriptionEnd: expiresAt,
+            status,
+          };
+        }),
+      });
+    },
+  );
+
+  app.post<{ Body: { durationDays?: number; notes?: string; googleEmail?: string } }>(
     '/admin/v1/license-codes',
     {
       schema: {
@@ -32,13 +187,11 @@ export async function registerAdminRoutes(
       },
     },
     async (request, reply) => {
-      const durationDays = Number(request.body?.durationDays ?? 365);
-      if (!Number.isFinite(durationDays) || durationDays < 1 || durationDays > 3650) {
+      const durationDays = normalizeDurationDays_(request.body?.durationDays);
+      if (!Number.isFinite(durationDays)) {
         return reply.code(400).send({ error: 'invalid_duration_days', code: 'INVALID_DURATION_DAYS' });
       }
-      const normalizedGoogleEmail = String((request.body as any)?.googleEmail ?? '')
-        .trim()
-        .toLowerCase();
+      const normalizedGoogleEmail = normalizeAdminEmail_((request.body as any)?.googleEmail);
       let activatedBy: string | null = null;
       if (normalizedGoogleEmail) {
         if (!normalizedGoogleEmail.includes('@')) {

@@ -24,11 +24,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_button: 'تفعيل البريد',
     email_label: 'بريد Google',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'تم تفعيل البريد مباشرة ({1}) عبر {0}.',
-    list_title: 'أحدث الأكواد',
+    issue_success: 'تم تفعيل البريد مباشرة: {0} ({1}).',
+    list_title: 'أحدث التفعيلات',
     list_refresh: 'تحديث القائمة',
-    list_search_placeholder: 'تصفية الأكواد حسب البريد (اختياري)…',
-    list_search_label: 'تصفية الأكواد حسب البريد',
+    list_search_placeholder: 'تصفية التفعيلات حسب البريد (اختياري)…',
+    list_search_label: 'تصفية التفعيلات حسب البريد',
     clients_title: 'العملاء',
     clients_reload: 'إعادة تحميل العملاء',
     clients_search_placeholder: 'تصفية حسب البريد (اختياري)…',
@@ -46,14 +46,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     stats_title: 'إحصائيات الترخيص',
     stats_reload: 'إعادة تحميل الإحصائيات',
     loading: 'جاري التحميل…',
-    enter_secret_codes: 'أدخل كلمة سر الإدارة لتحميل الأكواد.',
+    enter_secret_codes: 'أدخل كلمة سر الإدارة لتحميل التفعيلات.',
     enter_secret_clients: 'أدخل كلمة سر الإدارة لتحميل العملاء.',
     enter_secret_stats: 'أدخل كلمة سر الإدارة لتحميل الإحصائيات.',
     enter_secret_trials: 'أدخل كلمة سر الإدارة لتحميل التجارب.',
-    no_codes: 'لا توجد أكواد بعد.',
+    no_codes: 'لا توجد تفعيلات بعد.',
     no_clients: 'لا يوجد عملاء بعد.',
     no_trials: 'لا توجد تفعيلات تجريبية بعد.',
-    th_code: 'الكود',
+    th_code: 'البريد',
     th_client_hash: 'بصمة العميل',
     th_email: 'البريد',
     th_spreadsheet: 'معرّف الجدول',
@@ -87,7 +87,7 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
   fr: {
     app_title: 'Delivery Tool Admin ',
     app_subtitle:
-      "Émettez des codes, gérez les clients et suivez les statistiques d'abonnement pour l'add-on Sheets.",
+      "Activez les emails, gérez les clients et suivez les statistiques d'abonnement pour l'add-on Sheets.",
     lang_label: 'Langue',
     lang_ar: 'العربية',
     lang_fr: 'Français',
@@ -100,11 +100,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_button: "Activer l'email",
     email_label: 'Email Google',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'Email activé directement ({1}) via {0}.',
-    list_title: 'Codes récents',
+    issue_success: 'Email activé directement : {0} ({1}).',
+    list_title: 'Activations récentes',
     list_refresh: 'Actualiser la liste',
-    list_search_placeholder: 'Filtrer les codes par email (optionnel)…',
-    list_search_label: 'Filtrer les codes par email',
+    list_search_placeholder: 'Filtrer les activations par email (optionnel)…',
+    list_search_label: 'Filtrer les activations par email',
     clients_title: 'Clients',
     clients_reload: 'Recharger les clients',
     clients_search_placeholder: 'Filtrer par email (optionnel)…',
@@ -122,14 +122,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     stats_title: 'Statistiques licence',
     stats_reload: 'Recharger les stats',
     loading: 'Chargement…',
-    enter_secret_codes: 'Saisissez le secret admin pour charger les codes.',
+    enter_secret_codes: 'Saisissez le secret admin pour charger les activations.',
     enter_secret_clients: 'Saisissez le secret admin pour charger les clients.',
     enter_secret_stats: 'Saisissez le secret admin pour charger les statistiques.',
     enter_secret_trials: 'Saisissez le secret admin pour charger les essais.',
-    no_codes: 'Aucun code pour le moment.',
+    no_codes: 'Aucune activation pour le moment.',
     no_clients: 'Aucun client pour le moment.',
     no_trials: "Aucune activation d'essai pour le moment.",
-    th_code: 'Code',
+    th_code: 'Email',
     th_client_hash: 'Empreinte client',
     th_email: 'Email',
     th_spreadsheet: 'ID feuille',
@@ -163,7 +163,7 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
   en: {
     app_title: 'Delivery Tool Admin',
     app_subtitle:
-      'Modern admin dashboard to issue licenses, manage clients, and view subscription stats for the Sheets add-on.',
+      'Modern admin dashboard to activate client emails, manage clients, and view subscription stats for the Sheets add-on.',
     lang_label: 'Language',
     lang_ar: 'العربية',
     lang_fr: 'Français',
@@ -176,11 +176,11 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     issue_button: 'Activate Email',
     email_label: 'Google account email',
     email_placeholder: 'user@gmail.com',
-    issue_success: 'Email activated directly ({1}) via {0}.',
-    list_title: 'Recent codes',
+    issue_success: 'Email activated directly: {0} ({1}).',
+    list_title: 'Recent activations',
     list_refresh: 'Refresh list',
-    list_search_placeholder: 'Filter codes by email (optional)…',
-    list_search_label: 'Filter codes by email',
+    list_search_placeholder: 'Filter activations by email (optional)…',
+    list_search_label: 'Filter activations by email',
     clients_title: 'Clients',
     clients_reload: 'Reload clients',
     clients_search_placeholder: 'Filter by email (optional)…',
@@ -198,14 +198,14 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
     stats_title: 'License stats',
     stats_reload: 'Reload stats',
     loading: 'Loading…',
-    enter_secret_codes: 'Enter admin secret to load codes.',
+    enter_secret_codes: 'Enter admin secret to load activations.',
     enter_secret_clients: 'Enter admin secret to load clients.',
     enter_secret_stats: 'Enter admin secret to load stats.',
     enter_secret_trials: 'Enter admin secret to load trials.',
-    no_codes: 'No codes yet.',
+    no_codes: 'No activations yet.',
     no_clients: 'No clients yet.',
     no_trials: 'No trial activations yet.',
-    th_code: 'Code',
+    th_code: 'Email',
     th_client_hash: 'Client hash',
     th_email: 'Email',
     th_spreadsheet: 'Spreadsheet ID',
@@ -240,14 +240,15 @@ const ADMIN_I18N: Record<AdminLang, Record<string, string>> = {
 
 type LicenseItem = {
   id: string;
-  code: string;
+  googleEmail: string | null;
   createdAt: string;
   durationDays: number;
   notes: string | null;
   activatedAt: string | null;
-  activatedBy: string | null;
+  activatedBy?: string | null;
   revoked: boolean;
   revokedAt: string | null;
+  subscriptionEnd?: string | null;
   status: string;
 };
 
@@ -574,7 +575,7 @@ const App: React.FC = () => {
       const search = codesSearch.trim();
       const qs = search ? `&search=${encodeURIComponent(search)}` : '';
       const data = await api<{ items: LicenseItem[] }>(
-        `/admin/v1/license-codes?limit=50${qs}`,
+        `/admin/v1/email-activations?limit=50${qs}`,
       );
       setCodes(data.items ?? []);
     } catch (e) {
@@ -706,15 +707,15 @@ const App: React.FC = () => {
     setIssueLoading(true);
     try {
       const created = await api<{
-        code: string;
         id: string;
+        googleEmail: string;
         createdAt: string;
         durationDays: number;
         notes: string | null;
         activatedAt: string | null;
         revoked: boolean;
         status: string;
-      }>('/admin/v1/license-codes', {
+      }>('/admin/v1/licenses/activate-email', {
         method: 'POST',
         body: JSON.stringify({ durationDays: 365, googleEmail: email }),
       });
@@ -723,7 +724,7 @@ const App: React.FC = () => {
         text: t(
           lang,
           'issue_success',
-          created.code,
+          created.googleEmail || email,
           statusLabel(lang, created.status || 'pending'),
         ),
       });
@@ -1002,10 +1003,8 @@ const App: React.FC = () => {
                         key={it.id}
                         className="border-b border-dt-border/80 last:border-b-0 hover:bg-black/5"
                       >
-                        <td className="px-3 py-2 align-top font-mono text-xs">
-                          <code className="rounded bg-dt-accent/10 px-1.5 py-0.5">
-                            {it.code}
-                          </code>
+                        <td className="px-3 py-2 align-top text-xs">
+                          {it.googleEmail || '—'}
                         </td>
                         <td className="px-3 py-2 align-top">
                           <StatusBadge
@@ -1330,4 +1329,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-

@@ -149,7 +149,7 @@ describe('shipments tracking sync', () => {
               },
             ],
             credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
-            businessSettings: {},
+            businessSettings: { autoValidateNoest: false },
           },
           { pool: null },
         );
@@ -183,7 +183,7 @@ describe('shipments tracking sync', () => {
           },
         ],
         credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
-        businessSettings: {},
+        businessSettings: { autoValidateNoest: false },
       },
       { pool: null },
     );
@@ -229,7 +229,7 @@ describe('shipments tracking sync', () => {
               },
             ],
             credentials: { apiToken: 'TOK-1', userGuid: 'GUID-1' },
-            businessSettings: {},
+            businessSettings: { autoValidateNoest: false },
           },
           { pool: null },
         );
@@ -305,6 +305,61 @@ describe('shipments tracking sync', () => {
         assert.equal(message.includes('[object Object]'), false);
       },
     );
+  });
+
+  it('maps livraison stop desk text to ZR pickup-point instead of home', async () => {
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (_url: any, init?: any) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({
+            successes: [
+              {
+                index: 0,
+                parcelId: 'ZR-PARCEL-1',
+                trackingNumber: 'ZR-TRK-1',
+                externalId: 'ORDER-ZR-1',
+              },
+            ],
+            failures: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await sendOrdersBulk(
+          {
+            carrier: 'zr',
+            orders: [
+              {
+                rowIndex: 8,
+                orderId: 'ORDER-ZR-1',
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: 'Cite Kaidi',
+                commune: 'Bordj El Kiffan',
+                wilaya: 'Alger',
+                totalPrice: 2400,
+                productName: 'Machine a cafe',
+                quantity: 1,
+                deliveryMode: 'livraison stop desk',
+                deliveryType: 'livraison stop desk',
+              },
+            ],
+            credentials: { tenantId: 'tenant', secretKey: 'secret' },
+            businessSettings: { defaultHubId: 'HUB-16' },
+          },
+          { pool: null },
+        );
+        assert.equal(r.ok, true);
+        assert.equal(r.successCount, 1);
+      },
+    );
+    assert.equal(capturedBody?.parcels?.[0]?.deliveryType, 'pickup-point');
+    assert.equal(capturedBody?.parcels?.[0]?.hubId, 'HUB-16');
+    assert.equal(capturedBody?.parcels?.[0]?.deliveryAddress, undefined);
   });
 
   it('never returns [object Object] for Yalidine carrier failures', async () => {

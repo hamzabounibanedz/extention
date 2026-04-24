@@ -25,5 +25,7 @@ export interface BusinessSettings {
   defaultParcelLength: number; // cm
   defaultParcelWidth: number; // cm
   defaultParcelHeight: number; // cm
+  /** NOEST create/order should be followed by valid/orders by default. */
+  autoValidateNoest?: boolean;
 }
 

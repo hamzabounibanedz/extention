@@ -52,6 +52,13 @@ var ORDER_DELIVERY_PICKUP_TERMS_ = {
   relay: true,
   relais: true,
   bureau: true,
+  'au bureau': true,
+  'livraison bureau': true,
+  'livraison au bureau': true,
+  'livraison stopdesk': true,
+  'livraison stop desk': true,
+  'livrasion bureau': true,
+  'lavraison bureau': true,
   desk: true,
   office: true,
   agence: true,
@@ -79,11 +86,12 @@ var ORDER_DELIVERY_HOME_TERMS_ = {
   maison: true,
   house: true,
   residence: true,
-  livraison: true,
-  livrasion: true,
-  livrason: true,
   'livraison domicile': true,
   'livraison a domicile': true,
+  'livrasion domicile': true,
+  'livrasion a domicile': true,
+  'lavraison domicile': true,
+  'lavraison a domicile': true,
   منزل: true,
   'الى المنزل': true,
   'إلى المنزل': true,
@@ -97,7 +105,7 @@ var ORDER_DELIVERY_HOME_TERMS_ = {
 var ORDER_DELIVERY_PICKUP_HINT_RE_ =
   /(^|\b)(pickup|pick up|stop ?desk|desk|office|bureau|relay|relais|agence|agency|point relais|point de retrait|point retrait)(\b|$)|نقطة\s*الاستلام|نقطة\s*استلام|مكتب/;
 var ORDER_DELIVERY_HOME_HINT_RE_ =
-  /(^|\b)(home|domicile|maison|house|residence|delivery)(\b|$)|منزل|البيت|بيت|منزلي/;
+  /(^|\b)(home|domicile|maison|house|residence)(\b|$)|منزل|البيت|بيت|منزلي/;
 var ORDER_WILAYA_LABEL_BY_CODE_CACHE_ = null;
 
 /**
@@ -362,6 +370,9 @@ function sheet_getSelectedRowNumbers_(sheet, rowSelectionSpec) {
 function order_previewSelection(rowSelectionSpec, options) {
   var opts = options && typeof options === 'object' ? options : {};
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === 'function') {
+    ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+  }
   var requestedSheetId =
     opts.sheetId != null && String(opts.sheetId).trim() !== ''
       ? Number(opts.sheetId)
@@ -400,6 +411,18 @@ function order_previewSelection(rowSelectionSpec, options) {
     saved.defaultCarrier != null && String(saved.defaultCarrier).trim() !== ''
       ? String(saved.defaultCarrier).trim()
       : null;
+  var carrierOverrideId = null;
+  if (opts.carrierMode === 'override') {
+    carrierOverrideId =
+      typeof resolveCarrierAdapterId_ === 'function'
+        ? resolveCarrierAdapterId_(opts.carrierOverride || null, null)
+        : opts.carrierOverride != null && String(opts.carrierOverride).trim() !== ''
+          ? String(opts.carrierOverride).trim().toLowerCase()
+          : null;
+    if (!carrierOverrideId) {
+      throw new Error(i18n_t('error.choose_carrier'));
+    }
+  }
 
   var headerRow =
     saved.headerRow != null && String(saved.headerRow).trim() !== ''
@@ -496,6 +519,9 @@ function order_previewSelection(rowSelectionSpec, options) {
       continue;
     }
 
+    if (carrierOverrideId) {
+      order.carrier = carrierOverrideId;
+    }
     order_applyDefaultStopDeskForPickup_(order, businessSettings);
     var errors = validateOrder_(sheet, rowNum, order, columns, businessSettings);
     appendDuplicateErrors_(rowNum, order, dupIndex, errors);
@@ -1293,6 +1319,9 @@ function order_shouldUseAlternateDeliveryColumn_(deliveryRaw) {
   }
   if (ORDER_DELIVERY_PICKUP_HINT_RE_.test(n) || ORDER_DELIVERY_HOME_HINT_RE_.test(n)) {
     return false;
+  }
+  if (/^(livraison|livrasion|lavraison|livrason|delivery)$/.test(n)) {
+    return true;
   }
   if (
     /pickup|home|domicile|maison|house|residence|office|desk|bureau|relais|relay|point|stop|agence|livraison|livrasion|delivery|التوصيل|منزل|مكتب|استلام|نقطة/.test(

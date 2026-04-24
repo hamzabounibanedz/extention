@@ -231,6 +231,9 @@ function sync_syncSelection(rowSelectionSpec, options) {
   license_assertOperationsAllowed_();
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === 'function') {
+    ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+  }
   var spreadsheetId = ss.getId();
   var requestedSheetId =
     opts.sheetId != null && String(opts.sheetId).trim() !== ''

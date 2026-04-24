@@ -356,18 +356,52 @@ function normalizeDeliveryType_(raw: unknown): 'home' | 'pickup-point' | null {
     'point',
     'relay',
     'bureau',
+    'au bureau',
     'desk',
+    'office',
     'stopdesk',
     'stop desk',
     'point relais',
+    'point de retrait',
+    'point retrait',
+    'livraison bureau',
+    'livraison au bureau',
+    'livraison stopdesk',
+    'livraison stop desk',
+    'livrasion bureau',
+    'lavraison bureau',
     'استلام',
     'مكتب',
     'نقطه استلام',
   ]);
-  const homeSet = new Set(['home', 'domicile', 'maison', 'livraison', 'منزل', 'للمنزل', 'بيت']);
+  const homeSet = new Set([
+    'home',
+    'at home',
+    'domicile',
+    'a domicile',
+    'maison',
+    'livraison domicile',
+    'livraison a domicile',
+    'livrasion domicile',
+    'livrasion a domicile',
+    'lavraison domicile',
+    'lavraison a domicile',
+    'منزل',
+    'للمنزل',
+    'بيت',
+  ]);
   if (pickupSet.has(t)) return 'pickup-point';
   if (homeSet.has(t)) return 'home';
-  if (t.includes('pickup') || t.includes('relay') || t.includes('bureau')) return 'pickup-point';
+  if (
+    t.includes('pickup') ||
+    t.includes('relay') ||
+    t.includes('bureau') ||
+    t.includes('desk') ||
+    t.includes('office') ||
+    t.includes('stop')
+  ) {
+    return 'pickup-point';
+  }
   if (t.includes('home') || t.includes('domicile') || t.includes('منزل')) return 'home';
   return null;
 }
@@ -1261,6 +1295,7 @@ export async function sendOrdersBulk(
           result = await adapter.bulkCreateParcels({
             parcels: chunkParcels,
             credentials: creds,
+            businessSettings: input.businessSettings ?? null,
           });
           if (result.httpStatus !== 429 || attempt === RETRY_MAX_ATTEMPTS) break;
           await sleep_(Math.min(8000, RETRY_BASE_MS * 2 ** (attempt - 1)));
@@ -1317,6 +1352,8 @@ export async function sendOrdersBulk(
           errorCode: f.errorCode ?? null,
           errorMessage: failureText || 'Carrier request failed.',
           externalId: f.externalId ?? null,
+          trackingNumber: f.trackingNumber ?? null,
+          labelUrl: f.labelUrl ?? null,
         });
       }
       continue;

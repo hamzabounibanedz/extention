@@ -4,6 +4,7 @@
 export type LicenseStatus =
   | 'trial'
   | 'active'
+  | 'pending_activation'
   | 'expired'
   | 'revoked'
   | 'invalid';

@@ -6,6 +6,7 @@
 
 // Constants
 var LICENSE_CACHE_TTL_MS_ = 60 * 60 * 1000; // 1 hour
+var LICENSE_PENDING_CACHE_TTL_MS_ = 60 * 1000; // 1 minute
 // WhatsApp contact link – configurable via script property `dt.whatsapp.link`.
 var WHATSAPP_LINK_ = (function () {
   try {
@@ -44,6 +45,19 @@ function license_getCurrentEmail_() {
 }
 
 /**
+ * Pending activation needs a short TTL so a newly activated user is not
+ * blocked until the normal one-hour cache expires.
+ * @param {Object|null} record
+ * @return {number}
+ */
+function license_getCacheTtlMs_(record) {
+  var status = record ? String(record.licenseStatus || record.status || '') : '';
+  return status === 'pending_activation'
+    ? LICENSE_PENDING_CACHE_TTL_MS_
+    : LICENSE_CACHE_TTL_MS_;
+}
+
+/**
  * Best-effort cache warm-up on spreadsheet open.
  * This helps trigger-based flows work even before the sidebar is opened.
  * @return {{ ok: boolean, refreshed: boolean, reason: string|null }}
@@ -54,7 +68,7 @@ function license_prefetchCachedStateOnOpen_() {
     if (
       cached &&
       cached._cachedAt &&
-      Date.now() - Number(cached._cachedAt) < LICENSE_CACHE_TTL_MS_
+      Date.now() - Number(cached._cachedAt) < license_getCacheTtlMs_(cached)
     ) {
       return { ok: true, refreshed: false, reason: null };
     }
@@ -99,15 +113,18 @@ function license_attachUiSettings_(state) {
 /**
  * Called on every sidebar open — auto-starts trial if needed via backend.
  * Returns a simplified state for the client UI.
+ * @param {{ forceRefresh?: boolean }=} options
  * @return {Object}
  */
-function license_getSidebarState() {
+function license_getSidebarState(options) {
+  var opts = options && typeof options === "object" ? options : {};
   // 1. Check cache first
   var cached = license_getCachedRecord_();
   if (
+    !opts.forceRefresh &&
     cached &&
     cached._cachedAt &&
-    Date.now() - cached._cachedAt < LICENSE_CACHE_TTL_MS_
+    Date.now() - cached._cachedAt < license_getCacheTtlMs_(cached)
   ) {
     var stateFromCache = license_buildSidebarState_(cached);
     license_attachUiSettings_(stateFromCache);
@@ -171,7 +188,7 @@ function license_buildSidebarState_(record) {
   }
   return {
     status: status,
-    email: record.clientEmail || record.email || "",
+    email: record.customerEmail || record.clientEmail || record.email || "",
     daysRemaining: daysRemaining,
     expiresOn: expiresOn,
     whatsappLink: WHATSAPP_LINK_,
@@ -181,6 +198,8 @@ function license_buildSidebarState_(record) {
           ? i18n_t("trial.welcome_title")
           : status === "active"
             ? i18n_t("license.active")
+            : status === "pending_activation"
+              ? i18n_t("license.pending_title")
             : status === "expired"
               ? i18n_t("license.expired_title")
               : i18n_t("trial.expired_title"),
@@ -191,6 +210,8 @@ function license_buildSidebarState_(record) {
             : i18n_t("trial.expired_body")
           : status === "active"
             ? i18n_format("license.expires_on", expiresOn || "")
+            : status === "pending_activation"
+              ? i18n_t("license.pending_body")
             : i18n_t("license.expired_body"),
       contactLabel: i18n_t("trial.contact_whatsapp"),
       activateLabel: i18n_t("license.have_code"),
@@ -244,7 +265,7 @@ function license_assertOperationsAllowed_(opts) {
     !opts.skipRefresh &&
     (!cached ||
       !cached._cachedAt ||
-      Date.now() - cached._cachedAt > LICENSE_CACHE_TTL_MS_)
+      Date.now() - cached._cachedAt > license_getCacheTtlMs_(cached))
   ) {
     try {
       var fresh = license_getSidebarState();
@@ -271,6 +292,9 @@ function license_assertOperationsAllowed_(opts) {
     return true;
   }
 
+  if (status === "pending_activation") {
+    throw new Error(i18n_t("license.pending_body"));
+  }
   throw new Error(
     i18n_t("general.license_required") + ". " + i18n_t("license.expired_body"),
   );
