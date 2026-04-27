@@ -523,9 +523,9 @@ function order_previewSelection(rowSelectionSpec, options) {
       order.carrier = carrierOverrideId;
     }
     order_applyDefaultStopDeskForPickup_(order, businessSettings);
-    var errors = validateOrder_(sheet, rowNum, order, columns, businessSettings);
-    appendDuplicateErrors_(rowNum, order, dupIndex, errors);
     var warnings = blacklistWarningsForOrder_(order);
+    var errors = validateOrder_(sheet, rowNum, order, columns, businessSettings);
+    appendDuplicateErrors_(rowNum, order, dupIndex, errors, warnings);
     rows.push({
       rowNumber: rowNum,
       skipped: false,
@@ -972,6 +972,11 @@ function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
     errors.push(i18n_t('val.carrier_required'));
   }
 
+  if (order.externalShipmentId || order.trackingNumber) {
+    errors.push(i18n_t('send.already_sent'));
+    return errors;
+  }
+
   if (columns.codColumn != null) {
     var rawCod = getColumnValue_(sheet, rowNum, columns.codColumn);
     if (!isBlank_(rawCod) && order.codAmount == null) {
@@ -991,8 +996,9 @@ function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
     !fallbackStopDeskId
   ) {
     var carrierLc = String(order.carrier || '').trim().toLowerCase();
-    var isZr = carrierLc === 'zr';
-    errors.push(i18n_t(isZr ? 'val.stopdesk_required_zr' : 'val.stopdesk_required'));
+    if (carrierLc !== 'zr') {
+      errors.push(i18n_t('val.stopdesk_required'));
+    }
   }
 
   // Carrier-specific commune requirements.
@@ -1004,10 +1010,6 @@ function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
   }
   if (carrierIdLc === 'noest' && isBlank_(order.commune)) {
     errors.push(i18n_t('val.commune_required_noest'));
-  }
-
-  if (order.externalShipmentId) {
-    errors.push(i18n_t('send.already_sent'));
   }
 
   // Names: resolve from first/last/full name columns and validate
@@ -1194,8 +1196,9 @@ function firstDuplicateOtherRow_(rows, rowNum) {
  * @param {InternalOrderLike} order
  * @param {{ orderId: Object, phoneProduct: Object, tracking: Object }} index
  * @param {Array<string>} errors mutated
+ * @param {Array<string>=} warnings mutated
  */
-function appendDuplicateErrors_(rowNum, order, index, errors) {
+function appendDuplicateErrors_(rowNum, order, index, errors, warnings) {
   var tr = normalizeTrackingKey_(order.trackingNumber);
   if (tr) {
     var tlist = index.tracking[tr];
@@ -1219,7 +1222,13 @@ function appendDuplicateErrors_(rowNum, order, index, errors) {
   if (pp && index.phoneProduct[pp] && index.phoneProduct[pp].length > 1) {
     var pRow = firstDuplicateOtherRow_(index.phoneProduct[pp], rowNum);
     if (pRow != null) {
-      errors.push(i18n_format('error.dup_phone_product_row', pRow));
+      var msg = i18n_format('error.dup_phone_product_row', pRow);
+      // Phone+product is a useful duplicate hint, but repeat buyers can be legitimate.
+      if (warnings && typeof warnings.push === 'function') {
+        warnings.push(msg);
+      } else {
+        errors.push(msg);
+      }
     }
   }
 }

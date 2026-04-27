@@ -8,6 +8,35 @@ var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
 /** Wait for document lock (ms). Background auto-sync uses short per-sheet locks; this covers long sends/syncs. */
 var SEND_DOC_LOCK_WAIT_MS_ = 120000;
 
+function send_orderAlreadyHasTracking_(order) {
+  if (!order) return false;
+  var externalId =
+    order.externalShipmentId != null ? String(order.externalShipmentId).trim() : '';
+  var tracking =
+    order.trackingNumber != null ? String(order.trackingNumber).trim() : '';
+  return !!(externalId || tracking);
+}
+
+/**
+ * @param {Object} previewRow
+ * @param {string} fallbackText
+ * @return {string}
+ */
+function send_rowValidationErrorMessage_(previewRow, fallbackText) {
+  var fallback = fallbackText || i18n_t('send.error_generic');
+  var row = previewRow && typeof previewRow === 'object' ? previewRow : {};
+  var errors = Array.isArray(row.errors) ? row.errors : [];
+  var parts = [];
+  errors.forEach(function (err) {
+    var msg = send_finalizeErrorMessage_(err, fallback);
+    if (msg && parts.indexOf(msg) === -1) {
+      parts.push(msg);
+    }
+  });
+  var out = parts.length ? parts.join(' | ') : fallback;
+  return out.length > 500 ? out.slice(0, 497) + '...' : out;
+}
+
 /**
  * Backend/carrier may return structured errors; never surface "[object Object]" in the sidebar.
  * @param {*} msg
@@ -321,6 +350,32 @@ function send_sendSelection(rowSelectionSpec, options) {
     preview && preview.rows ? preview.rows : [],
     mapping && mapping.defaultCarrier ? String(mapping.defaultCarrier) : null,
   );
+  var genericSendError = i18n_t('send.error_generic');
+  var validationFailures = preview.rows
+    ? preview.rows.filter(function (r) {
+        return (
+          !r.skipped &&
+          !r.valid &&
+          r.order &&
+          !send_orderAlreadyHasTracking_(r.order)
+        );
+      })
+    : [];
+  var validationFailureDetails = validationFailures.map(function (r) {
+    return {
+      rowNumber: r.rowNumber,
+      ok: false,
+      errorMessage: send_rowValidationErrorMessage_(r, genericSendError),
+    };
+  });
+  if (validationFailureDetails.length && columns.statusColumn != null) {
+    validationFailureDetails.forEach(function (d) {
+      sheet
+        .getRange(d.rowNumber, Number(columns.statusColumn))
+        .setValue(i18n_format('general.error', d.errorMessage));
+    });
+    SpreadsheetApp.flush();
+  }
 
   // If there are no valid rows at all but we did analyze some, surface a clear
   // error instead of silently returning a zero-send result. This usually means
@@ -329,14 +384,27 @@ function send_sendSelection(rowSelectionSpec, options) {
     return !r.skipped;
   });
   var anyValidRows = preview.rows && preview.rows.some(function (r) {
-    return !r.skipped && r.valid && r.order && !r.order.externalShipmentId;
+    return !r.skipped && r.valid && r.order && !send_orderAlreadyHasTracking_(r.order);
   });
-  if (anyAnalyzedRows && !anyValidRows) {
-    throw new Error(i18n_t('error.no_valid_rows_for_send'));
+  var anyAlreadyTrackedRows = preview.rows && preview.rows.some(function (r) {
+    return !r.skipped && r.order && send_orderAlreadyHasTracking_(r.order);
+  });
+  if (anyAnalyzedRows && !anyValidRows && !anyAlreadyTrackedRows) {
+    return {
+      attempted: validationFailureDetails.length,
+      succeeded: 0,
+      failed: validationFailureDetails.length,
+      total: validationFailureDetails.length,
+      done: true,
+      message: i18n_t('error.no_valid_rows_for_send'),
+      errors: validationFailureDetails.map(function (d) {
+        return { row: d.rowNumber, error: d.errorMessage };
+      }),
+    };
   }
 
   var validRows = preview.rows.filter(function (r) {
-    return !r.skipped && r.valid && r.order && !r.order.externalShipmentId;
+    return !r.skipped && r.valid && r.order && !send_orderAlreadyHasTracking_(r.order);
   });
 
   if (validRows.length === 0) {
@@ -382,10 +450,10 @@ function send_sendSelection(rowSelectionSpec, options) {
     businessSettings_normalizeHubFields_(businessSettings);
   }
   var sent = 0;
-  var failed = 0;
+  var failed = validationFailureDetails.length;
   var labelUrls = [];
-  var batchDetails = [];
-  var genericSendError = i18n_t('send.error_generic');
+  var batchDetails = validationFailureDetails.slice();
+  var totalRowsToProcess = validRows.length + validationFailureDetails.length;
 
   var startTime = Date.now();
   var MAX_MS = 5 * 60 * 1000; // 5 minutes, leave buffer before Apps Script 6-min limit.
@@ -417,9 +485,9 @@ function send_sendSelection(rowSelectionSpec, options) {
         attempted: attemptedSoFar,
         succeeded: sent,
         failed: failed,
-        total: validRows.length,
+        total: totalRowsToProcess,
         done: false,
-        message: i18n_format('send.partial', attemptedSoFar, validRows.length),
+        message: i18n_format('send.partial', attemptedSoFar, totalRowsToProcess),
       };
     }
 
@@ -684,7 +752,7 @@ function send_sendSelection(rowSelectionSpec, options) {
     attempted: sent + failed,
     succeeded: sent,
     failed: failed,
-    total: validRows.length,
+    total: totalRowsToProcess,
     done: true,
     labelUrls: labelUrls,
     message: i18n_format('send.success', sent),
