@@ -10,6 +10,7 @@ import type {
   SearchParcelsResult,
   TestConnectionResult,
   TerritoryRecord,
+  HubRecord,
   CreateShipmentInput,
   CreateShipmentResult,
   TrackingInput,
@@ -246,6 +247,27 @@ function normalizeTerritory_(value: unknown): TerritoryRecord | null {
     postalCode: o.postalCode != null ? String(o.postalCode) : o.PostalCode != null ? String(o.PostalCode) : null,
     hasHomeDelivery: typeof hasHome === 'boolean' ? hasHome : null,
     hasPickupPoint: typeof hasPickup === 'boolean' ? hasPickup : null,
+    raw: value,
+  };
+}
+
+function normalizeHub_(value: unknown): HubRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  const id = o.id != null ? String(o.id) : '';
+  if (!id) return null;
+  const address = o.address && typeof o.address === 'object' ? (o.address as Record<string, unknown>) : {};
+  const isPickupRaw = o.isPickupPoint ?? o.IsPickupPoint;
+  return {
+    id,
+    name: o.name != null ? String(o.name) : null,
+    type: o.type != null ? String(o.type) : null,
+    isPickupPoint: typeof isPickupRaw === 'boolean' ? isPickupRaw : null,
+    city: address.city != null ? String(address.city) : null,
+    cityTerritoryId: address.cityTerritoryId != null ? String(address.cityTerritoryId) : null,
+    district: address.district != null ? String(address.district) : null,
+    districtTerritoryId: address.districtTerritoryId != null ? String(address.districtTerritoryId) : null,
+    postalCode: address.postalCode != null ? String(address.postalCode) : null,
     raw: value,
   };
 }
@@ -524,6 +546,44 @@ export class ZrAdapter implements CarrierAdapter {
       pageNumber += 1;
       if (pageNumber > 200) {
         // Safety stop to avoid accidental infinite pagination loops.
+        break;
+      }
+    }
+    return out;
+  }
+
+  async fetchAllHubs(credentials?: AdapterCredentials): Promise<HubRecord[]> {
+    const creds = parseCredentials_(credentials);
+    if (!creds) {
+      throw new Error('Missing ZR credentials (tenantId/secretKey).');
+    }
+    const out: HubRecord[] = [];
+    const pageSize = 1000;
+    let pageNumber = 1;
+    while (true) {
+      const response = await jsonRequest_(`${zrBase_(creds)}/hubs/search`, {
+        method: 'POST',
+        headers: headersForKeyAuth_(creds),
+        body: {
+          pageNumber,
+          pageSize,
+          includeServices: false,
+          onlySortingCentersWhenAvailable: false,
+        },
+      });
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`ZR hubs/search failed (${response.status})`);
+      }
+      const items = extractItems_(response.json);
+      for (const item of items) {
+        const normalized = normalizeHub_(item);
+        if (normalized) out.push(normalized);
+      }
+      if (!hasNext_(response.json, pageNumber, pageSize, items.length)) {
+        break;
+      }
+      pageNumber += 1;
+      if (pageNumber > 200) {
         break;
       }
     }

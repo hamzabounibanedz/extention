@@ -8,6 +8,7 @@ export type {
   CarrierId,
   CreateShipmentInput,
   CreateShipmentResult,
+  HubRecord,
   ParcelStatus,
   SearchParcelsInput,
   SearchParcelsResult,

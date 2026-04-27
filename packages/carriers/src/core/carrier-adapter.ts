@@ -50,6 +50,19 @@ export type TerritoryRecord = {
   raw?: unknown;
 };
 
+export type HubRecord = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  isPickupPoint: boolean | null;
+  city: string | null;
+  cityTerritoryId: string | null;
+  district: string | null;
+  districtTerritoryId: string | null;
+  postalCode: string | null;
+  raw?: unknown;
+};
+
 export type BulkCreateSuccess = {
   index: number;
   parcelId?: string | null;
@@ -122,6 +135,7 @@ export interface CarrierAdapter {
   getTracking(input: TrackingInput): Promise<TrackingResult>;
   testConnection?(credentials?: AdapterCredentials): Promise<TestConnectionResult>;
   fetchAllTerritories?(credentials?: AdapterCredentials): Promise<TerritoryRecord[]>;
+  fetchAllHubs?(credentials?: AdapterCredentials): Promise<HubRecord[]>;
   bulkCreateParcels?(input: BulkCreateParcelsInput): Promise<BulkCreateParcelsResult>;
   searchParcels?(input: SearchParcelsInput): Promise<SearchParcelsResult>;
 }
