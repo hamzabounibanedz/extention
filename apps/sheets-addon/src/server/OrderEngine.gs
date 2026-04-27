@@ -996,7 +996,7 @@ function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
     !fallbackStopDeskId
   ) {
     var carrierLc = String(order.carrier || '').trim().toLowerCase();
-    if (carrierLc !== 'zr') {
+    if (carrierLc !== 'zr' && carrierLc !== 'noest') {
       errors.push(i18n_t('val.stopdesk_required'));
     }
   }

@@ -5,6 +5,7 @@ import type {
   BulkCreateParcelsResult,
   BulkCreateSuccess,
   CarrierAdapter,
+  HubRecord,
   ParcelStatus,
   SearchParcelsInput,
   SearchParcelsResult,
@@ -382,6 +383,36 @@ function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number):
   return { order };
 }
 
+function wilayaCodeFromDesk_(key: string, code: string): number | null {
+  const candidates = [key, code];
+  for (const value of candidates) {
+    const m = /^0*(\d{1,2})/.exec(String(value || '').trim());
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n >= 1 && n <= 58) return n;
+  }
+  return null;
+}
+
+function normalizeDesk_(key: string, value: unknown): HubRecord | null {
+  const o = asRecord_(value);
+  const code = String(o.code ?? key ?? '').trim();
+  if (!code) return null;
+  const wilayaCode = wilayaCodeFromDesk_(key, code);
+  return {
+    id: code,
+    name: o.name != null ? String(o.name) : null,
+    type: 'stopdesk',
+    isPickupPoint: true,
+    city: o.name != null ? String(o.name) : null,
+    cityTerritoryId: wilayaCode != null ? String(wilayaCode) : null,
+    district: null,
+    districtTerritoryId: null,
+    postalCode: null,
+    raw: value,
+  };
+}
+
 function parseBulkCreateResponse_(
   status: number,
   json: unknown,
@@ -737,6 +768,28 @@ export class NoestAdapter implements CarrierAdapter {
       }
     }
     return out;
+  }
+
+  async fetchAllHubs(credentials?: AdapterCredentials): Promise<HubRecord[]> {
+    const creds = parseCredentials_(credentials);
+    if (!creds) throw new Error('Missing NOEST credentials (api_token + user_guid).');
+    const res = await jsonRequest_(buildUrl_(creds, 'api/public/desks'), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${creds.apiToken}`,
+      },
+    });
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`NOEST desks failed (${res.status})`);
+    }
+    const payload = asRecord_(res.json);
+    const hubs: HubRecord[] = [];
+    for (const [key, value] of Object.entries(payload)) {
+      const hub = normalizeDesk_(key, value);
+      if (hub) hubs.push(hub);
+    }
+    return hubs;
   }
 
   async bulkCreateParcels(input: BulkCreateParcelsInput): Promise<BulkCreateParcelsResult> {

@@ -116,6 +116,37 @@ describe('carrier adapters', () => {
     assert.equal(String(capturedBody?.orders?.[0]?.phone || '').startsWith('0'), true);
   });
 
+  it('NOEST fetchAllHubs maps desks to pickup station codes by wilaya', async () => {
+    const a = new NoestAdapter();
+    let capturedUrl = '';
+    const hubs = await (async () => {
+      let result: any[] = [];
+      await withMockFetch_(
+        async (url: any) => {
+          capturedUrl = String(url);
+          return new Response(
+            JSON.stringify({
+              '16A': {
+                code: '16A',
+                name: 'Alger',
+                address: 'Bureau Alger',
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+        async () => {
+          result = await a.fetchAllHubs!({ apiToken: 'TOK-1', userGuid: 'GUID-1' });
+        },
+      );
+      return result;
+    })();
+    assert.ok(capturedUrl.includes('/api/public/desks'));
+    assert.equal(hubs[0]?.id, '16A');
+    assert.equal(hubs[0]?.isPickupPoint, true);
+    assert.equal(hubs[0]?.cityTerritoryId, '16');
+  });
+
   it('NOEST bulk create validates created tracking numbers by default', async () => {
     const a = new NoestAdapter();
     const urls: string[] = [];

@@ -240,6 +240,67 @@ describe('shipments tracking sync', () => {
     assert.equal(capturedBody?.orders?.[0]?.phone, '0211234567');
   });
 
+  it('auto-resolves NOEST stop-desk station by wilaya code when station is missing', async () => {
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (url: any, init?: any) => {
+        const u = String(url || '');
+        if (u.includes('/api/public/desks')) {
+          return new Response(
+            JSON.stringify({
+              '16A': {
+                code: '16A',
+                name: 'Alger',
+                address: 'Bureau Alger',
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({
+            success: true,
+            passed: { 0: { success: true, tracking: 'NOEST-SD-1' } },
+            failed: {},
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await sendOrdersBulk(
+          {
+            carrier: 'noest',
+            orders: [
+              {
+                rowIndex: 15,
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: 'Rue 1',
+                commune: 'Bab Ezzouar',
+                wilaya: 'Alger',
+                codeWilaya: 16,
+                totalPrice: 2400,
+                productName: 'Item',
+                quantity: 1,
+                deliveryMode: 'pickup-point',
+                deliveryType: 'pickup-point',
+              },
+            ],
+            credentials: { apiToken: 'TOK-NOEST-SD', userGuid: 'GUID-NOEST-SD' },
+            businessSettings: { autoValidateNoest: false },
+          },
+          { pool: null },
+        );
+        assert.equal(r.ok, true);
+        assert.equal(r.successCount, 1);
+      },
+    );
+    assert.equal(capturedBody?.orders?.[0]?.stop_desk, 1);
+    assert.equal(capturedBody?.orders?.[0]?.station_code, '16A');
+  });
+
   it('coerces nested carrier failure objects into readable text', async () => {
     await withMockFetch_(
       async (url: any) => {

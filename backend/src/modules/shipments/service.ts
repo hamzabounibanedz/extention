@@ -708,6 +708,15 @@ function resolvePickupHub_(hubs: HubRecord[], territory: TerritoryResolution): H
   return scored[0]?.hub ?? null;
 }
 
+function resolveNoestPickupHub_(hubs: HubRecord[], wilayaCodeRaw: unknown): HubRecord | null {
+  const codeN = Number(String(wilayaCodeRaw ?? '').replace(/[^\d]/g, ''));
+  if (!Number.isFinite(codeN) || codeN < 1 || codeN > 58) return null;
+  const matches = hubs
+    .filter((hub) => hub.isPickupPoint !== false && String(hub.cityTerritoryId ?? '') === String(codeN))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return matches[0] ?? null;
+}
+
 /**
  * When the user puts a commune name in the wilaya column (common data-entry mistake),
  * match against all communes in the carrier index with the same fuzzy threshold as per-wilaya matching.
@@ -1307,6 +1316,25 @@ export async function sendOrdersBulk(
           hubId = resolvedHub.id;
         }
       }
+      if (!hubId && carrier === 'noest' && adapter.fetchAllHubs) {
+        try {
+          hubIndex = hubIndex ?? (await getHubIndex_(carrier, creds));
+        } catch (error) {
+          localFailures.push({
+            index: i,
+            errorCode: 'HUB_LOOKUP_FAILED',
+            errorMessage:
+              error instanceof Error
+                ? `Unable to load NOEST stop-desk stations for row ${rowIndex}: ${error.message}`
+                : `Unable to load NOEST stop-desk stations for row ${rowIndex}.`,
+          });
+          continue;
+        }
+        const resolvedHub = resolveNoestPickupHub_(hubIndex.hubs, row.codeWilaya ?? row.wilayaCode);
+        if (resolvedHub) {
+          hubId = resolvedHub.id;
+        }
+      }
       if (!hubId) {
         localFailures.push({
           index: i,
@@ -1314,6 +1342,8 @@ export async function sendOrdersBulk(
           errorMessage:
             carrier === 'zr'
               ? `ZR pickup-point row ${rowIndex} could not auto-match a pickup hub for "${rawCommuneName || resolvedCommuneName}" / "${rawWilayaName || resolvedWilayaName}". Map a stop-desk ID column or set defaultHubId in business settings.`
+              : carrier === 'noest'
+                ? `NOEST stop-desk row ${rowIndex} could not auto-match a station for wilaya code ${String(row.codeWilaya ?? row.wilayaCode ?? '').trim() || '(missing)'}. Map a station_code/stop-desk column or set defaultHubId in business settings.`
               : `hubId is required for pickup-point row ${rowIndex}.`,
         });
         continue;
