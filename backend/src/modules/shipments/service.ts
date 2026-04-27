@@ -7,6 +7,7 @@ import {
   getCarrierAdapterOrThrow,
   type AdapterCredentials,
   type BulkCreateFailure,
+  type HubRecord,
   type ParcelStatus,
   type TerritoryRecord,
   UnknownCarrierError,
@@ -24,13 +25,20 @@ type TerritoryIndex = {
   communesByWilayaId: Map<string, TerritoryRecord[]>;
 };
 
+type HubIndex = {
+  atMs: number;
+  hubs: HubRecord[];
+};
+
 const TERRITORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const HUB_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const SEND_CHUNK_SIZE = 50;
 const RETRY_BASE_MS = 600;
 const RETRY_MAX_ATTEMPTS = 4;
 const TRACKING_BATCH_SIZE = 50;
 
 const territoryCache = new Map<string, TerritoryIndex>();
+const hubCache = new Map<string, HubIndex>();
 let localCommunesByWilayaCache: Record<string, string[]> | null = null;
 
 function cleanedCredentials_(credentials?: Record<string, string> | null): AdapterCredentials {
@@ -631,12 +639,74 @@ async function getTerritoryIndex_(carrierId: string, creds: AdapterCredentials):
   return idx;
 }
 
+async function getHubIndex_(carrierId: string, creds: AdapterCredentials): Promise<HubIndex> {
+  const key = credentialFingerprint_(carrierId, creds);
+  const now = Date.now();
+  const cached = hubCache.get(key);
+  if (cached && now - cached.atMs < HUB_CACHE_TTL_MS) {
+    return cached;
+  }
+  const adapter = getCarrierAdapterOrThrow(carrierId);
+  if (!adapter.fetchAllHubs) {
+    throw new Error(`${carrierId} adapter does not implement fetchAllHubs`);
+  }
+  const hubs = await adapter.fetchAllHubs(creds);
+  const idx = { atMs: now, hubs };
+  hubCache.set(key, idx);
+  return idx;
+}
+
 type TerritoryResolution = {
   cityTerritoryId: string;
   districtTerritoryId: string;
   city: TerritoryRecord;
   district: TerritoryRecord;
 };
+
+function isPickupHubCandidate_(hub: HubRecord): boolean {
+  if (hub.isPickupPoint === true) return true;
+  if (hub.isPickupPoint === false) return false;
+  const t = normalizeText_(`${hub.type ?? ''} ${hub.name ?? ''}`);
+  return (
+    t.includes('stopdesk') ||
+    t.includes('stop desk') ||
+    t.includes('pickup') ||
+    t.includes('bureau') ||
+    t.includes('point')
+  );
+}
+
+function pickupHubScore_(hub: HubRecord, territory: TerritoryResolution): number {
+  let score = 0;
+  if (hub.districtTerritoryId && hub.districtTerritoryId === territory.districtTerritoryId) {
+    score += 1000;
+  }
+  if (hub.cityTerritoryId && hub.cityTerritoryId === territory.cityTerritoryId) {
+    score += 500;
+  }
+  const districtNorm = normalizeText_(territory.district.name);
+  const cityNorm = normalizeText_(territory.city.name);
+  const hubDistrictNorm = normalizeText_(hub.district);
+  const hubCityNorm = normalizeText_(hub.city);
+  const hubNameNorm = normalizeText_(hub.name);
+  score += Math.round(Math.max(similarity_(districtNorm, hubDistrictNorm), similarity_(districtNorm, hubNameNorm)) * 100);
+  score += Math.round(Math.max(similarity_(cityNorm, hubCityNorm), similarity_(cityNorm, hubNameNorm)) * 40);
+  if (normalizeText_(hub.type).includes('stopdesk')) score += 25;
+  return score;
+}
+
+function resolvePickupHub_(hubs: HubRecord[], territory: TerritoryResolution): HubRecord | null {
+  const candidates = hubs.filter(isPickupHubCandidate_);
+  if (!candidates.length) return null;
+  const scored = candidates
+    .map((hub) => ({ hub, score: pickupHubScore_(hub, territory) }))
+    .filter((x) => x.score >= 500)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(a.hub.name ?? a.hub.id).localeCompare(String(b.hub.name ?? b.hub.id));
+    });
+  return scored[0]?.hub ?? null;
+}
 
 /**
  * When the user puts a commune name in the wilaya column (common data-entry mistake),
@@ -990,6 +1060,7 @@ export async function sendOrdersBulk(
 
   const creds = cleanedCredentials_(input.credentials);
   let territoryIndex: TerritoryIndex | null = null;
+  let hubIndex: HubIndex | null = null;
   if (carrier === 'zr' && adapter.fetchAllTerritories) {
     try {
       territoryIndex = await getTerritoryIndex_(carrier, creds);
@@ -1034,7 +1105,7 @@ export async function sendOrdersBulk(
         errorMessage:
           carrier === 'noest'
             ? `Invalid phone for row ${rowIndex}. Expected 9-10 digits.`
-            : `Invalid phone for row ${rowIndex}. Expected +213XXXXXXXXX.`,
+            : `Invalid phone for row ${rowIndex}. Expected 05/06/07, 5/6/7XXXXXXXX, or +213XXXXXXXXX.`,
       });
       continue;
     }
@@ -1047,6 +1118,7 @@ export async function sendOrdersBulk(
       });
       continue;
     }
+    const requestedHubId = String(row.hubId ?? row.station ?? row.stopDeskId ?? defaultHubId ?? '').trim();
     const customerName = String(
       row.customerName ??
         [row.customerFirstName ?? '', row.customerLastName ?? ''].join(' ').trim(),
@@ -1071,7 +1143,9 @@ export async function sendOrdersBulk(
     ).trim();
     let resolvedWilayaName = rawWilayaName;
     let resolvedCommuneName = rawCommuneName;
-    const needsTerritoryResolution = carrier === 'zr' && deliveryType === 'home';
+    const needsTerritoryResolution =
+      carrier === 'zr' &&
+      (deliveryType === 'home' || (deliveryType === 'pickup-point' && !requestedHubId));
     if (needsTerritoryResolution) {
       if (!territoryIndex) {
         localFailures.push({
@@ -1095,7 +1169,10 @@ export async function sendOrdersBulk(
         });
         continue;
       }
-      if (territory.city.hasHomeDelivery === false || territory.district.hasHomeDelivery === false) {
+      if (
+        deliveryType === 'home' &&
+        (territory.city.hasHomeDelivery === false || territory.district.hasHomeDelivery === false)
+      ) {
         localFailures.push({
           index: i,
           errorCode: 'HOME_DELIVERY_UNAVAILABLE',
@@ -1210,12 +1287,34 @@ export async function sendOrdersBulk(
       };
     }
     if (deliveryType === 'pickup-point') {
-      const hubId = String(row.hubId ?? row.station ?? row.stopDeskId ?? defaultHubId ?? '').trim();
+      let hubId = requestedHubId;
+      if (!hubId && carrier === 'zr' && territory && !('error' in territory)) {
+        try {
+          hubIndex = hubIndex ?? (await getHubIndex_(carrier, creds));
+        } catch (error) {
+          localFailures.push({
+            index: i,
+            errorCode: 'HUB_LOOKUP_FAILED',
+            errorMessage:
+              error instanceof Error
+                ? `Unable to load ZR pickup hubs for row ${rowIndex}: ${error.message}`
+                : `Unable to load ZR pickup hubs for row ${rowIndex}.`,
+          });
+          continue;
+        }
+        const resolvedHub = resolvePickupHub_(hubIndex.hubs, territory);
+        if (resolvedHub) {
+          hubId = resolvedHub.id;
+        }
+      }
       if (!hubId) {
         localFailures.push({
           index: i,
           errorCode: 'HUB_REQUIRED',
-          errorMessage: `hubId is required for pickup-point row ${rowIndex}.`,
+          errorMessage:
+            carrier === 'zr'
+              ? `ZR pickup-point row ${rowIndex} could not auto-match a pickup hub for "${rawCommuneName || resolvedCommuneName}" / "${rawWilayaName || resolvedWilayaName}". Map a stop-desk ID column or set defaultHubId in business settings.`
+              : `hubId is required for pickup-point row ${rowIndex}.`,
         });
         continue;
       }

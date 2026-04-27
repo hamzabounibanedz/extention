@@ -337,7 +337,7 @@ describe('shipments tracking sync', () => {
                 orderId: 'ORDER-ZR-1',
                 customerFirstName: 'Ali',
                 customerLastName: 'Ben',
-                phone1: '0550123456',
+                phone1: '670860047',
                 address: 'Cite Kaidi',
                 commune: 'Bordj El Kiffan',
                 wilaya: 'Alger',
@@ -359,7 +359,166 @@ describe('shipments tracking sync', () => {
     );
     assert.equal(capturedBody?.parcels?.[0]?.deliveryType, 'pickup-point');
     assert.equal(capturedBody?.parcels?.[0]?.hubId, 'HUB-16');
+    assert.equal(capturedBody?.parcels?.[0]?.customer?.phone?.number1, '+213670860047');
     assert.equal(capturedBody?.parcels?.[0]?.deliveryAddress, undefined);
+  });
+
+  it('auto-resolves ZR pickup hub by territory when hubId is missing', async () => {
+    let capturedBody: any = null;
+    await withMockFetch_(
+      async (url: any, init?: any) => {
+        const u = String(url || '');
+        if (u.includes('/territories/search')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 'wil-16', code: 16, name: 'Alger', level: 'wilaya', parentId: null },
+                { id: 'com-reghaia', code: null, name: 'Reghaia', level: 'commune', parentId: 'wil-16' },
+              ],
+              pageNumber: 1,
+              pageSize: 1000,
+              totalCount: 2,
+              hasNext: false,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (u.includes('/hubs/search')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: 'hub-reghaia',
+                  name: 'Bureau Reghaia',
+                  type: 'stopdesk',
+                  isPickupPoint: true,
+                  address: {
+                    city: 'Alger',
+                    cityTerritoryId: 'wil-16',
+                    district: 'Reghaia',
+                    districtTerritoryId: 'com-reghaia',
+                  },
+                },
+              ],
+              pageNumber: 1,
+              pageSize: 1000,
+              totalCount: 1,
+              hasNext: false,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
+        return new Response(
+          JSON.stringify({
+            successes: [{ index: 0, parcelId: 'ZR-PARCEL-HUB', trackingNumber: 'ZR-TRK-HUB' }],
+            failures: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      async () => {
+        const r = await sendOrdersBulk(
+          {
+            carrier: 'zr',
+            orders: [
+              {
+                rowIndex: 13,
+                orderId: 'ORDER-ZR-OFFICE',
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: '',
+                commune: 'Reghaia',
+                wilaya: 'Alger',
+                codeWilaya: 16,
+                totalPrice: 2400,
+                productName: 'Mini termo',
+                quantity: 1,
+                deliveryMode: 'livraison stop desk',
+                deliveryType: 'livraison stop desk',
+              },
+            ],
+            credentials: { tenantId: 'tenant-auto-hub', secretKey: 'secret-auto-hub' },
+            businessSettings: {},
+          },
+          { pool: null },
+        );
+        assert.equal(r.successCount, 1);
+        assert.equal(r.failureCount, 0);
+      },
+    );
+    assert.equal(capturedBody?.parcels?.[0]?.hubId, 'hub-reghaia');
+    assert.equal(capturedBody?.parcels?.[0]?.deliveryType, 'pickup-point');
+  });
+
+  it('explains missing ZR hub for office delivery sheets when no hubs match', async () => {
+    let r: any = null;
+    await withMockFetch_(
+      async (url: any) => {
+        const u = String(url || '');
+        if (u.includes('/territories/search')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                { id: 'wil-41', code: 41, name: 'Souk Ahras', level: 'wilaya', parentId: null },
+                { id: 'com-souk-ahras', code: null, name: 'Souk Ahras', level: 'commune', parentId: 'wil-41' },
+              ],
+              pageNumber: 1,
+              pageSize: 1000,
+              totalCount: 2,
+              hasNext: false,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (u.includes('/hubs/search')) {
+          return new Response(
+            JSON.stringify({
+              items: [],
+              pageNumber: 1,
+              pageSize: 1000,
+              totalCount: 0,
+              hasNext: false,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
+      async () => {
+        r = await sendOrdersBulk(
+          {
+            carrier: 'zr',
+            orders: [
+              {
+                rowIndex: 14,
+                orderId: 'ORDER-ZR-NO-HUB',
+                customerFirstName: 'Ali',
+                customerLastName: 'Ben',
+                phone1: '0550123456',
+                address: '',
+                commune: 'Souk Ahras',
+                wilaya: 'Souk Ahras',
+                codeWilaya: 41,
+                totalPrice: 2400,
+                productName: 'Mini termo',
+                quantity: 1,
+                deliveryMode: 'livraison stop desk',
+                deliveryType: 'livraison stop desk',
+              },
+            ],
+            credentials: { tenantId: 'tenant-no-hub', secretKey: 'secret-no-hub' },
+            businessSettings: {},
+          },
+          { pool: null },
+        );
+      },
+    );
+    assert.equal(r.failureCount, 1);
+    assert.equal(r.successCount, 0);
+    assert.equal(r.failures[0]?.errorCode, 'HUB_REQUIRED');
+    assert.match(String(r.failures[0]?.errorMessage || ''), /could not auto-match a pickup hub/i);
   });
 
   it('never returns [object Object] for Yalidine carrier failures', async () => {
