@@ -5,6 +5,7 @@
 
 var SEND_BATCH_SIZE_ = 50;
 var SEND_CHECKPOINT_KEY_ = 'dt.send.checkpoint';
+var SEND_API_VERSION_ = '2026-04-28.3';
 /** Wait for document lock (ms). Background auto-sync uses short per-sheet locks; this covers long sends/syncs. */
 var SEND_DOC_LOCK_WAIT_MS_ = 120000;
 
@@ -15,6 +16,114 @@ function send_orderAlreadyHasTracking_(order) {
   var tracking =
     order.trackingNumber != null ? String(order.trackingNumber).trim() : '';
   return !!(externalId || tracking);
+}
+
+function send_orderTrackingKey_(order) {
+  if (!order) return '';
+  var tracking =
+    order.trackingNumber != null ? String(order.trackingNumber).trim() : '';
+  if (tracking) return tracking;
+  return order.externalShipmentId != null ? String(order.externalShipmentId).trim() : '';
+}
+
+function send_errorIsAlreadySent_(err) {
+  var text = String(err == null ? '' : err).trim();
+  if (!text) return false;
+  var already = i18n_t('send.already_sent');
+  return text === already || text.indexOf(already) !== -1;
+}
+
+function send_rowErrorsWithoutAlreadySent_(row) {
+  var errors = row && Array.isArray(row.errors) ? row.errors : [];
+  return errors.filter(function (err) {
+    return !send_errorIsAlreadySent_(err);
+  });
+}
+
+function send_cloneRowForResend_(row) {
+  var cloned = {};
+  Object.keys(row || {}).forEach(function (k) {
+    cloned[k] = row[k];
+  });
+  var order = {};
+  Object.keys((row && row.order) || {}).forEach(function (k) {
+    order[k] = row.order[k];
+  });
+  order.trackingNumber = null;
+  order.externalShipmentId = null;
+  cloned.order = order;
+  cloned.errors = send_rowErrorsWithoutAlreadySent_(row);
+  cloned.valid = cloned.errors.length === 0;
+  return cloned;
+}
+
+function send_verifyAlreadyTrackedRows_(rows, mapping, opts) {
+  var result = {};
+  var list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return result;
+  var strictRowCarrierMode = !opts || opts.carrierMode !== 'override';
+  var byCarrier = {};
+  list.forEach(function (r) {
+    var order = r && r.order ? r.order : null;
+    var tracking = send_orderTrackingKey_(order);
+    if (!tracking) return;
+    var carrierId = resolveCarrierAdapterId_(
+      order && order.carrier ? order.carrier : null,
+      strictRowCarrierMode
+        ? null
+        : mapping && mapping.defaultCarrier
+          ? mapping.defaultCarrier
+          : null,
+    );
+    if (!carrierId) return;
+    if (!byCarrier[carrierId]) byCarrier[carrierId] = [];
+    byCarrier[carrierId].push({
+      rowNumber: r.rowNumber,
+      trackingNumber: tracking,
+    });
+  });
+
+  Object.keys(byCarrier).forEach(function (carrierId) {
+    var entries = byCarrier[carrierId];
+    var creds = carrierCreds_getForCarrier_(carrierId);
+    if (send_getCarrierCredentialsError_(carrierId, creds)) {
+      return;
+    }
+    for (var offset = 0; offset < entries.length; offset += 100) {
+      var chunk = entries.slice(offset, offset + 100);
+      var trackingNumbers = chunk.map(function (e) {
+        return e.trackingNumber;
+      });
+      try {
+        var res = apiJsonPost_('/v1/shipments/tracking', {
+          carrier: String(carrierId),
+          trackingNumbers: trackingNumbers,
+          credentials: creds || {},
+        });
+        if (!res || res.ok === false || !Array.isArray(res.items)) {
+          continue;
+        }
+        var foundByTracking = {};
+        res.items.forEach(function (item) {
+          if (!item || item.trackingNumber == null) return;
+          foundByTracking[String(item.trackingNumber).trim().toLowerCase()] =
+            item.found !== false;
+        });
+        chunk.forEach(function (entry) {
+          var key = String(entry.trackingNumber || '').trim().toLowerCase();
+          if (!key || !Object.prototype.hasOwnProperty.call(foundByTracking, key)) {
+            return;
+          }
+          if (foundByTracking[key] === false) {
+            result[entry.rowNumber] = true;
+          }
+        });
+      } catch (e) {
+        // Tracking verification failure must not trigger a duplicate resend.
+      }
+    }
+  });
+  return result;
 }
 
 /**
@@ -351,13 +460,29 @@ function send_sendSelection(rowSelectionSpec, options) {
     mapping && mapping.defaultCarrier ? String(mapping.defaultCarrier) : null,
   );
   var genericSendError = i18n_t('send.error_generic');
+  var allPreviewRows = preview && Array.isArray(preview.rows) ? preview.rows : [];
+  var trackedPreviewRows = allPreviewRows.filter(function (r) {
+    return !r.skipped && r.order && send_orderAlreadyHasTracking_(r.order);
+  });
+  var staleTrackedRows = send_verifyAlreadyTrackedRows_(trackedPreviewRows, mapping, opts);
+  function rowHasStaleTracking_(r) {
+    return !!(r && staleTrackedRows[r.rowNumber]);
+  }
+  function rowShouldSkipAlreadyTracked_(r) {
+    return !!(r && r.order && send_orderAlreadyHasTracking_(r.order) && !rowHasStaleTracking_(r));
+  }
+  function rowIsSendable_(r) {
+    if (!r || r.skipped || !r.order || rowShouldSkipAlreadyTracked_(r)) return false;
+    if (r.valid) return true;
+    return rowHasStaleTracking_(r) && send_rowErrorsWithoutAlreadySent_(r).length === 0;
+  }
   var validationFailures = preview.rows
     ? preview.rows.filter(function (r) {
         return (
           !r.skipped &&
-          !r.valid &&
+          !rowIsSendable_(r) &&
           r.order &&
-          !send_orderAlreadyHasTracking_(r.order)
+          !rowShouldSkipAlreadyTracked_(r)
         );
       })
     : [];
@@ -368,6 +493,28 @@ function send_sendSelection(rowSelectionSpec, options) {
       errorMessage: send_rowValidationErrorMessage_(r, genericSendError),
     };
   });
+  var alreadyTrackedRows = preview.rows
+    ? preview.rows.filter(function (r) {
+        return !r.skipped && rowShouldSkipAlreadyTracked_(r);
+      })
+    : [];
+  var alreadyTrackedDetails = alreadyTrackedRows.map(function (r) {
+    return {
+      rowNumber: r.rowNumber,
+      ok: true,
+      skipped: true,
+      reason: 'already_sent',
+      errorMessage: null,
+    };
+  });
+  var selectedRowCount =
+    preview.selectedRowNumbers && preview.selectedRowNumbers.length
+      ? preview.selectedRowNumbers.length
+      : preview.rows
+        ? preview.rows.filter(function (r) {
+            return !r.skipped;
+          }).length
+        : 0;
   if (validationFailureDetails.length && columns.statusColumn != null) {
     validationFailureDetails.forEach(function (d) {
       sheet
@@ -384,19 +531,24 @@ function send_sendSelection(rowSelectionSpec, options) {
     return !r.skipped;
   });
   var anyValidRows = preview.rows && preview.rows.some(function (r) {
-    return !r.skipped && r.valid && r.order && !send_orderAlreadyHasTracking_(r.order);
+    return rowIsSendable_(r);
   });
   var anyAlreadyTrackedRows = preview.rows && preview.rows.some(function (r) {
-    return !r.skipped && r.order && send_orderAlreadyHasTracking_(r.order);
+    return !r.skipped && rowShouldSkipAlreadyTracked_(r);
   });
   if (anyAnalyzedRows && !anyValidRows && !anyAlreadyTrackedRows) {
     return {
       attempted: validationFailureDetails.length,
       succeeded: 0,
       failed: validationFailureDetails.length,
-      total: validationFailureDetails.length,
+      skippedAlreadySent: alreadyTrackedRows.length,
+      skipped: alreadyTrackedRows.length,
+      staleTrackingResent: Object.keys(staleTrackedRows).length,
+      total: selectedRowCount,
+      totalProcessable: validationFailureDetails.length,
       done: true,
       message: i18n_t('error.no_valid_rows_for_send'),
+      sendVersion: SEND_API_VERSION_,
       errors: validationFailureDetails.map(function (d) {
         return { row: d.rowNumber, error: d.errorMessage };
       }),
@@ -404,11 +556,37 @@ function send_sendSelection(rowSelectionSpec, options) {
   }
 
   var validRows = preview.rows.filter(function (r) {
-    return !r.skipped && r.valid && r.order && !send_orderAlreadyHasTracking_(r.order);
+    if (!rowIsSendable_(r)) return false;
+    return rowHasStaleTracking_(r) ? send_cloneRowForResend_(r) : true;
+  }).map(function (r) {
+    return rowHasStaleTracking_(r) ? send_cloneRowForResend_(r) : r;
   });
 
   if (validRows.length === 0) {
-    return { attempted: 0, succeeded: 0, failed: 0, total: 0, done: true };
+    var noWorkMessage = alreadyTrackedRows.length
+      ? i18n_format('send.skipped_already_sent', alreadyTrackedRows.length)
+      : i18n_t('error.no_valid_rows_for_send');
+    return {
+      attempted: 0,
+      succeeded: 0,
+      failed: validationFailureDetails.length,
+      skippedAlreadySent: alreadyTrackedRows.length,
+      skipped: alreadyTrackedRows.length,
+      staleTrackingResent: Object.keys(staleTrackedRows).length,
+      total: selectedRowCount,
+      totalProcessable: validationFailureDetails.length,
+      done: true,
+      message: noWorkMessage,
+      sendVersion: SEND_API_VERSION_,
+      skippedRows: alreadyTrackedRows.map(function (r) {
+        return { row: r.rowNumber, reason: i18n_t('send.already_sent') };
+      }),
+      errors: validationFailureDetails.length
+        ? validationFailureDetails.map(function (d) {
+            return { row: d.rowNumber, error: d.errorMessage };
+          })
+        : undefined,
+    };
   }
 
   // Check for checkpoint (resume from previous interrupted send). Scope by
@@ -452,13 +630,14 @@ function send_sendSelection(rowSelectionSpec, options) {
   var sent = 0;
   var failed = validationFailureDetails.length;
   var labelUrls = [];
-  var batchDetails = validationFailureDetails.slice();
+  var batchDetails = validationFailureDetails.concat(alreadyTrackedDetails);
   var totalRowsToProcess = validRows.length + validationFailureDetails.length;
 
   var startTime = Date.now();
   var MAX_MS = 5 * 60 * 1000; // 5 minutes, leave buffer before Apps Script 6-min limit.
 
   var i = startIndex;
+  var strictRowCarrierMode = opts.carrierMode !== 'override';
   while (i < validRows.length) {
     if (Date.now() - startTime > MAX_MS) {
       // Save checkpoint and return partial result
@@ -485,15 +664,29 @@ function send_sendSelection(rowSelectionSpec, options) {
         attempted: attemptedSoFar,
         succeeded: sent,
         failed: failed,
-        total: totalRowsToProcess,
+        skippedAlreadySent: alreadyTrackedRows.length,
+        skipped: alreadyTrackedRows.length,
+        staleTrackingResent: Object.keys(staleTrackedRows).length,
+        total: selectedRowCount,
+        totalProcessable: totalRowsToProcess,
         done: false,
         message: i18n_format('send.partial', attemptedSoFar, totalRowsToProcess),
+        sendVersion: SEND_API_VERSION_,
       };
     }
 
     var batch = validRows.slice(i, i + SEND_BATCH_SIZE_);
 
     // Optimistic lock: mark as sending before API calls
+    batch.forEach(function (r) {
+      if (!rowHasStaleTracking_(r)) return;
+      if (columns.trackingColumn != null) {
+        sheet.getRange(r.rowNumber, Number(columns.trackingColumn)).clearContent();
+      }
+      if (columns.externalShipmentIdColumn != null) {
+        sheet.getRange(r.rowNumber, Number(columns.externalShipmentIdColumn)).clearContent();
+      }
+    });
     if (columns.statusColumn != null) {
       batch.forEach(function (r) {
         sheet.getRange(r.rowNumber, Number(columns.statusColumn)).setValue(i18n_t('send.sending'));
@@ -508,7 +701,11 @@ function send_sendSelection(rowSelectionSpec, options) {
       if (!order) return;
       var carrierId = resolveCarrierAdapterId_(
         order.carrier || null,
-        mapping.defaultCarrier ? mapping.defaultCarrier : null,
+        strictRowCarrierMode
+          ? null
+          : mapping.defaultCarrier
+            ? mapping.defaultCarrier
+            : null,
       );
       if (!carrierId) {
         failed++;
@@ -740,7 +937,7 @@ function send_sendSelection(rowSelectionSpec, options) {
 
   var failedDetails = batchDetails
     .filter(function (d) {
-      return !d.ok;
+      return !d.ok && !d.skipped;
     })
     .map(function (d) {
       return {
@@ -748,14 +945,26 @@ function send_sendSelection(rowSelectionSpec, options) {
         error: send_finalizeErrorMessage_(d.errorMessage, genericSendError),
       };
     });
+  var finalMessage = i18n_format('send.success', sent);
+  if (alreadyTrackedRows.length) {
+    finalMessage += ' - ' + i18n_format('send.skipped_already_sent', alreadyTrackedRows.length);
+  }
   return {
     attempted: sent + failed,
     succeeded: sent,
     failed: failed,
-    total: totalRowsToProcess,
+    skippedAlreadySent: alreadyTrackedRows.length,
+    skipped: alreadyTrackedRows.length,
+    staleTrackingResent: Object.keys(staleTrackedRows).length,
+    total: selectedRowCount,
+    totalProcessable: totalRowsToProcess,
     done: true,
     labelUrls: labelUrls,
-    message: i18n_format('send.success', sent),
+    message: finalMessage,
+    sendVersion: SEND_API_VERSION_,
+    skippedRows: alreadyTrackedRows.map(function (r) {
+      return { row: r.rowNumber, reason: i18n_t('send.already_sent') };
+    }),
     errors: failedDetails.length > 0 ? failedDetails : undefined,
   };
   } finally {

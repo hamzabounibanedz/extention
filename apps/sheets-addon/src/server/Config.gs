@@ -1,8 +1,8 @@
 /**
  * @fileoverview Backend URL and API key.
  * - User properties: per Google account (sidebar) — URL + key.
- * - Script properties: optional default base URL set in the Apps Script editor (all users),
- *   used only when the user has not set their own URL.
+ * - Script properties: production base URL/API key set in the Apps Script editor (all users).
+ * - In production mode, script properties are mandatory and user-level dev values are ignored.
  */
 
 var DT_SCRIPT_API_BASE_URL_KEY_ = 'dt.api.baseUrl';
@@ -168,9 +168,11 @@ function getApiBaseUrl_() {
   if (scriptRaw && String(scriptRaw).trim() !== '') {
     return normalizeApiBaseUrl_(scriptRaw);
   }
-  // Compatibility fallback: if a user had previously configured a URL in local mode
-  // and deployment switched to locked prod mode without script URL yet, keep read-only usage.
-  if (userRaw != null && String(userRaw).trim() !== '') {
+  if (
+    config_getUiMode_() !== 'prod' &&
+    userRaw != null &&
+    String(userRaw).trim() !== ''
+  ) {
     return normalizeApiBaseUrl_(userRaw);
   }
   return '';
@@ -194,8 +196,10 @@ function getUserApiKey_() {
   if (scriptKey) {
     return scriptKey;
   }
-  // Compatibility fallback for existing test users if script key is not set yet.
-  return userRaw ? String(userRaw).trim() : '';
+  if (config_getUiMode_() !== 'prod' && userRaw) {
+    return String(userRaw).trim();
+  }
+  return '';
 }
 
 /**

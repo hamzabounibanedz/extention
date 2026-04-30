@@ -27,6 +27,10 @@ function normalizeDurationDays_(raw: unknown): number {
   return Math.floor(durationDays);
 }
 
+function sendLegacyCodesDisabled_(reply: any) {
+  return reply.code(404).send({ error: 'not_found', code: 'NOT_FOUND' });
+}
+
 export async function registerAdminRoutes(
   app: FastifyInstance,
   env: Env,
@@ -187,6 +191,9 @@ export async function registerAdminRoutes(
       },
     },
     async (request, reply) => {
+      if (!env.legacyLicenseCodesEnabled) {
+        return sendLegacyCodesDisabled_(reply);
+      }
       const durationDays = normalizeDurationDays_(request.body?.durationDays);
       if (!Number.isFinite(durationDays)) {
         return reply.code(400).send({ error: 'invalid_duration_days', code: 'INVALID_DURATION_DAYS' });
@@ -263,6 +270,9 @@ export async function registerAdminRoutes(
       },
     },
     async (request, reply) => {
+      if (!env.legacyLicenseCodesEnabled) {
+        return sendLegacyCodesDisabled_(reply);
+      }
       const lim = request.query.limit != null ? Number(request.query.limit) : 50;
       const searchRaw =
         request.query.search != null ? String(request.query.search).trim().toLowerCase() : '';

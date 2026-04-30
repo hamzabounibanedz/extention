@@ -654,10 +654,10 @@ function setup_getContext() {
     license_assertOperationsAllowed_();
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ownership =
-    typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === "function"
-      ? ownership_assertCurrentSpreadsheetOwnedByActiveUser_()
-      : null;
+  var ownership = null;
+  if (typeof ownership_getSpreadsheetOwnerState_ === "function") {
+    ownership = ownership_getSpreadsheetOwnerState_();
+  }
   var spreadsheetId = ss.getId();
   var sheets = ss.getSheets().map(function (sh) {
     return { sheetId: sh.getSheetId(), sheetName: sh.getName() };
@@ -728,7 +728,9 @@ function setup_getHeaders(sheetId, headerRowRaw) {
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (typeof ownership_assertCurrentSpreadsheetOwnedByActiveUser_ === "function") {
-    ownership_assertCurrentSpreadsheetOwnedByActiveUser_();
+    ownership_assertCurrentSpreadsheetOwnedByActiveUser_({
+      allowOwnerUnavailable: true,
+    });
   }
   var sheet = getSheetById_(ss, id);
   if (!sheet) {
@@ -1534,7 +1536,9 @@ function setup_scoreSmartColumnForField_(fieldKey, analysis, terms) {
     if (setup_headerLooksCarrier_(headerNorm) || carrierRatio >= 0.6) {
       score = Math.max(0, score - 0.75);
     }
-    if (setup_headerLooksDeliveryType_(headerNorm) || deliveryRatio >= 0.6) {
+    if (setup_headerLooksDeliveryType_(headerNorm)) {
+      score = 0;
+    } else if (deliveryRatio >= 0.6) {
       score = Math.max(0, score - 0.65);
     }
   }
@@ -1605,15 +1609,15 @@ function setup_smartFieldReplaceMargin_(fieldKey) {
 }
 
 /**
- * True when the mapped address column is clearly a carrier / shipping-company field
- * or its cells are mostly carrier names (e.g. NOEST), not street addresses.
+ * True when the mapped address column is clearly a carrier / delivery-mode field
+ * or its cells are mostly carrier names / delivery modes, not street addresses.
  *
  * @param {number} addrCol
  * @param {Array<{ index: number, letter: string, header: string }>} columnsMeta
  * @param {Object<number, Object>} analysisByCol
  * @return {boolean}
  */
-function setup_addressColumnLooksLikeCarrierSlot_(
+function setup_addressColumnLooksLikeNonAddressSlot_(
   addrCol,
   columnsMeta,
   analysisByCol,
@@ -1632,17 +1636,20 @@ function setup_addressColumnLooksLikeCarrierSlot_(
   if (setup_headerLooksCarrier_(headerNorm)) {
     return true;
   }
+  if (setup_headerLooksDeliveryType_(headerNorm)) {
+    return true;
+  }
   var a = analysisByCol && analysisByCol[col] ? analysisByCol[col] : null;
   if (!a || Number(a.seen || 0) < 3) {
     return false;
   }
   var cr = Number(a.carrierRatio || 0);
   var dr = Number(a.deliveryRatio || 0);
-  return cr >= 0.28 && dr <= 0.14;
+  return (cr >= 0.28 && dr <= 0.14) || dr >= 0.28;
 }
 
 /**
- * When address is bound to a carrier column and no good replacement exists, clear it
+ * When address is bound to a non-address column and no good replacement exists, clear it
  * so saves do not persist a broken mapping. Otherwise pick a better column.
  *
  * @param {Object<string, number>} out
@@ -1663,7 +1670,7 @@ function setup_stripCarrierColumnFromAddress_(
     return;
   }
   if (
-    !setup_addressColumnLooksLikeCarrierSlot_(
+    !setup_addressColumnLooksLikeNonAddressSlot_(
       addrCol,
       columnsMeta,
       analysisByCol,

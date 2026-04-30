@@ -22,6 +22,8 @@ export type Env = {
   zrWebhookSecret: string | undefined;
   yalidineWebhookSecret: string | undefined;
   trialDailyShipmentLimit: number;
+  /** Enables legacy generated-code admin routes. Defaults off in production. */
+  legacyLicenseCodesEnabled: boolean;
 };
 
 function parsePort_(raw: string | undefined, fallback: number): number {
@@ -119,6 +121,10 @@ export function loadEnv(): Env {
     corsOrigin: corsOrigin || undefined,
     zrWebhookSecret: zrWebhookSecret || undefined,
     yalidineWebhookSecret: yalidineWebhookSecret || undefined,
+    legacyLicenseCodesEnabled: parseBool_(
+      process.env.ADMIN_LEGACY_LICENSE_CODES,
+      nodeEnv !== 'production',
+    ),
   };
   // Fail-fast in production (locked checklist).
   const isProd = nodeEnv === 'production';

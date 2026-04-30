@@ -50,14 +50,47 @@ async function withMockFetch_(
   }
 }
 
+function noestTrackingInfoResponse_(init?: any): Response {
+  const body = init?.body ? JSON.parse(String(init.body)) : {};
+  const trackings = Array.isArray(body.trackings) ? body.trackings : [];
+  const rows: Record<string, unknown> = {};
+  for (const tracking of trackings) {
+    rows[String(tracking)] = { OrderInfo: { tracking: String(tracking) }, activity: [] };
+  }
+  return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
 describe('shipments tracking sync', () => {
-  it('sends Yalidine parcels without calling territory endpoints first', async () => {
+  it('canonicalizes Yalidine place names from carrier wilayas/communes before sending', async () => {
     const urls: string[] = [];
     await withMockFetch_(
       async (url: any, init?: any) => {
-        urls.push(String(url));
+        const u = String(url);
+        urls.push(u);
+        if (u.includes('/wilayas/')) {
+          return new Response(
+            JSON.stringify({
+              has_more: false,
+              data: [{ id: 16, name: 'Alger', zone: 1, is_deliverable: 1 }],
+              links: { self: u },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (u.includes('/communes/')) {
+          return new Response(
+            JSON.stringify({
+              has_more: false,
+              data: [{ id: 1630, name: 'Bordj El Kiffan', wilaya_id: 16, wilaya_name: 'Alger', is_deliverable: 1 }],
+              links: { self: u },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
         const body = init?.body ? JSON.parse(String(init.body)) : null;
         const orderId = body?.[0]?.order_id || 'ORDER-1';
+        assert.equal(body?.[0]?.to_wilaya_name, 'Alger');
+        assert.equal(body?.[0]?.to_commune_name, 'Bordj El Kiffan');
         return new Response(
           JSON.stringify({
             [orderId]: {
@@ -106,8 +139,8 @@ describe('shipments tracking sync', () => {
         assert.equal(r.successCount, 1);
       },
     );
-    assert.equal(urls.some((u) => u.includes('/wilayas/')), false);
-    assert.equal(urls.some((u) => u.includes('/communes/')), false);
+    assert.equal(urls.some((u) => u.includes('/wilayas/')), true);
+    assert.equal(urls.some((u) => u.includes('/communes/')), true);
     assert.equal(urls.some((u) => u.includes('/parcels/')), true);
   });
 
@@ -116,7 +149,14 @@ describe('shipments tracking sync', () => {
     let capturedBody: any = null;
     await withMockFetch_(
       async (url: any, init?: any) => {
-        capturedUrl = String(url);
+        const u = String(url);
+        if (u.includes('/api/public/get/communes/')) {
+          return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (u.includes('/api/public/get/trackings/info')) {
+          return noestTrackingInfoResponse_(init);
+        }
+        capturedUrl = u;
         capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
         return new Response(
           JSON.stringify({
@@ -195,7 +235,14 @@ describe('shipments tracking sync', () => {
   it('accepts NOEST 10-digit local phones (non +213 format)', async () => {
     let capturedBody: any = null;
     await withMockFetch_(
-      async (_url: any, init?: any) => {
+      async (url: any, init?: any) => {
+        const u = String(url);
+        if (u.includes('/api/public/get/communes/')) {
+          return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (u.includes('/api/public/get/trackings/info')) {
+          return noestTrackingInfoResponse_(init);
+        }
         capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
         return new Response(
           JSON.stringify({
@@ -256,6 +303,12 @@ describe('shipments tracking sync', () => {
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           );
+        }
+        if (u.includes('/api/public/get/communes/')) {
+          return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (u.includes('/api/public/get/trackings/info')) {
+          return noestTrackingInfoResponse_(init);
         }
         capturedBody = init?.body ? JSON.parse(String(init.body)) : null;
         return new Response(

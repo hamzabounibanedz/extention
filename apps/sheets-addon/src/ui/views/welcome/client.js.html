@@ -175,6 +175,8 @@
       /** Prevents overlapping send/sync/preview server calls (double-clicks vs. slow responses). */
       ordersPipelineBusy: false,
     };
+    var mappingAutoSaveTimer = null;
+    var mappingAutoSaveInFlight = false;
 
     var el = {
       sheet: null,
@@ -2933,6 +2935,9 @@
             opt.textContent = col.letter + " · " + h;
             sel.appendChild(opt);
           });
+          sel.addEventListener("change", function () {
+            scheduleMappingAutoSave_();
+          });
 
           wrap.appendChild(lab);
           wrap.appendChild(sel);
@@ -2969,6 +2974,20 @@
       buildGroup("required", false);
       buildGroup("recommended", false);
       buildGroup("optional", true);
+    }
+
+    function scheduleMappingAutoSave_() {
+      if (mappingAutoSaveTimer) {
+        clearTimeout(mappingAutoSaveTimer);
+      }
+      mappingAutoSaveTimer = setTimeout(function () {
+        mappingAutoSaveTimer = null;
+        if (mappingAutoSaveInFlight) {
+          scheduleMappingAutoSave_();
+          return;
+        }
+        saveMapping(true);
+      }, 600);
     }
 
     function applyMappingToFields() {
@@ -3228,6 +3247,8 @@
           applyMappingToFields();
           state.mappingReady = mappingHasRequiredColumns_(state.mapping);
           refreshFlowReadiness_();
+          // Persist smart-tuned fields as well, not only the user's initial change.
+          scheduleMappingAutoSave_();
         })
         .catch(function () {
           // Best-effort only; never block user edits when smart tune is unavailable.
@@ -3329,9 +3350,14 @@
           var a = result.attempted || 0;
           var s = result.succeeded || 0;
           var f = result.failed || 0;
-          var lines = [tf("sidebar.msg.send_summary", a, s, f)];
-          if (result && result.done === false && result.message) {
+          var skipped = result && (result.skippedAlreadySent || result.skipped) ? Number(result.skippedAlreadySent || result.skipped) : 0;
+          var summaryTotal = result && result.total != null ? Number(result.total) : a;
+          var lines = [tf("sidebar.msg.send_summary", summaryTotal, s, f)];
+          if (result && result.message) {
             lines.push(String(result.message));
+          }
+          if (skipped > 0 && (!result || !result.message || String(result.message).indexOf(String(skipped)) === -1)) {
+            lines.push(tf("sidebar.msg.send_skipped_already_sent", skipped));
           }
           if (state.lastLabelUrls.length > 0) {
             lines.push(
@@ -3340,7 +3366,7 @@
           }
           renderStructuredOutput(el.ordersOut, lines, result);
           setOrdersStatus(
-            tf("sidebar.msg.send_summary", a, s, f),
+            tf("sidebar.msg.send_summary", summaryTotal, s, f),
             f > 0 ? "err" : "ok",
           );
           return loadJournal();
@@ -3461,10 +3487,14 @@
         });
     }
 
-    function saveMapping() {
+    function saveMapping(isAutoSave) {
       if (state.spreadsheetId == null || state.currentSheetId == null) {
         setStatus(t("sidebar.msg.missing_context"), "err");
         return;
+      }
+      if (mappingAutoSaveTimer) {
+        clearTimeout(mappingAutoSaveTimer);
+        mappingAutoSaveTimer = null;
       }
       var columns = collectColumnsFromFields();
       var carrierId = el.carrier.value || null;
@@ -3480,6 +3510,7 @@
       setBusy(true);
       setSectionBusy("dt-setup", true);
       setStatus(t("sidebar.msg.saving"), null);
+      mappingAutoSaveInFlight = true;
 
       runServer("setup_saveMapping", payload)
         .then(function (saved) {
@@ -3487,13 +3518,17 @@
           applyMappingToFields();
           state.mappingReady = mappingHasRequiredColumns_(state.mapping);
           refreshFlowReadiness_();
-          setStatus(t("sidebar.msg.mapping_saved"), "ok");
+          setStatus(
+            isAutoSave ? t("sidebar.msg.ready") : t("sidebar.msg.mapping_saved"),
+            "ok",
+          );
           return rememberSidebarSheetPreference_();
         })
         .catch(function (err) {
           setStatus(err.message || String(err), "err");
         })
         .then(function () {
+          mappingAutoSaveInFlight = false;
           setSectionBusy("dt-setup", false);
           setBusy(false);
         });
@@ -3720,6 +3755,7 @@
         var headerRowInput = el.headerRow;
         if (headerRowInput) {
           headerRowInput.addEventListener("change", function () {
+            scheduleMappingAutoSave_();
             loadHeadersAndMapping();
           });
         }
@@ -3731,6 +3767,7 @@
             state.mapping.defaultCarrier = String(el.carrier.value || "").trim();
             state.mappingReady = mappingHasRequiredColumns_(state.mapping);
             refreshFlowReadiness_();
+            scheduleMappingAutoSave_();
             autoTuneMappingForCarrier_();
           });
         }

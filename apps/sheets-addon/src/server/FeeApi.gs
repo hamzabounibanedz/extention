@@ -155,9 +155,11 @@ function fee_applySelection(overwrite, rowSelectionSpec) {
       sheetId,
       sheetName,
       defaultCarrierId,
+      true,
       now,
       headerRow,
-      values
+      values,
+      headerRow
     );
 
     if (isRowEmpty_(order)) {

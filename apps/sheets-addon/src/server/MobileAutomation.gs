@@ -623,11 +623,20 @@ function mobile_hasCarrierCredentialsForAutoSend_(carrierId, cache) {
  */
 function mobile_rowAlreadySent_(sheet, rowNum, columns) {
   var extCol = mobile_toColumnIndex_(columns.externalShipmentIdColumn);
-  if (extCol == null) {
-    return false;
+  if (extCol != null) {
+    var extRaw = sheet.getRange(rowNum, extCol).getDisplayValue();
+    if (extRaw != null && String(extRaw).trim() !== '') {
+      return true;
+    }
   }
-  var raw = sheet.getRange(rowNum, extCol).getDisplayValue();
-  return raw != null && String(raw).trim() !== '';
+  var trackingCol = mobile_toColumnIndex_(columns.trackingColumn);
+  if (trackingCol != null) {
+    var trackingRaw = sheet.getRange(rowNum, trackingCol).getDisplayValue();
+    if (trackingRaw != null && String(trackingRaw).trim() !== '') {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -1783,45 +1792,173 @@ function mobile_tryHandleFinanceInputsEdit_(ss, sheet, range) {
 function mobile_refreshStatusViewSheets_(ss, sourceSheet, header, rowsByBucket) {
   var key = mobile_viewMapStoreKey_(ss.getId(), sourceSheet.getSheetId());
   var viewMap = mobile_readDocumentJson_(key) || {};
-  var updated = [];
-  var reused = [];
-  var created = [];
+  var resolved = mobile_resolveUnifiedStatusViewSheet_(ss, sourceSheet, viewMap.unified);
+  var targetSheet = resolved.sheet;
+  if (!targetSheet) {
+    return { updated: [], reused: [], created: [] };
+  }
+  mobile_writeUnifiedStatusViewSheet_(
+    targetSheet,
+    sourceSheet.getName(),
+    sourceSheet.getSheetId(),
+    header,
+    rowsByBucket,
+  );
+  mobile_deleteLegacySplitStatusViewSheets_(ss, sourceSheet, viewMap, targetSheet.getName());
+  viewMap = { unified: targetSheet.getName() };
+  mobile_writeDocumentJson_(key, viewMap);
+  return {
+    updated: [targetSheet.getName()],
+    reused: resolved.created ? [] : [targetSheet.getName()],
+    created: resolved.created ? [targetSheet.getName()] : [],
+  };
+}
 
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sourceSheet
+ * @param {string|undefined} storedName
+ * @return {{ sheet: GoogleAppsScript.Spreadsheet.Sheet|null, created: boolean }}
+ */
+function mobile_resolveUnifiedStatusViewSheet_(ss, sourceSheet, storedName) {
+  var preferred = mobile_buildCompanionSheetName_('Order Views', sourceSheet.getName());
+  if (storedName) {
+    var stored = ss.getSheetByName(String(storedName));
+    if (
+      stored &&
+      stored.getSheetId() !== sourceSheet.getSheetId() &&
+      mobile_isManagedStatusViewSheet_(stored, sourceSheet.getSheetId())
+    ) {
+      return { sheet: stored, created: false };
+    }
+  }
+  var existing = ss.getSheetByName(preferred);
+  if (
+    existing &&
+    existing.getSheetId() !== sourceSheet.getSheetId() &&
+    mobile_isManagedStatusViewSheet_(existing, sourceSheet.getSheetId())
+  ) {
+    return { sheet: existing, created: false };
+  }
+  var createdSheet = mobile_createSheetWithUniqueName_(ss, preferred);
+  return { sheet: createdSheet, created: true };
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} targetSheet
+ * @param {string} sourceSheetName
+ * @param {number} sourceSheetId
+ * @param {Array<string>} header
+ * @param {Object<string, Array<Array<string>>>} rowsByBucket
+ */
+function mobile_writeUnifiedStatusViewSheet_(
+  targetSheet,
+  sourceSheetName,
+  sourceSheetId,
+  header,
+  rowsByBucket,
+) {
+  var safeHeader = header && header.length ? header.slice() : [''];
+  var sectionRows = [];
+  var matrix = [];
   for (var i = 0; i < MOBILE_STATUS_VIEW_DEFS_.length; i++) {
     var def = MOBILE_STATUS_VIEW_DEFS_[i];
-    var resolved = mobile_resolveStatusViewSheet_(ss, sourceSheet, viewMap[def.key], def);
-    var targetSheet = resolved.sheet;
-    if (!targetSheet) {
-      continue;
-    }
-    if (resolved.created) {
-      created.push(targetSheet.getName());
-    } else {
-      reused.push(targetSheet.getName());
-    }
-
     var payloadRows = [];
     for (var b = 0; b < def.buckets.length; b++) {
-      var bk = def.buckets[b];
-      var bucketRows = rowsByBucket[bk] || [];
+      var bucketRows = rowsByBucket[def.buckets[b]] || [];
       for (var r = 0; r < bucketRows.length; r++) {
         payloadRows.push(bucketRows[r]);
       }
     }
-    mobile_writeCompanionRowsToSheet_(
-      targetSheet,
-      sourceSheet.getName(),
-      sourceSheet.getSheetId(),
-      header,
-      payloadRows,
-      def.defaultTitle,
-    );
-    viewMap[def.key] = targetSheet.getName();
-    updated.push(targetSheet.getName());
+    sectionRows.push(matrix.length + 1);
+    var titleRow = mobile_blankRow_(safeHeader.length);
+    titleRow[0] = def.defaultTitle + ' (' + payloadRows.length + ')';
+    matrix.push(titleRow);
+    matrix.push(safeHeader.slice());
+    if (payloadRows.length) {
+      for (var pr = 0; pr < payloadRows.length; pr++) {
+        var outRow = (payloadRows[pr] || []).slice(0, safeHeader.length);
+        while (outRow.length < safeHeader.length) {
+          outRow.push('');
+        }
+        matrix.push(outRow);
+      }
+    } else {
+      matrix.push(mobile_blankRow_(safeHeader.length));
+    }
+    matrix.push(mobile_blankRow_(safeHeader.length));
   }
+  if (!matrix.length) {
+    matrix = [safeHeader.slice(), mobile_blankRow_(safeHeader.length)];
+  }
+  mobile_writeMatrixToSheet_(targetSheet, matrix);
+  targetSheet.setFrozenRows(0);
+  mobile_styleUnifiedStatusViewSheet_(targetSheet, matrix.length, safeHeader.length, sectionRows);
+  targetSheet.getRange(1, 1).setNote(
+    'dt-mobile-view-source:' +
+      String(sourceSheetId) +
+      '\nAuto-managed consolidated order views from sheet "' +
+      sourceSheetName +
+      '".',
+  );
+}
 
-  mobile_writeDocumentJson_(key, viewMap);
-  return { updated: updated, reused: reused, created: created };
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} rows
+ * @param {number} cols
+ * @param {Array<number>} sectionRows
+ */
+function mobile_styleUnifiedStatusViewSheet_(sheet, rows, cols, sectionRows) {
+  mobile_styleStatusViewSheet_(sheet, rows, cols);
+  var colors = MOBILE_UI_COLORS_;
+  for (var i = 0; i < sectionRows.length; i++) {
+    var sectionRow = sectionRows[i];
+    if (sectionRow < 1 || sectionRow > rows) {
+      continue;
+    }
+    sheet
+      .getRange(sectionRow, 1, 1, cols)
+      .setBackground(colors.brand)
+      .setFontColor('#ffffff')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('left');
+    if (sectionRow + 1 <= rows) {
+      sheet
+        .getRange(sectionRow + 1, 1, 1, cols)
+        .setBackground(colors.headerBg)
+        .setFontColor(colors.headerText)
+        .setFontWeight('bold')
+        .setHorizontalAlignment('center');
+    }
+  }
+}
+
+/**
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sourceSheet
+ * @param {Object} viewMap
+ * @param {string} unifiedSheetName
+ */
+function mobile_deleteLegacySplitStatusViewSheets_(ss, sourceSheet, viewMap, unifiedSheetName) {
+  for (var i = 0; i < MOBILE_STATUS_VIEW_DEFS_.length; i++) {
+    var def = MOBILE_STATUS_VIEW_DEFS_[i];
+    var name = viewMap ? viewMap[def.key] : null;
+    if (!name || String(name) === String(unifiedSheetName)) {
+      continue;
+    }
+    var sheet = ss.getSheetByName(String(name));
+    if (
+      sheet &&
+      ss.getSheets().length > 1 &&
+      sheet.getSheetId() !== sourceSheet.getSheetId() &&
+      mobile_isManagedStatusViewSheet_(sheet, sourceSheet.getSheetId())
+    ) {
+      try {
+        ss.deleteSheet(sheet);
+      } catch (e) {}
+    }
+  }
 }
 
 /**

@@ -128,9 +128,11 @@ function stats_computeSheet(fromIso, toIso, targetSheetId) {
       sheetId,
       sheetName,
       defaultCarrierId,
+      true,
       now,
       headerRow,
-      values
+      values,
+      headerRow
     );
 
     if (isRowEmpty_(order)) {

@@ -250,6 +250,21 @@ function resolveYalidinePlaceNames_(
   return { wilayaName, communeName };
 }
 
+function resolveYalidinePlaceNamesFromTerritoryIndex_(
+  index: TerritoryIndex | null,
+  wilayaRaw: unknown,
+  communeRaw: unknown,
+  wilayaCodeRaw: unknown,
+): { wilayaName: string; communeName: string } | null {
+  if (!index) return null;
+  const resolved = resolveTerritories_(index, wilayaRaw, communeRaw, wilayaCodeRaw);
+  if ('error' in resolved) return null;
+  return {
+    wilayaName: resolved.city.name,
+    communeName: resolved.district.name,
+  };
+}
+
 function similarity_(a: string, b: string): number {
   if (!a || !b) return 0;
   if (a === b) return 1;
@@ -1070,10 +1085,13 @@ export async function sendOrdersBulk(
   const creds = cleanedCredentials_(input.credentials);
   let territoryIndex: TerritoryIndex | null = null;
   let hubIndex: HubIndex | null = null;
-  if (carrier === 'zr' && adapter.fetchAllTerritories) {
+  if ((carrier === 'zr' || carrier === 'yalidine') && adapter.fetchAllTerritories) {
     try {
       territoryIndex = await getTerritoryIndex_(carrier, creds);
     } catch (error) {
+      if (carrier === 'yalidine') {
+        territoryIndex = null;
+      } else {
       return {
         ok: false,
         errorMessage:
@@ -1081,6 +1099,7 @@ export async function sendOrdersBulk(
             ? error.message
             : `Unable to resolve ${carrier} territories. Please verify carrier credentials.`,
       };
+      }
     }
   }
   const parcels: Array<Record<string, unknown>> = [];
@@ -1193,11 +1212,18 @@ export async function sendOrdersBulk(
       // allow the order through and let the carrier API reject if unsupported.
     }
     if (carrier === 'yalidine') {
-      const resolved = resolveYalidinePlaceNames_(
-        rawWilayaName,
-        rawCommuneName,
-        row.codeWilaya ?? row.wilayaCode,
-      );
+      const resolved =
+        resolveYalidinePlaceNamesFromTerritoryIndex_(
+          territoryIndex,
+          rawWilayaName,
+          rawCommuneName,
+          row.codeWilaya ?? row.wilayaCode,
+        ) ??
+        resolveYalidinePlaceNames_(
+          rawWilayaName,
+          rawCommuneName,
+          row.codeWilaya ?? row.wilayaCode,
+        );
       if (resolved.wilayaName) {
         resolvedWilayaName = resolved.wilayaName;
       }

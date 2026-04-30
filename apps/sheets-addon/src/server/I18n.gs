@@ -235,6 +235,7 @@ var I18N_DICT_ = {
     "send.success": "تم إرسال {0} طلب بنجاح",
     "send.partial": "تم إرسال {0} من {1}. اضغط مجدداً للمتابعة.",
     "send.already_sent": "تم الإرسال مسبقاً",
+    "send.skipped_already_sent": "تم تخطي {0} صف لأنه مرسل مسبقاً",
     "send.sent_status": "تم الإرسال",
     "send.confirm": "تأكيد الإرسال",
     "send.preview": "معاينة الطلبات",
@@ -261,6 +262,8 @@ var I18N_DICT_ = {
       "لشركة Yalidine: البلدية/المدينة مطلوبة في العمود المربوط قبل الإرسال.",
     "val.commune_required_noest":
       "لشركة NOEST: البلدية/المدينة مطلوبة في العمود المربوط قبل الإرسال.",
+    "val.commune_invalid":
+      "البلدية/المدينة غير صالحة. لا يمكن أن تكون رقماً فقط؛ اربط عمود البلدية الصحيح أو صحح الخلية.",
     // Sync
     "sync.button": "مزامنة الآن",
     "sync.auto_enable": "تفعيل المزامنة التلقائية",
@@ -615,6 +618,7 @@ var I18N_DICT_ = {
     "sidebar.msg.preview_only_empty":
       "تنبيه: الصفوف المحددة فارغة أو بلا بيانات إرسال.",
     "sidebar.msg.send_summary": "إرسال: {0} صف(وف) — {1} نجاح، {2} فشل.",
+    "sidebar.msg.send_skipped_already_sent": "تم تخطي {0} صف لأنه مرسل مسبقاً.",
     "sidebar.msg.sync_summary": "تتبع: {0} صف(وف) — {1} نجاح، {2} فشل.",
     "sidebar.msg.sync_last_ok": " — آخر مزامنة ناجحة: {0}",
     "sidebar.msg.stats_bucket_line":
@@ -793,6 +797,7 @@ var I18N_DICT_ = {
     "send.success": "{0} commande(s) envoyée(s)",
     "send.partial": "{0} sur {1} envoyées. Cliquez à nouveau pour continuer.",
     "send.already_sent": "Déjà envoyé",
+    "send.skipped_already_sent": "{0} ligne(s) déjà envoyée(s) ignorée(s)",
     "send.sent_status": "Envoyé",
     "send.confirm": "Confirmer l'envoi",
     "send.preview": "Aperçu des commandes",
@@ -818,6 +823,8 @@ var I18N_DICT_ = {
       "Yalidine : la commune/ville est requise dans la colonne mappée avant l’envoi.",
     "val.commune_required_noest":
       "NOEST : la commune/ville est requise dans la colonne mappée avant l’envoi.",
+    "val.commune_invalid":
+      "Commune/ville invalide. Elle ne peut pas être uniquement un nombre ; mappez la bonne colonne commune ou corrigez la cellule.",
     "sync.button": "Synchroniser maintenant",
     "sync.auto_enable": "Activer la sync auto",
     "sync.auto_disable": "Désactiver la sync auto",
@@ -1178,6 +1185,7 @@ var I18N_DICT_ = {
     "sidebar.msg.preview_only_empty":
       "Attention : les lignes sélectionnées sont vides ou sans données d’envoi.",
     "sidebar.msg.send_summary": "Envoi : {0} ligne(s) — {1} OK, {2} échec(s).",
+    "sidebar.msg.send_skipped_already_sent": "{0} ligne(s) déjà envoyée(s) ignorée(s).",
     "sidebar.msg.sync_summary": "Suivi : {0} ligne(s) — {1} OK, {2} échec(s).",
     "sidebar.msg.sync_last_ok": " — Dernière sync réussie : {0}",
     "sidebar.msg.stats_bucket_line":
@@ -1349,6 +1357,7 @@ var I18N_DICT_ = {
     "send.success": "{0} order(s) sent successfully",
     "send.partial": "{0} of {1} sent. Click again to continue.",
     "send.already_sent": "Already sent",
+    "send.skipped_already_sent": "{0} already sent row(s) skipped",
     "send.sent_status": "Sent",
     "send.confirm": "Confirm Send",
     "send.preview": "Preview Orders",
@@ -1374,6 +1383,8 @@ var I18N_DICT_ = {
       "Yalidine: commune/city is required in the mapped column before send.",
     "val.commune_required_noest":
       "NOEST: commune/city is required in the mapped column before send.",
+    "val.commune_invalid":
+      "Invalid commune/city. It cannot be only a number; map the correct commune column or fix the cell.",
     "sync.button": "Sync Now",
     "sync.auto_enable": "Enable Auto-Sync",
     "sync.auto_disable": "Disable Auto-Sync",
@@ -1723,6 +1734,7 @@ var I18N_DICT_ = {
     "sidebar.msg.preview_only_empty":
       "Note: selected rows are empty or have no sendable data.",
     "sidebar.msg.send_summary": "Send: {0} row(s) — {1} OK, {2} failed.",
+    "sidebar.msg.send_skipped_already_sent": "{0} already sent row(s) skipped.",
     "sidebar.msg.sync_summary": "Tracking: {0} row(s) — {1} OK, {2} failed.",
     "sidebar.msg.sync_last_ok": " — Last successful sync: {0}",
     "sidebar.msg.stats_bucket_line":

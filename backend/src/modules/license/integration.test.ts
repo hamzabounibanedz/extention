@@ -22,6 +22,7 @@ function envStub(over: Partial<Env> = {}): Env {
     zrWebhookSecret: undefined,
     yalidineWebhookSecret: undefined,
     trialDailyShipmentLimit: 0,
+    legacyLicenseCodesEnabled: true,
     ...over,
   };
 }

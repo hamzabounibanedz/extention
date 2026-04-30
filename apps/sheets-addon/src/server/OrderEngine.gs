@@ -477,6 +477,8 @@ function order_previewSelection(rowSelectionSpec, options) {
     : buildDuplicateIndex_(sheet, columns, defaultCarrierId, now, lastSheetRow, headerRow, values);
 
   var rows = [];
+  var strictRowCarrierMode =
+    !carrierOverrideId && String(opts.carrierMode || 'row') === 'row';
   for (var si = 0; si < selectedRowNumbers.length; si++) {
     var rowNum = selectedRowNumbers[si];
     if (rowNum === headerRow) {
@@ -500,6 +502,7 @@ function order_previewSelection(rowSelectionSpec, options) {
       sheetId,
       sheetName,
       defaultCarrierId,
+      !strictRowCarrierMode,
       now,
       headerRow,
       values,
@@ -557,6 +560,7 @@ function order_previewSelection(rowSelectionSpec, options) {
  * @param {number} sheetId
  * @param {string} sheetName
  * @param {string|null} defaultCarrierId
+ * @param {boolean=} useDefaultCarrierFallback
  * @param {string} nowIso
  * @param {number} headerRow
  * @param {Array<Array<string>>} values
@@ -571,11 +575,14 @@ function buildOrderFromRow_(
   sheetId,
   sheetName,
   defaultCarrierId,
+  useDefaultCarrierFallback,
   nowIso,
   headerRow,
   values,
   valuesStartRow
 ) {
+  var allowDefaultCarrier =
+    useDefaultCarrierFallback === false ? false : true;
   var anchorRow =
     valuesStartRow != null && isFinite(Number(valuesStartRow))
       ? Number(valuesStartRow)
@@ -603,13 +610,21 @@ function buildOrderFromRow_(
   }
 
   var carrierFromColumn = fromValues(columns.carrierColumn);
-  var carrier = carrierFromColumn != null && carrierFromColumn !== '' ? carrierFromColumn : defaultCarrierId;
+  var carrier =
+    carrierFromColumn != null && carrierFromColumn !== ''
+      ? carrierFromColumn
+      : allowDefaultCarrier
+        ? defaultCarrierId
+        : null;
   var carrierIdLc =
     typeof resolveCarrierAdapterId_ === 'function'
-      ? resolveCarrierAdapterId_(carrier || null, defaultCarrierId || null)
+      ? resolveCarrierAdapterId_(
+          carrier || null,
+          allowDefaultCarrier ? defaultCarrierId || null : null,
+        )
       : carrier != null && String(carrier).trim() !== ''
         ? String(carrier).trim().toLowerCase()
-        : defaultCarrierId != null
+        : allowDefaultCarrier && defaultCarrierId != null
           ? String(defaultCarrierId).trim().toLowerCase()
           : '';
 
@@ -1011,6 +1026,13 @@ function validateOrder_(sheet, rowNum, order, columns, businessSettings) {
   if (carrierIdLc === 'noest' && isBlank_(order.commune)) {
     errors.push(i18n_t('val.commune_required_noest'));
   }
+  if (
+    (carrierIdLc === 'noest' || carrierIdLc === 'yalidine' || carrierIdLc === 'zr') &&
+    !isBlank_(order.commune) &&
+    order_communeLooksInvalid_(order.commune)
+  ) {
+    errors.push(i18n_t('val.commune_invalid'));
+  }
 
   // Names: resolve from first/last/full name columns and validate
   var firstName = '';
@@ -1090,6 +1112,7 @@ function buildDuplicateIndex_(sheet, columns, defaultCarrierId, nowIso, lastRow,
       sheetId,
       sheetName,
       defaultCarrierId,
+      true,
       nowIso,
       headerRow,
       values,
@@ -1260,6 +1283,14 @@ function getColumnValue_(sheet, rowNum, colIndex) {
  */
 function isBlank_(s) {
   return s == null || String(s).trim() === '';
+}
+
+function order_communeLooksInvalid_(raw) {
+  var text = String(raw == null ? '' : raw).trim();
+  if (!text) return false;
+  if (/^\d+$/.test(text)) return true;
+  if (text.length <= 1) return true;
+  return /^(n\/?a|na|null|undefined|unknown|inconnu|inconnue|-|\u2014)$/i.test(text);
 }
 
 /**

@@ -86,6 +86,222 @@ function asRecord_(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+/** NOEST sometimes returns `passed` / `failed` as arrays; our parser expects string-keyed maps. */
+function noestIndexMap_(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    const out: Record<string, unknown> = {};
+    for (let i = 0; i < value.length; i++) {
+      out[String(i)] = value[i];
+    }
+    return out;
+  }
+  return asRecord_(value);
+}
+
+/**
+ * NOEST validates `commune` against their dropdown; Arabic wilaya-capital labels often fail.
+ * Map common sheet spellings to French commune labels when wilaya_id matches.
+ */
+function normalizeNoestCommuneForWilaya_(wilayaId: number, communeRaw: string): string {
+  const raw = String(communeRaw || '').trim();
+  if (!raw || wilayaId < 1 || wilayaId > 58) return raw;
+  const deAcc = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const d = deAcc(raw);
+
+  const rules: Array<{ w: number; ok: () => boolean; out: string }> = [
+    { w: 19, ok: () => /سطيف|ستيف/.test(raw) || d === 'setif', out: 'Sétif' },
+    { w: 6, ok: () => /بجاية|بجايا/.test(raw) || d === 'bejaia', out: 'Béjaïa' },
+    { w: 16, ok: () => /الجزائر/.test(raw) || d === 'alger', out: 'Alger' },
+    { w: 25, ok: () => /قسنطينة/.test(raw) || d === 'constantine', out: 'Constantine' },
+    { w: 23, ok: () => /عنابة/.test(raw) || d === 'annaba', out: 'Annaba' },
+    { w: 31, ok: () => /وهران/.test(raw) || d === 'oran', out: 'Oran' },
+    { w: 9, ok: () => /البليدة|بليدة/.test(raw) || d === 'blida', out: 'Blida' },
+    { w: 15, ok: () => /تيزي\s*وزو|tizi\s*ouzou/i.test(raw) || d === 'tizi ouzou', out: 'Tizi Ouzou' },
+    { w: 21, ok: () => /سكيكدة/.test(raw) || d === 'skikda', out: 'Skikda' },
+    { w: 5, ok: () => /باتنة/.test(raw) || d === 'batna', out: 'Batna' },
+    { w: 18, ok: () => /\u062c\u064a\u062c\u0644/.test(raw) || d === 'jijel', out: 'Jijel' },
+  ];
+  for (const r of rules) {
+    if (r.w === wilayaId && r.ok()) return r.out;
+  }
+  return raw;
+}
+
+type NoestCommuneApiRow = {
+  nom?: string;
+  name?: string;
+  wilaya_id?: number;
+  code_postal?: string;
+  is_active?: number;
+};
+
+const noestCommunesByWilayaCache_ = new Map<string, { expires: number; rows: NoestCommuneApiRow[] }>();
+const NOEST_COMMUNES_TTL_MS = 4 * 60 * 60 * 1000;
+const NOEST_COMMUNES_ERROR_TTL_MS = 60 * 1000;
+
+function noestCommunesCacheKey_(userGuid: string, wilayaId: number): string {
+  return `${userGuid}\0${wilayaId}`;
+}
+
+function deAccentLowerNoest_(s: string): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Match sheet commune text to NOEST's official list (GET /api/public/get/communes/{wilaya_id}).
+ * Returns canonical `nom` and postal code when confident, so we can send `zip_code` (doc: replaces wilaya+commune).
+ */
+function matchNoestCommuneFromApi_(communeRaw: string, rows: NoestCommuneApiRow[]): { nom: string; code_postal?: string } | null {
+  const raw = String(communeRaw || '').trim();
+  if (!raw || !rows.length) return null;
+  const n0 = deAccentLowerNoest_(raw);
+  const activeFirst = rows.filter((r) => typeof r.is_active !== 'number' || r.is_active !== 0);
+  const use = activeFirst.length ? activeFirst : rows;
+
+  for (const r of use) {
+    const nom = String(r.nom ?? r.name ?? '').trim();
+    if (!nom) continue;
+    if (deAccentLowerNoest_(nom) === n0) {
+      return { nom, code_postal: r.code_postal != null ? String(r.code_postal).trim() : undefined };
+    }
+  }
+
+  const fuzzy: Array<{ nom: string; code_postal?: string; score: number }> = [];
+  for (const r of use) {
+    const nom = String(r.nom ?? r.name ?? '').trim();
+    if (!nom) continue;
+    const n = deAccentLowerNoest_(nom);
+    if (n.includes(n0) || n0.includes(n)) {
+      const score = Math.min(n.length, n0.length) / Math.max(n.length, n0.length, 1);
+      fuzzy.push({
+        nom,
+        code_postal: r.code_postal != null ? String(r.code_postal).trim() : undefined,
+        score,
+      });
+    }
+  }
+  if (fuzzy.length === 1) return { nom: fuzzy[0].nom, code_postal: fuzzy[0].code_postal };
+  if (fuzzy.length > 1) {
+    fuzzy.sort((a, b) => b.score - a.score);
+    if (fuzzy[0].score >= 0.55 && fuzzy[0].score - fuzzy[1].score > 0.08) {
+      return { nom: fuzzy[0].nom, code_postal: fuzzy[0].code_postal };
+    }
+  }
+  return null;
+}
+
+async function fetchNoestCommunesForWilaya_(creds: NoestCredentials, wilayaId: number): Promise<NoestCommuneApiRow[]> {
+  const key = noestCommunesCacheKey_(creds.userGuid, wilayaId);
+  const now = Date.now();
+  const hit = noestCommunesByWilayaCache_.get(key);
+  if (hit && hit.expires > now) return hit.rows;
+
+  let res: JsonResponse;
+  try {
+    res = await jsonRequest_(buildUrl_(creds, `api/public/get/communes/${wilayaId}`), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${creds.apiToken}`,
+      },
+    });
+  } catch {
+    noestCommunesByWilayaCache_.set(key, { expires: now + NOEST_COMMUNES_ERROR_TTL_MS, rows: [] });
+    return [];
+  }
+
+  if (res.status < 200 || res.status >= 300) {
+    noestCommunesByWilayaCache_.set(key, { expires: now + NOEST_COMMUNES_ERROR_TTL_MS, rows: [] });
+    return [];
+  }
+  const arr = asArray_(res.json);
+  const rows = arr.filter((x): x is NoestCommuneApiRow => Boolean(x) && typeof x === 'object' && !Array.isArray(x));
+  noestCommunesByWilayaCache_.set(key, { expires: now + NOEST_COMMUNES_TTL_MS, rows });
+  return rows;
+}
+
+function shouldResolveNoestCommunesFromApi_(businessSettings?: Record<string, unknown> | null): boolean {
+  if (!businessSettings || typeof businessSettings !== 'object') return true;
+  const raw = businessSettings.noestResolveCommunesFromApi;
+  if (raw === false || raw === 0) return false;
+  const t = String(raw ?? '').trim().toLowerCase();
+  return !(t === 'false' || t === '0' || t === 'no' || t === 'non');
+}
+
+async function enrichNoestParcelsWithApiCommunes_(
+  creds: NoestCredentials,
+  parcels: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (!parcels.length) return parcels;
+  const out = parcels.map((p) => ({ ...p }));
+
+  const wilayasNeeded = new Set<number>();
+  for (const p of out) {
+    if (normalizeDeliveryType_(p.deliveryType) === 'pickup-point') continue;
+    const z = String(p.zip_code ?? p.zipCode ?? p.postalCode ?? '').trim();
+    if (z) continue;
+    const wid = toInteger_(p.wilaya_id ?? p.wilayaId ?? p.toWilayaId ?? p.codeWilaya ?? p.wilayaCode, 0);
+    if (wid < 1 || wid > 58) continue;
+    const comm = String(p.commune ?? p.toCommuneName ?? p.to_commune_name ?? '').trim();
+    if (!comm) continue;
+    wilayasNeeded.add(wid);
+  }
+  await Promise.all([...wilayasNeeded].map((w) => fetchNoestCommunesForWilaya_(creds, w)));
+
+  for (let i = 0; i < out.length; i++) {
+    const p = out[i];
+    if (normalizeDeliveryType_(p.deliveryType) === 'pickup-point') continue;
+    const z0 = String(p.zip_code ?? p.zipCode ?? p.postalCode ?? '').trim();
+    if (z0) continue;
+    const wid = toInteger_(p.wilaya_id ?? p.wilayaId ?? p.toWilayaId ?? p.codeWilaya ?? p.wilayaCode, 0);
+    if (wid < 1 || wid > 58) continue;
+    let communeRaw = String(p.commune ?? p.toCommuneName ?? p.to_commune_name ?? '').trim();
+    if (!communeRaw) continue;
+    communeRaw = normalizeNoestCommuneForWilaya_(wid, communeRaw);
+    const cacheKey = noestCommunesCacheKey_(creds.userGuid, wid);
+    const rows = noestCommunesByWilayaCache_.get(cacheKey)?.rows ?? [];
+    if (!rows.length) {
+      out[i] = { ...p, commune: communeRaw };
+      continue;
+    }
+    const matched = matchNoestCommuneFromApi_(communeRaw, rows);
+    if (!matched) {
+      out[i] = { ...p, commune: communeRaw };
+      continue;
+    }
+    const next: Record<string, unknown> = { ...p, commune: matched.nom };
+    const cp = (matched.code_postal ?? '').replace(/\D/g, '');
+    if (cp.length >= 4 && cp.length <= 5) {
+      next.zip_code = cp;
+      next.zipCode = cp;
+    }
+    out[i] = next;
+  }
+  return out;
+}
+
+function noestPickResultRoot_(json: unknown): Record<string, unknown> {
+  const root = asRecord_(json);
+  const nested = asRecord_(root.data ?? root.payload ?? root.result ?? root.body);
+  if (nested.passed != null || nested.failed != null || nested.success != null) {
+    return nested;
+  }
+  return root;
+}
+
+function summarizeNoestUnknownResponse_(json: unknown, status: number): string {
+  const root = asRecord_(json);
+  const top = coerceNoestErrorText_(root.message ?? root.error ?? root.msg);
+  if (top) return top;
+  const keys = Object.keys(root).slice(0, 14).join(', ');
+  return `NOEST create failed (${status}) — response keys: ${keys || '(empty)'}`;
+}
+
 function isObjectPlaceholderText_(value: string): boolean {
   return /^\[object [^\]]+\]$/i.test(String(value || '').trim());
 }
@@ -95,6 +311,55 @@ function compactErrorText_(value: unknown): string {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+const NOEST_FAILED_FIELD_ORDER = [
+  'commune',
+  'wilaya_id',
+  'zip_code',
+  'phone',
+  'phone_2',
+  'adresse',
+  'station_code',
+  'montant',
+  'produit',
+  'type_id',
+  'stop_desk',
+  'reference',
+  'client',
+  'stock',
+  'quantite',
+  'poids',
+  'tracking',
+];
+
+/**
+ * NOEST bulk `failed` entries are often Laravel-style objects:
+ * `{ reference: "…", phone: ["…"], commune: ["The selected commune is invalid."] }`.
+ * Prefer explicit `field: message` text over a flat join so sheet users see what to fix.
+ */
+function formatNoestBulkFailedRow_(value: unknown): string {
+  if (value == null) return '';
+  const flat = coerceNoestErrorText_(value);
+  if (typeof value !== 'object' || Array.isArray(value)) return flat;
+  const o = value as Record<string, unknown>;
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const k of NOEST_FAILED_FIELD_ORDER) {
+    if (o[k] == null) continue;
+    const msg = coerceNoestErrorText_(o[k]);
+    if (!msg) continue;
+    parts.push(`${k}: ${msg}`);
+    seen.add(k);
+  }
+  for (const [k, v] of Object.entries(o)) {
+    if (seen.has(k)) continue;
+    if (v == null || k === 'stack' || k === 'raw') continue;
+    const msg = coerceNoestErrorText_(v);
+    if (!msg) continue;
+    parts.push(`${k}: ${msg}`);
+  }
+  return parts.join(' | ') || flat;
 }
 
 function coerceNoestErrorText_(value: unknown, depth = 0): string {
@@ -272,6 +537,7 @@ function resolveNoestTypeId_(rawParcel: Record<string, unknown>): 1 | 2 | 3 {
 }
 
 function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number): { order?: Record<string, unknown>; error?: string } {
+  const displayRow = toInteger_(rawParcel.rowIndex ?? rawParcel.row ?? null, rowIndex + 1);
   const customer = asRecord_(rawParcel.customer);
   const phoneObj = asRecord_(customer.phone);
   const name =
@@ -283,20 +549,26 @@ function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number):
   const client = (name || 'Client').slice(0, 255);
   const phone =
     normalizeDzPhoneForNoest_(rawParcel.phone ?? rawParcel.phone1 ?? rawParcel.contact_phone ?? phoneObj.number1) || null;
-  if (!phone) return { error: `Invalid phone for row ${rowIndex + 1}. Expected 9-10 digits.` };
+  if (!phone) return { error: `Invalid phone for row ${displayRow}. Expected 9-10 digits.` };
 
   const adresse = String(rawParcel.address ?? rawParcel.deliveryAddressText ?? rawParcel.deliveryAddress ?? '').trim();
-  if (!adresse) return { error: `adresse is required for row ${rowIndex + 1}.` };
+  if (!adresse) return { error: `adresse is required for row ${displayRow}.` };
 
   const deliveryType = normalizeDeliveryType_(rawParcel.deliveryType);
   const stopDesk = deliveryType === 'pickup-point';
   const stationCode =
     String(rawParcel.station_code ?? rawParcel.stationCode ?? rawParcel.hubId ?? rawParcel.stopDeskId ?? '').trim() || '';
-  if (stopDesk && !stationCode) return { error: `station_code is required when stop_desk=1 (row ${rowIndex + 1}).` };
+  if (stopDesk && !stationCode) return { error: `station_code is required when stop_desk=1 (row ${displayRow}).` };
 
   const trackingRefRaw = String(rawParcel.reference ?? rawParcel.externalId ?? rawParcel.orderId ?? '').trim();
-  const reference = (trackingRefRaw || `dt-${Date.now().toString(36)}-${rowIndex + 1}`).slice(0, 255);
-  if (reference.length < 5) return { error: `reference must be at least 5 characters (row ${rowIndex + 1}).` };
+  let reference = (trackingRefRaw || `dt-${Date.now().toString(36)}-${displayRow}`).slice(0, 255);
+  if (trackingRefRaw && reference.length < 5) {
+    // NOEST requires a minimum reference length; preserve user value by prefixing.
+    reference = `ORD-${reference}`.slice(0, 255);
+  }
+  if (reference.length < 5) {
+    reference = `dt-${Date.now().toString(36)}-${displayRow}`.slice(0, 255);
+  }
 
   const wilayaId =
     toInteger_(
@@ -304,13 +576,14 @@ function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number):
       0,
     ) || 0;
   const zipCode = String(rawParcel.zip_code ?? rawParcel.zipCode ?? rawParcel.postalCode ?? '').trim();
-  const commune = String(rawParcel.commune ?? rawParcel.toCommuneName ?? rawParcel.to_commune_name ?? '').trim();
+  let commune = String(rawParcel.commune ?? rawParcel.toCommuneName ?? rawParcel.to_commune_name ?? '').trim();
+  commune = normalizeNoestCommuneForWilaya_(wilayaId, commune);
 
   if (!zipCode && (!wilayaId || wilayaId < 1 || wilayaId > 58)) {
-    return { error: `wilaya_id (1-58) is required when zip_code is not provided (row ${rowIndex + 1}).` };
+    return { error: `wilaya_id (1-58) is required when zip_code is not provided (row ${displayRow}).` };
   }
   if (!zipCode && !stopDesk && !commune) {
-    return { error: `commune is required when zip_code and stop_desk are not provided (row ${rowIndex + 1}).` };
+    return { error: `commune is required when zip_code and stop_desk are not provided (row ${displayRow}).` };
   }
 
   const orderedProducts = asArray_(rawParcel.orderedProducts);
@@ -323,7 +596,7 @@ function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number):
   )
     .trim()
     .slice(0, 255);
-  if (!produit) return { error: `produit is required for row ${rowIndex + 1}.` };
+  if (!produit) return { error: `produit is required for row ${displayRow}.` };
 
   const typeId = resolveNoestTypeId_(rawParcel);
   let montant = toMoney_(rawParcel.amount ?? rawParcel.montant, 0);
@@ -356,7 +629,7 @@ function buildNoestOrder_(rawParcel: Record<string, unknown>, rowIndex: number):
     order.zip_code = zipCode;
   } else {
     order.wilaya_id = wilayaId;
-    if (commune) order.commune = commune.slice(0, 255);
+    if (!stopDesk && commune) order.commune = commune.slice(0, 255);
   }
   if (stopDesk) {
     order.station_code = stationCode;
@@ -420,12 +693,18 @@ function parseBulkCreateResponse_(
   sentOrders: Array<Record<string, unknown>>,
   creds: NoestCredentials,
 ): { successes: BulkCreateSuccess[]; failures: BulkCreateFailure[] } {
-  const payload = asRecord_(json);
+  const payload = noestPickResultRoot_(json);
   const successes: BulkCreateSuccess[] = [];
   const failures: BulkCreateFailure[] = [];
 
-  const passed = asRecord_(payload.passed);
-  const failed = asRecord_(payload.failed);
+  const passed = noestIndexMap_(payload.passed);
+  const failed = noestIndexMap_(payload.failed);
+  const orderErrors = asArray_(payload.order_errors ?? payload.orders_errors ?? payload.errors ?? []);
+  const batchDenied =
+    payload.success === false ||
+    payload.success === 0 ||
+    String(payload.success || '').toLowerCase() === 'false';
+  const batchMsg = coerceNoestErrorText_(payload.message) || coerceNoestErrorText_(payload.error);
 
   const addFailureForSentIndex = (localIdx: number, message: string, errorCode?: string | null) => {
     const originalIndex = sentIndexMap[localIdx];
@@ -439,8 +718,19 @@ function parseBulkCreateResponse_(
   };
 
   for (let localIdx = 0; localIdx < sentIndexMap.length; localIdx++) {
-    const okRow = passed[String(localIdx)];
-    const failRow = failed[String(localIdx)];
+    const refKey =
+      sentOrders[localIdx]?.reference != null ? String(sentOrders[localIdx].reference).trim() : '';
+    let okRow = passed[String(localIdx)];
+    let failRow = failed[String(localIdx)];
+    if (okRow == null && failRow == null && refKey) {
+      okRow = passed[refKey] ?? passed[refKey.toUpperCase()] ?? passed[refKey.toLowerCase()];
+      failRow = failed[refKey] ?? failed[refKey.toUpperCase()] ?? failed[refKey.toLowerCase()];
+    }
+    if (okRow == null && failRow == null && orderErrors.length > localIdx && orderErrors[localIdx] != null) {
+      const msg = coerceNoestErrorText_(orderErrors[localIdx]) || String(orderErrors[localIdx]);
+      addFailureForSentIndex(localIdx, msg, 'VALIDATION_ERROR');
+      continue;
+    }
     if (okRow != null) {
       const o = asRecord_(okRow);
       if (o.success === true || String(o.success).toLowerCase() === 'true') {
@@ -456,12 +746,16 @@ function parseBulkCreateResponse_(
         });
         continue;
       }
-      const msg = coerceNoestErrorText_(o.message) || coerceNoestErrorText_(o.error) || 'NOEST: order rejected';
+      const msg =
+        formatNoestBulkFailedRow_(okRow) ||
+        coerceNoestErrorText_(o.message) ||
+        coerceNoestErrorText_(o.error) ||
+        'NOEST: order rejected';
       addFailureForSentIndex(localIdx, msg, 'CARRIER_REJECTED');
       continue;
     }
     if (failRow != null) {
-      const msg = coerceNoestErrorText_(failRow) || 'NOEST: validation error';
+      const msg = formatNoestBulkFailedRow_(failRow) || coerceNoestErrorText_(failRow) || 'NOEST: validation error';
       addFailureForSentIndex(localIdx, msg, 'VALIDATION_ERROR');
       continue;
     }
@@ -480,9 +774,11 @@ function parseBulkCreateResponse_(
       continue;
     }
     const generic =
-      coerceNoestErrorText_(payload.message) ||
-      coerceNoestErrorText_(payload.error) ||
-      `NOEST create failed (${status})`;
+      batchDenied && batchMsg
+        ? batchMsg
+        : coerceNoestErrorText_(payload.message) ||
+            coerceNoestErrorText_(payload.error) ||
+            summarizeNoestUnknownResponse_(json, status);
     addFailureForSentIndex(localIdx, generic, status >= 500 ? 'REQUEST_FAILED' : 'CARRIER_REJECTED');
   }
 
@@ -519,12 +815,51 @@ function noestValidationFailureForSuccess_(
     index: success.index,
     errorCode: code,
     errorMessage:
-      coerceNoestErrorText_(message) ||
+      formatNoestBulkFailedRow_(message) ||
       'NOEST order was created but validation failed. Tracking was saved; do not resend as a new order.',
     externalId: success.externalId ?? success.parcelId ?? null,
     trackingNumber: tracking || null,
     labelUrl: success.labelUrl ?? (tracking ? buildUrl_(creds, 'api/public/get/order/label', { tracking }) : null),
   };
+}
+
+function noestTrackingInfoRow_(payload: unknown, tracking: string): unknown {
+  const root = asRecord_(payload);
+  return root[tracking] ?? root[tracking.toUpperCase()] ?? root[tracking.toLowerCase()] ?? null;
+}
+
+function normalizeNoestStatusText_(raw: unknown): string {
+  return String(raw ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function noestTrackingLooksValidated_(row: unknown): boolean {
+  const root = asRecord_(row);
+  const activity = Array.isArray(root.activity) ? root.activity : [];
+  for (const item of activity) {
+    const entry = asRecord_(item);
+    const eventKey = normalizeNoestStatusText_(entry.event_key ?? entry.key ?? '');
+    const event = normalizeNoestStatusText_(entry.event ?? entry.status ?? entry.name ?? '');
+    if (eventKey === 'customer_validation' || eventKey === 'already_validated') return true;
+    if (eventKey.startsWith('validation_')) return true;
+    if (event === 'validated' || event.includes('commande deja validee')) return true;
+    if (event.includes('validated by partner') || event.includes('order validated')) return true;
+  }
+  const orderInfo = asRecord_(root.OrderInfo ?? root.orderInfo ?? root.order_info);
+  const statusText = normalizeNoestStatusText_(
+    [root.last_status, root.status, root.event_key, root.event, orderInfo.status, orderInfo.last_status]
+      .filter((v) => v != null)
+      .join(' '),
+  );
+  return (
+    statusText.includes('customer_validation') ||
+    statusText.includes('already_validated') ||
+    statusText.includes('validated') ||
+    statusText.includes('validee')
+  );
 }
 
 async function validateNoestSuccesses_(
@@ -544,9 +879,9 @@ async function validateNoestSuccesses_(
       trackings,
     },
   });
-  const payload = asRecord_(res.json ?? res.text);
-  const passed = asRecord_(payload.passed);
-  const failed = asRecord_(payload.failed);
+  const payload = noestPickResultRoot_(res.json ?? res.text);
+  const passed = noestIndexMap_(payload.passed);
+  const failed = noestIndexMap_(payload.failed);
   const failedByTracking = new Map<string, unknown>();
   const passedByTracking = new Set<string>();
 
@@ -596,6 +931,85 @@ async function validateNoestSuccesses_(
     failures: validationFailures,
     raw: res.json ?? res.text,
     httpStatus: res.status,
+  };
+}
+
+async function verifyNoestCreatedTrackings_(
+  creds: NoestCredentials,
+  successes: BulkCreateSuccess[],
+  requireValidated: boolean,
+): Promise<{ successes: BulkCreateSuccess[]; failures: BulkCreateFailure[]; raw: unknown; httpStatus: number | null }> {
+  const withTracking = successes.filter((s) => s.trackingNumber && String(s.trackingNumber).trim() !== '');
+  if (!withTracking.length) {
+    return { successes, failures: [], raw: null, httpStatus: null };
+  }
+  const trackings = withTracking.map((s) => String(s.trackingNumber).trim());
+  const verificationDelays = requireValidated ? [0, 1_000, 2_500] : [0];
+  let raw: unknown = null;
+  let httpStatus: number | null = null;
+  let verificationFailures: BulkCreateFailure[] = [];
+  let failedIndexes = new Set<number>();
+
+  for (const delayMs of verificationDelays) {
+    if (delayMs > 0) await sleep_(delayMs);
+    const res = await jsonRequest_(buildUrl_(creds, 'api/public/get/trackings/info'), {
+      method: 'POST',
+      headers: baseHeaders_(creds),
+      body: { trackings },
+    });
+    raw = res.json ?? res.text;
+    httpStatus = res.status;
+    verificationFailures = [];
+    failedIndexes = new Set<number>();
+
+    if (res.status >= 200 && res.status < 300) {
+      for (const success of withTracking) {
+        const tracking = String(success.trackingNumber || '').trim();
+        const trackingInfo = noestTrackingInfoRow_(raw, tracking);
+        if (trackingInfo && (!requireValidated || noestTrackingLooksValidated_(trackingInfo))) continue;
+        if (trackingInfo && requireValidated) {
+          verificationFailures.push(
+            noestValidationFailureForSuccess_(
+              success,
+              `NOEST returned tracking ${tracking}, but validation was not confirmed by /get/trackings/info. Verify in NOEST before resending.`,
+              'VALIDATION_NOT_CONFIRMED',
+              creds,
+            ),
+          );
+          failedIndexes.add(success.index);
+          continue;
+        }
+        verificationFailures.push(
+          noestValidationFailureForSuccess_(
+            success,
+            `NOEST returned tracking ${tracking}, but /get/trackings/info did not find it. Verify in NOEST before resending.`,
+            'TRACKING_NOT_FOUND',
+            creds,
+          ),
+        );
+        failedIndexes.add(success.index);
+      }
+      if (failedIndexes.size === 0 || !requireValidated) break;
+      continue;
+    }
+
+    const message =
+      coerceNoestErrorText_(raw) ||
+      `NOEST returned tracking numbers, but tracking verification failed (${res.status}).`;
+    for (const success of withTracking) {
+      verificationFailures.push(
+        noestValidationFailureForSuccess_(success, message, 'TRACKING_VERIFICATION_FAILED', creds),
+      );
+      failedIndexes.add(success.index);
+    }
+    break;
+  }
+
+  return {
+    successes: successes.filter((s) => !failedIndexes.has(s.index)),
+    failures: verificationFailures,
+    raw,
+    httpStatus,
   };
 }
 
@@ -813,14 +1227,17 @@ export class NoestAdapter implements CarrierAdapter {
     const preValidationFailures: BulkCreateFailure[] = [];
     const sendOrders: Array<Record<string, unknown>> = [];
     const sendIndexMap: number[] = [];
-    for (let i = 0; i < input.parcels.length; i++) {
-      const built = buildNoestOrder_(input.parcels[i], i);
+    const parcelsForBuild = shouldResolveNoestCommunesFromApi_(input.businessSettings ?? null)
+      ? await enrichNoestParcelsWithApiCommunes_(creds, input.parcels as Record<string, unknown>[])
+      : (input.parcels as Record<string, unknown>[]);
+    for (let i = 0; i < parcelsForBuild.length; i++) {
+      const built = buildNoestOrder_(parcelsForBuild[i], i);
       if (built.error || !built.order) {
         preValidationFailures.push({
           index: i,
           errorCode: 'LOCAL_VALIDATION',
           errorMessage: built.error || 'Invalid NOEST order payload',
-          externalId: input.parcels[i].externalId != null ? String(input.parcels[i].externalId) : null,
+          externalId: parcelsForBuild[i].externalId != null ? String(parcelsForBuild[i].externalId) : null,
         });
       } else {
         sendOrders.push(built.order);
@@ -833,6 +1250,7 @@ export class NoestAdapter implements CarrierAdapter {
     let httpStatus = 400;
     let raw: unknown = null;
     let validationRaw: unknown = null;
+    let verificationRaw: unknown = null;
 
     if (sendOrders.length) {
       const res = await jsonRequest_(buildUrl_(creds, 'api/public/create/orders'), {
@@ -848,7 +1266,8 @@ export class NoestAdapter implements CarrierAdapter {
       const parsed = parseBulkCreateResponse_(res.status, res.json ?? res.text, sendIndexMap, sendOrders, creds);
       successes.push(...parsed.successes);
       failures.push(...parsed.failures);
-      if (successes.length && shouldAutoValidateNoest_(input.businessSettings)) {
+      const autoValidateNoest = shouldAutoValidateNoest_(input.businessSettings);
+      if (successes.length && autoValidateNoest) {
         const validation = await validateNoestSuccesses_(creds, successes);
         successes.splice(0, successes.length, ...validation.successes);
         failures.push(...validation.failures);
@@ -862,6 +1281,20 @@ export class NoestAdapter implements CarrierAdapter {
           httpStatus = validation.httpStatus;
         }
       }
+      if (successes.length) {
+        const verification = await verifyNoestCreatedTrackings_(creds, successes, autoValidateNoest);
+        successes.splice(0, successes.length, ...verification.successes);
+        failures.push(...verification.failures);
+        verificationRaw = verification.raw;
+        if (
+          verification.httpStatus != null &&
+          verification.httpStatus !== 429 &&
+          httpStatus >= 200 &&
+          httpStatus < 300
+        ) {
+          httpStatus = verification.httpStatus;
+        }
+      }
     }
 
     failures.sort((a, b) => a.index - b.index);
@@ -872,7 +1305,10 @@ export class NoestAdapter implements CarrierAdapter {
       failureCount: failures.length,
       successes,
       failures,
-      raw: validationRaw != null ? { create: raw, validation: validationRaw } : raw,
+      raw:
+        validationRaw != null || verificationRaw != null
+          ? { create: raw, validation: validationRaw, verification: verificationRaw }
+          : raw,
     };
   }
 
@@ -933,4 +1369,3 @@ export class NoestAdapter implements CarrierAdapter {
     return { httpStatus: res.status, items, raw: payload };
   }
 }
-
